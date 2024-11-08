@@ -50,3 +50,4 @@ share/const.goe
 .cursor
 openapi/*.md
 coverage.html
+.trae
