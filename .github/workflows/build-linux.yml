@@ -44,6 +44,6 @@ jobs:
           path: |
             /data/*
 
-      - name: Push To Silicon Valley
-        run: |
-          for file in /data/*; do /python3/venv/bin/coscmd upload $file /archives/; done;
+      # - name: Push To Silicon Valley
+      #   run: |
+      #     for file in /data/*; do /python3/venv/bin/coscmd upload $file /archives/; done;
