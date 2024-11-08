@@ -37,25 +37,25 @@ jobs:
       - name: Checkout Kun
         uses: actions/checkout@v4
         with:
-          repository: yaoapp/kun
+          repository: feishu/kun
           path: kun
 
       - name: Checkout Xun
         uses: actions/checkout@v4
         with:
-          repository: yaoapp/xun
+          repository: feishu/xun
           path: xun
 
       - name: Checkout Gou
         uses: actions/checkout@v4
         with:
-          repository: yaoapp/gou
+          repository: feishu/gou
           path: gou
 
       - name: Checkout V8Go
         uses: actions/checkout@v4
         with:
-          repository: yaoapp/v8go
+          repository: feishu/v8go
           lfs: true
           path: v8go
 
@@ -64,13 +64,13 @@ jobs:
         #  ** new repository: https://github.com/YaoApp/dui.git **
         uses: actions/checkout@v4
         with:
-          repository: yaoapp/xgen
+          repository: feishu/xgen
           path: xgen-v1.0
 
       - name: Checkout Yao-Init
         uses: actions/checkout@v4
         with:
-          repository: yaoapp/yao-init
+          repository: feishu/yao-init
           path: yao-init
 
       - name: Move Kun, Xun, Gou, UI, V8Go
