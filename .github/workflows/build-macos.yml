@@ -166,9 +166,9 @@ jobs:
       #     rm -f dist/release/yao-$VERSION-unstable-darwin-arm64.zip
       #     rm -f dist/release/yao-$VERSION-unstable-darwin-amd64.zip
 
-      # - name: Archive production artifacts
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: yao-macos
-      #     path: |
-      #       dist/release/*
+      - name: Archive production artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: yao-macos
+          path: |
+            dist/release/*
