@@ -13,6 +13,7 @@
 #
 # ===========================================
 FROM ubuntu:23.04
+RUN mkdir -p /app
 WORKDIR /app
 ADD build.sh /app/build.sh
 ENV PATH=$PATH:/usr/local/go/bin:/root/go/bin
