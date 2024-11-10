@@ -26,11 +26,18 @@ jobs:
         # docker cp yao-build-container:/app/build.sh /app/build.sh
         # docker cp yao-build-container:/data ./data
         # docker rm yao-build-container
+    
+    - name: Remove APT locks
+    run: |
+      sudo rm /var/lib/apt/lists/lock
+      sudo rm /var/cache/apt/archives/lock
+      sudo rm /var/lib/dpkg/lock*
+    shell: bash
 
     - name: Install Coscmd
       run: |
-        apt-get update
-        apt-get install -y python3-venv
+       sudo apt-get update
+       sudo apt-get install -y python3-venv
         python3 -m venv /python3/venv
         /python3/venv/bin/python -m pip install coscmd
         /python3/venv/bin/coscmd -v
