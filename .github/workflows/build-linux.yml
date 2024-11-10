@@ -22,10 +22,10 @@ jobs:
     - name: Build Docker image
       run: |
         docker build -t yao-build -f Dockerfile .
-      # docker create --name yao-build-container yao-build
-      # docker cp yao-build-container:/app/build.sh /app/build.sh
-      # docker cp yao-build-container:/data ./data
-      # docker rm yao-build-container
+        docker create --name yao-build-container yao-build
+        docker cp yao-build-container:/app/build.sh /app/build.sh
+        docker cp yao-build-container:/data ./data
+        docker rm yao-build-container
 
     # - name: Install Coscmd
     #   run: |
