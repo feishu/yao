@@ -27,25 +27,25 @@ jobs:
       # docker cp yao-build-container:/data ./data
       # docker rm yao-build-container
 
-    - name: Install Coscmd
-      run: |
-        sudo rm /var/lib/apt/lists/lock
-        sudo rm /var/cache/apt/archives/lock
-        sudo rm /var/lib/dpkg/lock*
-        sudo apt-get update
-        sudo apt-get install -y python3-venv
-        python3 -m venv /python3/venv
-        /python3/venv/bin/python -m pip install coscmd
-        /python3/venv/bin/coscmd -v
+    # - name: Install Coscmd
+    #   run: |
+    #     sudo rm /var/lib/apt/lists/lock
+    #     sudo rm /var/cache/apt/archives/lock
+    #     sudo rm /var/lib/dpkg/lock*
+    #     sudo apt-get update
+    #     sudo apt-get install -y python3-venv
+    #     python3 -m venv /python3/venv
+    #     /python3/venv/bin/python -m pip install coscmd
+    #     /python3/venv/bin/coscmd -v
 
-    - name: Configure COS For Silicon Valley
-      env:
-        SECRET_ID: ${{ secrets.COS_ID }}
-        SECRET_KEY: ${{ secrets.COS_KEY }}
-        BUCKET: release-sv-1252011659
-        REGION: na-siliconvalley
-      run: |
-        /python3/venv/bin/coscmd config -a $SECRET_ID -s $SECRET_KEY -b $BUCKET -r $REGION
+    # - name: Configure COS For Silicon Valley
+    #   env:
+    #     SECRET_ID: ${{ secrets.COS_ID }}
+    #     SECRET_KEY: ${{ secrets.COS_KEY }}
+    #     BUCKET: release-sv-1252011659
+    #     REGION: na-siliconvalley
+    #   run: |
+    #     /python3/venv/bin/coscmd config -a $SECRET_ID -s $SECRET_KEY -b $BUCKET -r $REGION
 
     - name: Build
       run: |
