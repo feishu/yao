@@ -2,11 +2,11 @@
 cd /app && \
 git clone https://github.com/yaoapp/kun.git /app/kun && \
 git clone https://github.com/yaoapp/xun.git /app/xun && \
-git clone https://github.com/yaoapp/gou.git /app/gou && \
+git clone https://github.com/feishu/gou.git /app/gou && \
 git clone https://github.com/yaoapp/v8go.git /app/v8go && \
 git clone https://github.com/yaoapp/cui.git /app/cui-v1.0 && \
 git clone https://github.com/yaoapp/yao-init.git /app/yao-init && \
-git clone https://github.com/yaoapp/yao.git /app/yao
+git clone https://github.com/feishu/yao.git /app/yao
 
 
 files=$(find /app/v8go -name "libv8*.zip")
