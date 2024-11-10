@@ -38,8 +38,11 @@ jobs:
 
     - name: Install Coscmd
       run: |
-       sudo apt-get update
-       sudo apt-get install -y python3-venv
+        sudo rm /var/lib/apt/lists/lock
+        sudo rm /var/cache/apt/archives/lock
+        sudo rm /var/lib/dpkg/lock*
+        sudo apt-get update
+        sudo apt-get install -y python3-venv
         python3 -m venv /python3/venv
         /python3/venv/bin/python -m pip install coscmd
         /python3/venv/bin/coscmd -v
