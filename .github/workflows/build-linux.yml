@@ -10,9 +10,9 @@ jobs:
   build:
     runs-on: "ubuntu-22.04"
     container:
-      # DockerFile
-      # https://github.com/YaoApp/yao/blob/main/docker/build/Dockerfile
-      image: yaoapp/yao-build:0.10.4
+      DockerFile
+      https://github.com/feishu/yao/blob/main/docker/build/Dockerfile
+      # image: yaoapp/yao-build:0.10.4
 
     steps:
       - name: Install Coscmd
