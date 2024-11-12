@@ -54,6 +54,8 @@ jobs:
 
     - name: Build
       run: |
+        export PATH=$PATH:/github/home/go/bin
+        ./build.sh
         ls -l ./data
 
     - name: Archive production artifacts
