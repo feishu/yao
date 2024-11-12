@@ -18,6 +18,7 @@ jobs:
       run: |
         curl -L -o Dockerfile https://raw.githubusercontent.com/feishu/yao/main/docker/build/Dockerfile
         curl -L -o build.sh https://raw.githubusercontent.com/feishu/yao/main/docker/build/build.sh
+        chmod +x ./build.sh
 
     - name: Build Docker image1
       run: |
