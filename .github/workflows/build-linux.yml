@@ -28,12 +28,20 @@ jobs:
           aws configure set default.s3.endpoint_url https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com
           aws --version
 
-    - name: Build Docker image
+    - name: Build Docker image1
       run: |
         docker build -t yao-build -f Dockerfile .
+    - name: Build Docker image2
+      run: |
         docker create --name yao-build-container yao-build
+    - name: Build Docker image3
+      run: |
         docker cp yao-build-container:/app/build.sh /app/build.sh
+    - name: Build Docker image4
+      run: |
         docker cp yao-build-container:/data ./data
+    - name: Build Docker image5
+      run: |
         docker rm yao-build-container
 
     # - name: Install Coscmd
