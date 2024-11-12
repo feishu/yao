@@ -17,8 +17,8 @@ jobs:
       run: |
         curl -L -o Dockerfile https://github.com/YaoApp/yao/blob/main/docker/build/Dockerfile?raw=true
         curl -L -o build.sh https://github.com/YaoApp/yao/blob/main/docker/build/build.sh?raw=true
-        mkdir -p /data
-        chmod +x ./build.sh /data
+        mkdir data
+        chmod +x ./build.sh ./data
 
     - name: Build Docker image
       run: |
@@ -34,15 +34,15 @@ jobs:
     - name: Run Docker container and execute build script
       run: |
         # 获取当前工作目录的路径
-        docker run --rm -v /data:/data yao-build /app/build.sh
-        ls -l /data
+        docker run --rm -v ./data:/data yao-build /app/build.sh
+        ls -l ./data
 
     - name: Archive production artifacts
       uses: actions/upload-artifact@v4
       with:
         name: yao-linux
         path: |
-          /data/*
+          ./data/*
 
     # - name: Install Coscmd
     #   run: |
