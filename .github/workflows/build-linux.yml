@@ -9,54 +9,23 @@ on:
 jobs:
   build:
     runs-on: "ubuntu-22.04"
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Download Dockerfile
+    - name: Download Dockerfile and build script
       run: |
-        curl -L -o Dockerfile https://raw.githubusercontent.com/feishu/yao/main/docker/build/Dockerfile
-        curl -L -o build.sh https://raw.githubusercontent.com/feishu/yao/main/docker/build/build.sh
+        curl -L -o Dockerfile https://github.com/YaoApp/yao/blob/main/docker/build/Dockerfile?raw=true
+        curl -L -o build.sh https://github.com/YaoApp/yao/blob/main/docker/build/build.sh?raw=true
         chmod +x ./build.sh
 
-    - name: Build Docker image1
+    - name: Build Docker image
       run: |
         docker build -t yao-build -f Dockerfile .
-    - name: Build Docker image2
-      run: |
-        docker create --name yao-build-container yao-build
-    - name: Build Docker image3
-      run: |
-        docker cp yao-build-container:/data ./data
-    - name: Build Docker image4
-      run: |
-        docker rm yao-build-container
 
-    # - name: Install Coscmd
-    #   run: |
-    #     sudo rm /var/lib/apt/lists/lock
-    #     sudo rm /var/cache/apt/archives/lock
-    #     sudo rm /var/lib/dpkg/lock*
-    #     sudo apt-get update
-    #     sudo apt-get install -y python3-venv
-    #     python3 -m venv /python3/venv
-    #     /python3/venv/bin/python -m pip install coscmd
-    #     /python3/venv/bin/coscmd -v
-
-    # - name: Configure COS For Silicon Valley
-    #   env:
-    #     SECRET_ID: ${{ secrets.COS_ID }}
-    #     SECRET_KEY: ${{ secrets.COS_KEY }}
-    #     BUCKET: release-sv-1252011659
-    #     REGION: na-siliconvalley
-    #   run: |
-    #     /python3/venv/bin/coscmd config -a $SECRET_ID -s $SECRET_KEY -b $BUCKET -r $REGION
-
-    - name: Build
+    - name: Run Docker container and execute build script
       run: |
-        export PATH=$PATH:/github/home/go/bin
-        ./build.sh
+        docker run --rm -v $(pwd):/data yao-build /app/build.sh
         ls -l ./data
 
     - name: Archive production artifacts
@@ -66,9 +35,24 @@ jobs:
         path: |
           ./data/*
 
-    # 如果需要上传到COS，可以取消注释以下步骤
-    # - name: Push To Silicon Valley
-    #   run: |
-    #     for file in ./data/*; do
-    #       /python3/venv/bin/coscmd upload "$file" /archives/
-    #     done
+    - name: Install Coscmd
+      run: |
+        sudo apt-get install -y python3-venv
+        python3 -m venv /python3/venv
+        /python3/venv/bin/python -m pip install coscmd
+        /python3/venv/bin/coscmd -v
+
+    - name: Configure COS For Silicon Valley
+      env:
+        SECRET_ID: ${{ secrets.COS_ID }}
+        SECRET_KEY: ${{ secrets.COS_KEY }}
+        BUCKET: release-sv-1252011659
+        REGION: na-siliconvalley
+      run: |
+        /python3/venv/bin/coscmd config -a $SECRET_ID -s $SECRET_KEY -b $BUCKET -r $REGION
+
+    - name: Push To Silicon Valley
+      run: |
+        for file in ./data/*; do
+          /python3/venv/bin/coscmd upload "$file" /archives/
+        done
