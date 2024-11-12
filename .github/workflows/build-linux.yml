@@ -27,11 +27,8 @@ jobs:
         docker create --name yao-build-container yao-build
     - name: Build Docker image3
       run: |
-        docker cp yao-build-container:/app/build.sh ./app/build.sh
-    - name: Build Docker image4
-      run: |
         docker cp yao-build-container:/data ./data
-    - name: Build Docker image5
+    - name: Build Docker image4
       run: |
         docker rm yao-build-container
 
@@ -57,8 +54,6 @@ jobs:
 
     - name: Build
       run: |
-        chmod +x ./app/build.sh
-        ./app/build.sh
         ls -l ./data
 
     - name: Archive production artifacts
