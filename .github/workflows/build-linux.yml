@@ -17,8 +17,7 @@ jobs:
       run: |
         curl -L -o Dockerfile https://github.com/YaoApp/yao/blob/main/docker/build/Dockerfile?raw=true
         curl -L -o build.sh https://github.com/YaoApp/yao/blob/main/docker/build/build.sh?raw=true
-        mkdir data
-        chmod +x ./build.sh ./data
+        chmod +x ./build.sh
 
     - name: Build Docker image
       run: |
