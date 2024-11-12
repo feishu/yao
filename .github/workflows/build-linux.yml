@@ -32,15 +32,18 @@ jobs:
         
     - name: Run Docker container and execute build script
       run: |
-        docker run --rm -v $(pwd):/data yao-build /app/build.sh
-        ls -l $(pwd)
+        # 获取当前工作目录的路径
+        WORKING_DIR=$(pwd)
+        echo "Running Docker container with current directory $WORKING_DIR mounted to /data"
+        docker run --rm -v $WORKING_DIR:/data yao-build /app/build.sh
+        ls -l $WORKING_DIR
 
     - name: Archive production artifacts
       uses: actions/upload-artifact@v4
       with:
         name: yao-linux
         path: |
-          $(pwd)/*
+          $WORKING_DIR/*
 
     # - name: Install Coscmd
     #   run: |
