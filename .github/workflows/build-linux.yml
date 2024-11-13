@@ -15,8 +15,8 @@ jobs:
 
     - name: Download Dockerfile and build script
       run: |
-        curl -L -o Dockerfile https://github.com/YaoApp/yao/blob/main/docker/build/Dockerfile?raw=true
-        curl -L -o build.sh https://github.com/YaoApp/yao/blob/main/docker/build/build.sh?raw=true
+        curl -L -o Dockerfile https://github.com/feishu/yao/blob/main/docker/build/Dockerfile?raw=true
+        curl -L -o build.sh https://github.com/feishu/yao/blob/main/docker/build/build.sh?raw=true
         chmod +x ./build.sh
 
     - name: Build Docker image
