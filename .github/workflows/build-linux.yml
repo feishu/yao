@@ -26,6 +26,7 @@ jobs:
     - name: Run Docker container and execute build script
       run: |
         # 获取当前工作目录的路径
+        rm -rf ./data/*
         docker run --rm -v ./data:/data yao-build /app/build.sh
         ls -l ./data
 
