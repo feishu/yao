@@ -55,7 +55,7 @@ jobs:
       - name: Checkout V8Go
         uses: actions/checkout@v4
         with:
-          repository: feishu/v8go
+          repository: feishu/v8go2
           lfs: false
           path: v8go
 
