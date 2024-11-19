@@ -9,30 +9,36 @@ on:
 jobs:
   build:
     runs-on: "ubuntu-22.04"
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Download Dockerfile
+    - name: Download Dockerfile and build script
       run: |
-        curl -L -o Dockerfile https://raw.githubusercontent.com/feishu/yao/main/docker/build/Dockerfile
-        curl -L -o build.sh https://raw.githubusercontent.com/feishu/yao/main/docker/build/build.sh
+        curl -L -o Dockerfile https://github.com/feishu/yao/blob/main/docker/build/Dockerfile?raw=true
+        curl -L -o build.sh https://github.com/feishu/yao/blob/main/docker/build/build.sh?raw=true
+        chmod +x ./build.sh
 
     - name: Build Docker image
       run: |
         docker build -t yao-build -f Dockerfile .
-        docker create --name yao-build-container yao-build
-        docker cp yao-build-container:/app/build.sh /app/build.sh
-        docker cp yao-build-container:/data ./data
-        docker rm yao-build-container
+        
+    - name: Run Docker container and execute build script
+      run: |
+        # 获取当前工作目录的路径
+        rm -rf ./data/*
+        docker run --rm -v ./data:/data yao-build /app/build.sh
+        ls -l ./data
+
+    - name: Archive production artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: yao-linux
+        path: |
+          ./data/*
 
     # - name: Install Coscmd
     #   run: |
-    #     sudo rm /var/lib/apt/lists/lock
-    #     sudo rm /var/cache/apt/archives/lock
-    #     sudo rm /var/lib/dpkg/lock*
-    #     sudo apt-get update
     #     sudo apt-get install -y python3-venv
     #     python3 -m venv /python3/venv
     #     /python3/venv/bin/python -m pip install coscmd
@@ -47,20 +53,6 @@ jobs:
     #   run: |
     #     /python3/venv/bin/coscmd config -a $SECRET_ID -s $SECRET_KEY -b $BUCKET -r $REGION
 
-    - name: Build
-      run: |
-        chmod +x /app/build.sh
-        /app/build.sh
-        ls -l ./data
-
-    - name: Archive production artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: yao-linux
-        path: |
-          ./data/*
-
-    # 如果需要上传到COS，可以取消注释以下步骤
     # - name: Push To Silicon Valley
     #   run: |
     #     for file in ./data/*; do
