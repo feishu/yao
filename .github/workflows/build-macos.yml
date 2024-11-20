@@ -55,8 +55,8 @@ jobs:
       - name: Checkout V8Go
         uses: actions/checkout@v4
         with:
-          repository: YaoApp/v8go
-          lfs: false
+          repository: feishu/v8go
+          #lfs: false
           path: v8go
 
       - name: Checkout XGen v1.0
