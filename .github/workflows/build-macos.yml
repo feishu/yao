@@ -85,6 +85,19 @@ jobs:
           ls -l .
           ls -l ../
           ls -l ../xgen-v1.0/packages/setup/
+      
+      - name: Unzip file
+        run: |
+
+          unzip ./darwin_arm64/libv8.a.zip -d ./darwin_arm64  # 解压ZIP文件到指定目录
+          unzip ./darwin_x86_64/libv8.a.zip -d ./darwin_x86_64  # 解压ZIP文件到指定目录
+          unzip ./linux_arm64/libv8.a.zip -d ./linux_arm64  # 解压ZIP文件到指定目录
+          unzip ./linux_x86_64/libv8.a.zip -d ./linux_x86_64  # 解压ZIP文件到指定目录
+          ls -l ./darwin_arm64
+          ls -l ./darwin_x86_64
+          ls -l ./linux_arm64
+          ls -l ./linux_x86_64
+        working-directory: ../v8go/deps  # 指定工作目录，假设ZIP文件在
 
       - name: Checkout Code
         uses: actions/checkout@v4
