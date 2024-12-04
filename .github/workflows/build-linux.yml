@@ -37,24 +37,8 @@ jobs:
         path: |
           ./data/*
 
-    # - name: Install Coscmd
-    #   run: |
-    #     sudo apt-get install -y python3-venv
-    #     python3 -m venv /python3/venv
-    #     /python3/venv/bin/python -m pip install coscmd
-    #     /python3/venv/bin/coscmd -v
-
-    # - name: Configure COS For Silicon Valley
-    #   env:
-    #     SECRET_ID: ${{ secrets.COS_ID }}
-    #     SECRET_KEY: ${{ secrets.COS_KEY }}
-    #     BUCKET: release-sv-1252011659
-    #     REGION: na-siliconvalley
-    #   run: |
-    #     /python3/venv/bin/coscmd config -a $SECRET_ID -s $SECRET_KEY -b $BUCKET -r $REGION
-
-    # - name: Push To Silicon Valley
-    #   run: |
-    #     for file in ./data/*; do
-    #       /python3/venv/bin/coscmd upload "$file" /archives/
-    #     done
+      # - name: Push To R2 Cloudflare
+      #   run: |
+      #     for file in /data/*; do
+      #       aws s3 cp $file s3://$R2_BUCKET/archives/ --endpoint-url https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com
+      #     done
