@@ -1,14 +1,14 @@
 package neo
 
 import (
+	"context"
+	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/yaoapp/gou/application"
-	"github.com/yaoapp/kun/log"
-	"github.com/yaoapp/yao/aigc"
 	"github.com/yaoapp/yao/config"
-	"github.com/yaoapp/yao/neo/command"
-	"github.com/yaoapp/yao/neo/command/driver"
+	"github.com/yaoapp/yao/neo/assistant"
 	"github.com/yaoapp/yao/neo/conversation"
 )
 
@@ -20,10 +20,9 @@ func Load(cfg config.Config) error {
 
 	setting := DSL{
 		ID:      "neo",
-		Prompts: []aigc.Prompt{},
+		Prompts: []assistant.Prompt{},
 		Option:  map[string]interface{}{},
 		Allows:  []string{},
-		Command: Command{Parser: ""},
 		ConversationSetting: conversation.Setting{
 			Table:     "yao_neo_conversation",
 			Connector: "default",
@@ -46,35 +45,38 @@ func Load(cfg config.Config) error {
 
 	Neo = &setting
 
-	// AI Setting
-	err = Neo.newAI()
-	if err != nil {
-		return err
-	}
-
 	// Conversation Setting
-	err = Neo.newConversation()
+	err = Neo.createConversation()
 	if err != nil {
 		return err
 	}
 
-	// Command Setting
-	parser := setting.Command.Parser
-	if parser == "" || parser == "default" {
-		parser = setting.Connector
+	// Query Assistant List
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	listDone := make(chan error, 1)
+	go func() {
+		list, err := Neo.HookAssistants(ctx, assistant.QueryParam{Limit: 100})
+		Neo.updateAssistantList(list)
+		listDone <- err
+	}()
+
+	select {
+	case err := <-listDone:
+		if err != nil {
+			return fmt.Errorf("Neo assistant list failed: %w", err)
+		}
+
+		// Create Default Assistant
+		Neo.Assistant, err = Neo.createDefaultAssistant()
+		if err != nil {
+			return err
+		}
+
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("Neo assistant list timeout: %w", ctx.Err())
 	}
 
-	store, err := driver.NewMemory(parser, nil)
-	if err != nil {
-		return err
-	}
-	command.SetStore(store)
-
-	// Load the commands
-	err = command.Load(cfg)
-	if err != nil {
-		log.Error("Command Load Error: %s", err.Error())
-	}
-
-	return nil
 }
