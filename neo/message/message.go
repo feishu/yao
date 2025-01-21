@@ -16,21 +16,34 @@ import (
 
 // Message the message
 type Message struct {
-	Text        string                 `json:"text,omitempty"`  // text content
-	Type        string                 `json:"type,omitempty"`  // error, text, plan, table, form, page, file, video, audio, image, markdown, json ...
-	Props       map[string]interface{} `json:"props,omitempty"` // props for the types
-	IsDone      bool                   `json:"done,omitempty"`
-	Actions     []Action               `json:"actions,omitempty"`     // Conversation Actions for frontend
-	Attachments []Attachment           `json:"attachments,omitempty"` // File attachments
-	Role        string                 `json:"role,omitempty"`        // user, assistant, system ...
-	Name        string                 `json:"name,omitempty"`        // name for the message
-	Data        map[string]interface{} `json:"-"`
+	Text            string                 `json:"text,omitempty"`             // text content
+	Type            string                 `json:"type,omitempty"`             // error, text, plan, table, form, page, file, video, audio, image, markdown, json ...
+	Props           map[string]interface{} `json:"props,omitempty"`            // props for the types
+	IsDone          bool                   `json:"done,omitempty"`             // Mark as a done message from neo
+	IsNew           bool                   `json:"is_new,omitempty"`           // Mark as a new message from neo
+	Actions         []Action               `json:"actions,omitempty"`          // Conversation Actions for frontend
+	Attachments     []Attachment           `json:"attachments,omitempty"`      // File attachments
+	Role            string                 `json:"role,omitempty"`             // user, assistant, system ...
+	Name            string                 `json:"name,omitempty"`             // name for the message
+	AssistantID     string                 `json:"assistant_id,omitempty"`     // assistant_id (for assistant role = assistant )
+	AssistantName   string                 `json:"assistant_name,omitempty"`   // assistant_name (for assistant role = assistant )
+	AssistantAvatar string                 `json:"assistant_avatar,omitempty"` // assistant_avatar (for assistant role = assistant )
+	Mentions        []Mention              `json:"menions,omitempty"`          // Mentions for the message ( for user  role = user )
+	Data            map[string]interface{} `json:"-"`
+}
+
+// Mention represents a mention
+type Mention struct {
+	ID     string `json:"assistant_id"`     // assistant_id
+	Name   string `json:"name"`             // name
+	Avatar string `json:"avatar,omitempty"` // avatar
 }
 
 // Attachment represents a file attachment
 type Attachment struct {
 	Name        string `json:"name,omitempty"`
 	URL         string `json:"url,omitempty"`
+	Description string `json:"description,omitempty"`
 	Type        string `json:"type,omitempty"`
 	ContentType string `json:"content_type,omitempty"`
 	Bytes       int64  `json:"bytes,omitempty"`
@@ -86,7 +99,7 @@ func NewOpenAI(data []byte) *Message {
 		msg.Type = "tool_calls"
 		if len(toolCalls.Choices) > 0 && len(toolCalls.Choices[0].Delta.ToolCalls) > 0 {
 			msg.Props["id"] = toolCalls.Choices[0].Delta.ToolCalls[0].ID
-			msg.Props["name"] = toolCalls.Choices[0].Delta.ToolCalls[0].Function.Name
+			msg.Props["function"] = toolCalls.Choices[0].Delta.ToolCalls[0].Function.Name
 			msg.Text = toolCalls.Choices[0].Delta.ToolCalls[0].Function.Arguments
 		}
 
@@ -97,6 +110,7 @@ func NewOpenAI(data []byte) *Message {
 			return msg
 		}
 
+		msg.Type = "text"
 		if len(message.Choices) > 0 {
 			msg.Text = message.Choices[0].Delta.Content
 		}
@@ -170,6 +184,32 @@ func (m *Message) SetContent(content string) *Message {
 	return m
 }
 
+// AppendTo append the contents
+func (m *Message) AppendTo(contents *Contents) *Message {
+
+	switch m.Type {
+	case "text":
+		if m.Text != "" {
+			contents.AppendText([]byte(m.Text))
+		}
+
+	case "tool_calls":
+
+		// Set function name
+		if name, ok := m.Props["function"].(string); ok && name != "" {
+			contents.NewFunction(name, []byte(m.Text))
+		}
+
+		// Set id
+		if id, ok := m.Props["id"].(string); ok && id != "" {
+			contents.SetFunctionID(id)
+		}
+
+		contents.AppendFunction([]byte(m.Text))
+	}
+	return m
+}
+
 // Content get the content
 func (m *Message) Content() string {
 	content := map[string]interface{}{"text": m.Text}
@@ -231,6 +271,23 @@ func (m *Message) Map(msg map[string]interface{}) *Message {
 	if done, ok := msg["done"].(bool); ok {
 		m.IsDone = done
 	}
+
+	if isNew, ok := msg["is_new"].(bool); ok {
+		m.IsNew = isNew
+	}
+
+	if assistantID, ok := msg["assistant_id"].(string); ok {
+		m.AssistantID = assistantID
+	}
+
+	if assistantName, ok := msg["assistant_name"].(string); ok {
+		m.AssistantName = assistantName
+	}
+
+	if assistantAvatar, ok := msg["assistant_avatar"].(string); ok {
+		m.AssistantAvatar = assistantAvatar
+	}
+
 	if actions, ok := msg["actions"].([]interface{}); ok {
 		for _, action := range actions {
 			if v, ok := action.(map[string]interface{}); ok {
@@ -257,6 +314,14 @@ func (m *Message) Map(msg map[string]interface{}) *Message {
 // Done set the done flag
 func (m *Message) Done() *Message {
 	m.IsDone = true
+	return m
+}
+
+// Assistant set the assistant
+func (m *Message) Assistant(id string, name string, avatar string) *Message {
+	m.AssistantID = id
+	m.AssistantName = name
+	m.AssistantAvatar = avatar
 	return m
 }
 
@@ -306,11 +371,6 @@ func (m *Message) Write(w gin.ResponseWriter) bool {
 	}
 	w.Flush()
 	return true
-}
-
-// Append appends content to the byte slice
-func (m *Message) Append(content []byte) []byte {
-	return append(content, []byte(m.Text)...)
 }
 
 // WriteError writes an error message to response writer
