@@ -39,16 +39,16 @@ type ResHookInit struct {
 
 // ResHookStream the response of the stream hook
 type ResHookStream struct {
-	Silent bool        `json:"silent,omitempty"` // Whether to suppress the output
-	Next   *NextAction `json:"next,omitempty"`   // The next action
-	Output string      `json:"output,omitempty"` // The output
+	Silent bool           `json:"silent,omitempty"` // Whether to suppress the output
+	Next   *NextAction    `json:"next,omitempty"`   // The next action
+	Output []message.Data `json:"output,omitempty"` // The output
 }
 
 // ResHookDone the response of the done hook
 type ResHookDone struct {
 	Next   *NextAction       `json:"next,omitempty"`
 	Input  []message.Message `json:"input,omitempty"`
-	Output string            `json:"output,omitempty"`
+	Output []message.Data    `json:"output,omitempty"`
 }
 
 // ResHookFail the response of the fail hook
@@ -126,6 +126,8 @@ type Assistant struct {
 	CreatedAt   int64                    `json:"created_at"`            // Creation timestamp
 	UpdatedAt   int64                    `json:"updated_at"`            // Last update timestamp
 	openai      *api.OpenAI              // OpenAI API
+	vision      bool                     // Whether this assistant supports vision
+	initHook    bool                     // Whether this assistant has an init hook
 }
 
 // VisionCapableModels list of LLM models that support vision capabilities

@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/gou/fs"
 	"github.com/yaoapp/gou/process"
 	chatctx "github.com/yaoapp/yao/neo/context"
-	"github.com/yaoapp/yao/neo/message"
 	chatMessage "github.com/yaoapp/yao/neo/message"
 )
 
@@ -56,30 +56,40 @@ func (ast *Assistant) Execute(c *gin.Context, ctx chatctx.Context, input string,
 	// Run init hook
 	res, err := ast.HookInit(c, ctx, messages, options)
 	if err != nil {
+		chatMessage.New().
+			Assistant(ast.ID, ast.Name, ast.Avatar).
+			Error(err).
+			Done().
+			Write(c.Writer)
 		return err
 	}
 
 	// Switch to the new assistant if necessary
-	if res.AssistantID != ctx.AssistantID {
+	if res != nil && res.AssistantID != ctx.AssistantID {
 		newAst, err := Get(res.AssistantID)
 		if err != nil {
+			chatMessage.New().
+				Assistant(ast.ID, ast.Name, ast.Avatar).
+				Error(err).
+				Done().
+				Write(c.Writer)
 			return err
 		}
 		*ast = *newAst
 	}
 
 	// Handle next action
-	if res.Next != nil {
+	if res != nil && res.Next != nil {
 		return res.Next.Execute(c, ctx)
 	}
 
 	// Update options if provided
-	if res.Options != nil {
+	if res != nil && res.Options != nil {
 		options = res.Options
 	}
 
 	// messages
-	if res.Input != nil {
+	if res != nil && res.Input != nil {
 		messages = res.Input
 	}
 
@@ -160,19 +170,19 @@ func (next *NextAction) Execute(c *gin.Context, ctx chatctx.Context) error {
 }
 
 // handleChatStream manages the streaming chat interaction with the AI
-func (ast *Assistant) handleChatStream(c *gin.Context, ctx chatctx.Context, messages []message.Message, options map[string]interface{}) error {
+func (ast *Assistant) handleChatStream(c *gin.Context, ctx chatctx.Context, messages []chatMessage.Message, options map[string]interface{}) error {
 	clientBreak := make(chan bool, 1)
 	done := make(chan bool, 1)
-	content := message.NewContent("text")
+	contents := chatMessage.NewContents()
 
 	// Chat with AI in background
 	go func() {
-		err := ast.streamChat(c, ctx, messages, options, clientBreak, done, content)
+		err := ast.streamChat(c, ctx, messages, options, clientBreak, done, contents)
 		if err != nil {
 			chatMessage.New().Error(err).Done().Write(c.Writer)
 		}
 
-		ast.saveChatHistory(ctx, messages, content)
+		ast.saveChatHistory(ctx, messages, contents)
 		done <- true
 	}()
 
@@ -190,11 +200,11 @@ func (ast *Assistant) handleChatStream(c *gin.Context, ctx chatctx.Context, mess
 func (ast *Assistant) streamChat(
 	c *gin.Context,
 	ctx chatctx.Context,
-	messages []message.Message,
+	messages []chatMessage.Message,
 	options map[string]interface{},
 	clientBreak chan bool,
 	done chan bool,
-	content *message.Content) error {
+	contents *chatMessage.Contents) error {
 
 	return ast.Chat(c.Request.Context(), messages, options, func(data []byte) int {
 		select {
@@ -210,7 +220,7 @@ func (ast *Assistant) streamChat(
 			// Handle error
 			if msg.Type == "error" {
 				value := msg.String()
-				res, hookErr := ast.HookFail(c, ctx, messages, content.String(), fmt.Errorf("%s", value))
+				res, hookErr := ast.HookFail(c, ctx, messages, contents.JSON(), fmt.Errorf("%s", value))
 				if hookErr == nil && res != nil && (res.Output != "" || res.Error != "") {
 					value = res.Output
 					if res.Error != "" {
@@ -221,30 +231,13 @@ func (ast *Assistant) streamChat(
 				return 0 // break
 			}
 
-			// Handle tool call
-			if msg.Type == "tool_calls" {
-				content.SetType("function") // Set type to function
-				// Set id
-				if id, ok := msg.Props["id"].(string); ok && id != "" {
-					content.SetID(id)
-				}
-
-				// Set name
-				if name, ok := msg.Props["name"].(string); ok && name != "" {
-					content.SetName(name)
-				}
-			}
-
 			// Append content and send message
+			msg.AppendTo(contents)
 			value := msg.String()
-			content.Append(value)
 			if value != "" {
 				// Handle stream
-				res, err := ast.HookStream(c, ctx, messages, content.String(), msg.Type == "tool_calls")
+				res, err := ast.HookStream(c, ctx, messages, contents.Data)
 				if err == nil && res != nil {
-					if res.Output != "" {
-						value = res.Output
-					}
 
 					if res.Next != nil {
 						err = res.Next.Execute(c, ctx)
@@ -263,8 +256,11 @@ func (ast *Assistant) streamChat(
 
 				chatMessage.New().
 					Map(map[string]interface{}{
-						"text": value,
-						"done": msg.IsDone,
+						"assistant_id":     ast.ID,
+						"assistant_name":   ast.Name,
+						"assistant_avatar": ast.Avatar,
+						"text":             value,
+						"done":             msg.IsDone,
 					}).
 					Write(c.Writer)
 			}
@@ -275,14 +271,12 @@ func (ast *Assistant) streamChat(
 				// 	msg.Write(c.Writer)
 				// }
 
-				// Call HookDone
-				content.SetStatus(message.ContentStatusDone)
-				res, hookErr := ast.HookDone(c, ctx, messages, content.String(), msg.Type == "tool_calls")
+				res, hookErr := ast.HookDone(c, ctx, messages, contents.Data)
 				if hookErr == nil && res != nil {
-					if res.Output != "" {
+					if res.Output != nil {
 						chatMessage.New().
 							Map(map[string]interface{}{
-								"text": res.Output,
+								"text": res.Input,
 								"done": true,
 							}).
 							Write(c.Writer)
@@ -300,8 +294,11 @@ func (ast *Assistant) streamChat(
 				} else if value != "" {
 					chatMessage.New().
 						Map(map[string]interface{}{
-							"text": value,
-							"done": true,
+							"assistant_id":     ast.ID,
+							"assistant_name":   ast.Name,
+							"assistant_avatar": ast.Avatar,
+							"text":             value,
+							"done":             true,
 						}).
 						Write(c.Writer)
 				}
@@ -316,17 +313,31 @@ func (ast *Assistant) streamChat(
 }
 
 // saveChatHistory saves the chat history if storage is available
-func (ast *Assistant) saveChatHistory(ctx chatctx.Context, messages []message.Message, content *message.Content) {
-	if len(content.Bytes) > 0 && ctx.Sid != "" && len(messages) > 0 {
-		storage.SaveHistory(
-			ctx.Sid,
-			[]map[string]interface{}{
-				{"role": "user", "content": messages[len(messages)-1].Content(), "name": ctx.Sid},
-				{"role": "assistant", "content": content.String(), "name": ctx.Sid},
+func (ast *Assistant) saveChatHistory(ctx chatctx.Context, messages []chatMessage.Message, contents *chatMessage.Contents) {
+	if len(contents.Data) > 0 && ctx.Sid != "" && len(messages) > 0 {
+		userMessage := messages[len(messages)-1]
+		data := []map[string]interface{}{
+			{
+				"role":    "user",
+				"content": userMessage.Content(),
+				"name":    ctx.Sid,
 			},
-			ctx.ChatID,
-			nil,
-		)
+			{
+				"role":             "assistant",
+				"content":          contents.JSON(),
+				"name":             ctx.Sid,
+				"assistant_id":     ast.ID,
+				"assistant_name":   ast.Name,
+				"assistant_avatar": ast.Avatar,
+			},
+		}
+
+		// Add mentions
+		if userMessage.Mentions != nil {
+			data[0]["mentions"] = userMessage.Mentions
+		}
+
+		storage.SaveHistory(ctx.Sid, data, ctx.ChatID, ctx.Map())
 	}
 }
 
@@ -352,21 +363,21 @@ func (ast *Assistant) withOptions(options map[string]interface{}) map[string]int
 	return options
 }
 
-func (ast *Assistant) withPrompts(messages []message.Message) []message.Message {
+func (ast *Assistant) withPrompts(messages []chatMessage.Message) []chatMessage.Message {
 	if ast.Prompts != nil {
 		for _, prompt := range ast.Prompts {
 			name := ast.Name
 			if prompt.Name != "" {
 				name = prompt.Name
 			}
-			messages = append(messages, *message.New().Map(map[string]interface{}{"role": prompt.Role, "content": prompt.Content, "name": name}))
+			messages = append(messages, *chatMessage.New().Map(map[string]interface{}{"role": prompt.Role, "content": prompt.Content, "name": name}))
 		}
 	}
 	return messages
 }
 
-func (ast *Assistant) withHistory(ctx chatctx.Context, input string) ([]message.Message, error) {
-	messages := []message.Message{}
+func (ast *Assistant) withHistory(ctx chatctx.Context, input string) ([]chatMessage.Message, error) {
+	messages := []chatMessage.Message{}
 	messages = ast.withPrompts(messages)
 	if storage != nil {
 		history, err := storage.GetHistory(ctx.Sid, ctx.ChatID)
@@ -376,17 +387,17 @@ func (ast *Assistant) withHistory(ctx chatctx.Context, input string) ([]message.
 
 		// Add history messages
 		for _, h := range history {
-			messages = append(messages, *message.New().Map(h))
+			messages = append(messages, *chatMessage.New().Map(h))
 		}
 	}
 
 	// Add user message
-	messages = append(messages, *message.New().Map(map[string]interface{}{"role": "user", "content": input, "name": ctx.Sid}))
+	messages = append(messages, *chatMessage.New().Map(map[string]interface{}{"role": "user", "content": input, "name": ctx.Sid}))
 	return messages, nil
 }
 
 // Chat implements the chat functionality
-func (ast *Assistant) Chat(ctx context.Context, messages []message.Message, option map[string]interface{}, cb func(data []byte) int) error {
+func (ast *Assistant) Chat(ctx context.Context, messages []chatMessage.Message, option map[string]interface{}, cb func(data []byte) int) error {
 	if ast.openai == nil {
 		return fmt.Errorf("openai is not initialized")
 	}
@@ -404,27 +415,10 @@ func (ast *Assistant) Chat(ctx context.Context, messages []message.Message, opti
 	return nil
 }
 
-func (ast *Assistant) requestMessages(ctx context.Context, messages []message.Message) ([]map[string]interface{}, error) {
+func (ast *Assistant) requestMessages(ctx context.Context, messages []chatMessage.Message) ([]map[string]interface{}, error) {
 	newMessages := []map[string]interface{}{}
-	// With Prompts
-	if ast.Prompts != nil {
-		for _, prompt := range ast.Prompts {
-			msg := map[string]interface{}{
-				"role":    prompt.Role,
-				"content": prompt.Content,
-			}
-
-			name := ast.Name
-			if prompt.Name != "" {
-				name = prompt.Name
-			}
-
-			msg["name"] = name
-			newMessages = append(newMessages, msg)
-		}
-	}
-
 	length := len(messages)
+
 	for index, message := range messages {
 		role := message.Role
 		if role == "" {
@@ -454,12 +448,24 @@ func (ast *Assistant) requestMessages(ctx context.Context, messages []message.Me
 			}
 
 			newMessage["content"] = msg.Text
-			if msg.Attachments != nil {
-				content, err := ast.withAttachments(ctx, msg)
+			if message.Attachments != nil {
+				contents, err := ast.withAttachments(ctx, &message)
 				if err != nil {
 					return nil, fmt.Errorf("with attachments error: %s", err.Error())
 				}
-				newMessage["content"] = content
+
+				// if current assistant is vision capable, add the contents directly
+				if ast.vision {
+					newMessage["content"] = contents
+					continue
+				}
+
+				// If current assistant is not vision capable, add the description of the image
+				if contents != nil {
+					for _, content := range contents {
+						newMessages = append(newMessages, content)
+					}
+				}
 			}
 		}
 
@@ -470,10 +476,27 @@ func (ast *Assistant) requestMessages(ctx context.Context, messages []message.Me
 
 func (ast *Assistant) withAttachments(ctx context.Context, msg *chatMessage.Message) ([]map[string]interface{}, error) {
 	contents := []map[string]interface{}{{"type": "text", "text": msg.Text}}
+	if !ast.vision {
+		contents = []map[string]interface{}{{"role": "user", "content": msg.Text}}
+	}
+
 	images := []string{}
 	for _, attachment := range msg.Attachments {
 		if strings.HasPrefix(attachment.ContentType, "image/") {
-			images = append(images, attachment.FileID)
+			if ast.vision {
+				images = append(images, attachment.URL)
+				continue
+			}
+
+			// If the current assistant is not vision capable, add the description of the image
+			raw, err := jsoniter.MarshalToString(attachment)
+			if err != nil {
+				return nil, fmt.Errorf("marshal attachment error: %s", err.Error())
+			}
+			contents = append(contents, map[string]interface{}{
+				"role":    "system",
+				"content": raw,
+			})
 		}
 	}
 
@@ -481,19 +504,37 @@ func (ast *Assistant) withAttachments(ctx context.Context, msg *chatMessage.Mess
 		return contents, nil
 	}
 
-	for _, image := range images {
-		bytes64, err := ast.ReadBase64(ctx, image)
-		if err != nil {
-			return nil, fmt.Errorf("read base64 error: %s", err.Error())
-		}
+	// If the current assistant is vision capable, add the image to the contents directly
+	if ast.vision {
+		for _, url := range images {
 
-		contents = append(contents, map[string]interface{}{
-			"type": "image_url",
-			"image_url": map[string]string{
-				"url": fmt.Sprintf("data:image/jpeg;base64,%s", bytes64),
-			},
-		})
+			// If the image is already a URL, add it directly
+			if strings.HasPrefix(url, "http") {
+				contents = append(contents, map[string]interface{}{
+					"type": "image_url",
+					"image_url": map[string]string{
+						"url": url,
+					},
+				})
+				continue
+			}
+
+			// Read base64
+			bytes64, err := ast.ReadBase64(ctx, url)
+			if err != nil {
+				return nil, fmt.Errorf("read base64 error: %s", err.Error())
+			}
+			contents = append(contents, map[string]interface{}{
+				"type": "image_url",
+				"image_url": map[string]string{
+					"url": fmt.Sprintf("data:image/jpeg;base64,%s", bytes64),
+				},
+			})
+		}
+		return contents, nil
 	}
+
+	// If the current assistant is not vision capable, add the description of the image
 
 	return contents, nil
 }

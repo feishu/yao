@@ -28,6 +28,10 @@ var defaultConnector string = "" // default connector
 
 // LoadBuiltIn load the built-in assistants
 func LoadBuiltIn() error {
+
+	// Clear the cache
+	loaded.Clear()
+
 	root := `/assistants`
 	app, err := fs.Get("app")
 	if err != nil {
@@ -517,5 +521,25 @@ func (ast *Assistant) initialize() error {
 		return err
 	}
 	ast.openai = api
+
+	// Check if the assistant supports vision
+	model := api.Model()
+	if v, ok := ast.Options["model"].(string); ok {
+		model = strings.TrimLeft(v, "moapi:")
+	}
+	if _, ok := VisionCapableModels[model]; ok {
+		ast.vision = true
+	}
+
+	// Check if the assistant has an init hook
+	if ast.Script != nil {
+		scriptCtx, err := ast.Script.NewContext("", nil)
+		if err != nil {
+			return err
+		}
+		defer scriptCtx.Close()
+		ast.initHook = scriptCtx.Global().Has("init")
+	}
+
 	return nil
 }
