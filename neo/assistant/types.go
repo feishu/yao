@@ -24,6 +24,8 @@ type API interface {
 	Upload(ctx context.Context, file *multipart.FileHeader, reader io.Reader, option map[string]interface{}) (*File, error)
 	Download(ctx context.Context, fileID string) (*FileResponse, error)
 	ReadBase64(ctx context.Context, fileID string) (string, error)
+
+	GetPlaceholder() *Placeholder
 	Execute(c *gin.Context, ctx chatctx.Context, input string, options map[string]interface{}) error
 	Call(c *gin.Context, payload APIPayload) (interface{}, error)
 }
@@ -92,8 +94,8 @@ type Prompt struct {
 	Name    string `json:"name,omitempty"`
 }
 
-// Function a function
-type Function struct {
+// Tool represents a tool
+type Tool struct {
 	Type     string `json:"type"`
 	Function struct {
 		Name        string                 `json:"name"`
@@ -127,14 +129,35 @@ type Assistant struct {
 	Automated   bool                     `json:"automated,omitempty"`   // Whether this assistant is automated
 	Options     map[string]interface{}   `json:"options,omitempty"`     // AI Options
 	Prompts     []Prompt                 `json:"prompts,omitempty"`     // AI Prompts
-	Functions   []Function               `json:"functions,omitempty"`   // Assistant Functions
+	Tools       *ToolCalls               `json:"tools,omitempty"`       // Assistant Tools
 	Flows       []map[string]interface{} `json:"flows,omitempty"`       // Assistant Flows
+	Placeholder *Placeholder             `json:"placeholder,omitempty"` // Assistant Placeholder
 	Script      *v8.Script               `json:"-" yaml:"-"`            // Assistant Script
 	CreatedAt   int64                    `json:"created_at"`            // Creation timestamp
 	UpdatedAt   int64                    `json:"updated_at"`            // Last update timestamp
 	openai      *api.OpenAI              // OpenAI API
 	vision      bool                     // Whether this assistant supports vision
+	toolCalls   bool                     // Whether this assistant supports tool_calls
 	initHook    bool                     // Whether this assistant has an init hook
+}
+
+// ToolCalls the tool calls
+type ToolCalls struct {
+	Tools   []Tool   `json:"tools,omitempty"`
+	Prompts []Prompt `json:"prompts,omitempty"`
+}
+
+// ConnectorSetting the connector setting
+type ConnectorSetting struct {
+	Vision bool `json:"vision,omitempty" yaml:"vision,omitempty"`
+	Tools  bool `json:"tools,omitempty" yaml:"tools,omitempty"`
+}
+
+// Placeholder the assistant placeholder
+type Placeholder struct {
+	Title       string   `json:"title,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Prompts     []string `json:"prompts,omitempty"`
 }
 
 // VisionCapableModels list of LLM models that support vision capabilities

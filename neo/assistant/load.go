@@ -2,6 +2,7 @@ package assistant
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/spf13/cast"
+	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/gou/fs"
 	"github.com/yaoapp/gou/rag/driver"
 	v8 "github.com/yaoapp/gou/runtime/v8"
@@ -23,6 +25,7 @@ import (
 var loaded = NewCache(200) // 200 is the default capacity
 var storage store.Store = nil
 var rag *RAG = nil
+var connectorSettings map[string]ConnectorSetting = map[string]ConnectorSetting{}
 var vision *neovision.Vision = nil
 var defaultConnector string = "" // default connector
 
@@ -122,6 +125,11 @@ func SetVision(v *neovision.Vision) {
 	vision = v
 }
 
+// SetConnectorSettings set the connector settings
+func SetConnectorSettings(settings map[string]ConnectorSetting) {
+	connectorSettings = settings
+}
+
 // SetConnector set the connector
 func SetConnector(c string) {
 	defaultConnector = c
@@ -195,8 +203,8 @@ func LoadStore(id string) (*Assistant, error) {
 	return assistant, nil
 }
 
-// LoadPath load assistant from path
-func LoadPath(path string) (*Assistant, error) {
+// loadPackage loads and parses the package.yao file
+func loadPackage(path string) (map[string]interface{}, error) {
 	app, err := fs.Get("app")
 	if err != nil {
 		return nil, err
@@ -207,19 +215,44 @@ func LoadPath(path string) (*Assistant, error) {
 		return nil, fmt.Errorf("package.yao not found in %s", path)
 	}
 
-	pkg, err := app.ReadFile(pkgfile)
+	pkgraw, err := app.ReadFile(pkgfile)
 	if err != nil {
 		return nil, err
 	}
 
-	id := strings.ReplaceAll(strings.TrimPrefix(path, "/assistants/"), "/", ".")
 	var data map[string]interface{}
-	err = jsoniter.Unmarshal(pkg, &data)
+	err = application.Parse(pkgfile, pkgraw, &data)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process connector environment variable
+	if connector, ok := data["connector"].(string); ok {
+		if strings.HasPrefix(connector, "$ENV.") {
+			envKey := strings.TrimPrefix(connector, "$ENV.")
+			if envValue := os.Getenv(envKey); envValue != "" {
+				data["connector"] = envValue
+			}
+		}
+	}
+
+	return data, nil
+}
+
+// LoadPath load assistant from path
+func LoadPath(path string) (*Assistant, error) {
+	app, err := fs.Get("app")
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := loadPackage(path)
 	if err != nil {
 		return nil, err
 	}
 
 	// assistant_id
+	id := strings.ReplaceAll(strings.TrimPrefix(path, "/assistants/"), "/", ".")
 	data["assistant_id"] = id
 	data["type"] = "assistant"
 	data["path"] = path
@@ -249,16 +282,15 @@ func LoadPath(path string) (*Assistant, error) {
 		data["updated_at"] = max(updatedAt, ts)
 	}
 
-	// load functions
-	functionsfile := filepath.Join(path, "functions.json")
-	if has, _ := app.Exists(functionsfile); has {
-		functions, ts, err := loadFunctions(functionsfile)
+	// load tools
+	toolsfile := filepath.Join(path, "tools.yao")
+	if has, _ := app.Exists(toolsfile); has {
+		tools, ts, err := loadTools(toolsfile)
 		if err != nil {
 			return nil, err
 		}
-		data["functions"] = functions
+		data["tools"] = tools
 		updatedAt = max(updatedAt, ts)
-		data["updated_at"] = updatedAt
 	}
 
 	// load flow
@@ -292,6 +324,41 @@ func loadMap(data map[string]interface{}) (*Assistant, error) {
 	// Type
 	if v, ok := data["type"].(string); ok {
 		assistant.Type = v
+	}
+
+	// Placeholder
+	if v, ok := data["placeholder"]; ok {
+
+		switch vv := v.(type) {
+		case string:
+			placeholder, err := jsoniter.Marshal(vv)
+			if err != nil {
+				return nil, err
+			}
+			assistant.Placeholder = &Placeholder{}
+			err = jsoniter.Unmarshal(placeholder, assistant.Placeholder)
+			if err != nil {
+				return nil, err
+			}
+
+		case map[string]interface{}:
+			raw, err := jsoniter.Marshal(vv)
+			if err != nil {
+				return nil, err
+			}
+
+			assistant.Placeholder = &Placeholder{}
+			err = jsoniter.Unmarshal(raw, assistant.Placeholder)
+			if err != nil {
+				return nil, err
+			}
+
+		case *Placeholder:
+			assistant.Placeholder = vv
+
+		case nil:
+			assistant.Placeholder = nil
+		}
 	}
 
 	// Mentionable
@@ -330,8 +397,32 @@ func loadMap(data map[string]interface{}) (*Assistant, error) {
 	}
 
 	// tags
-	if v, ok := data["tags"].([]string); ok {
-		assistant.Tags = v
+	if v, has := data["tags"]; has {
+		switch vv := v.(type) {
+		case []string:
+			assistant.Tags = vv
+		case []interface{}:
+			var tags []string
+			for _, tag := range vv {
+				tags = append(tags, cast.ToString(tag))
+			}
+			assistant.Tags = tags
+
+		case interface{}:
+			raw, err := jsoniter.Marshal(vv)
+			if err != nil {
+				return nil, err
+			}
+			var tags []string
+			err = jsoniter.Unmarshal(raw, &tags)
+			if err != nil {
+				return nil, err
+			}
+			assistant.Tags = tags
+
+		case string:
+			assistant.Tags = []string{vv}
+		}
 	}
 
 	// options
@@ -354,22 +445,30 @@ func loadMap(data map[string]interface{}) (*Assistant, error) {
 		assistant.Prompts = prompts
 	}
 
-	// functions
-	if funcs, has := data["functions"]; has {
-		switch vv := funcs.(type) {
-		case []Function:
-			assistant.Functions = vv
+	// tools
+	if tools, has := data["tools"]; has {
+		switch vv := tools.(type) {
+		case []Tool:
+			assistant.Tools = &ToolCalls{
+				Tools:   vv,
+				Prompts: assistant.Prompts,
+			}
+
+		case ToolCalls:
+			assistant.Tools = &vv
+
 		default:
-			raw, err := jsoniter.Marshal(vv)
+			raw, err := jsoniter.Marshal(tools)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("tools format error %s", err.Error())
 			}
-			var functions []Function
-			err = jsoniter.Unmarshal(raw, &functions)
+
+			var tools ToolCalls
+			err = jsoniter.Unmarshal(raw, &tools)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("tools format error %s", err.Error())
 			}
-			assistant.Functions = functions
+			assistant.Tools = &tools
 		}
 	}
 
@@ -413,32 +512,6 @@ func loadMap(data map[string]interface{}) (*Assistant, error) {
 	}
 
 	return assistant, nil
-}
-
-func loadFunctions(file string) ([]Function, int64, error) {
-
-	app, err := fs.Get("app")
-	if err != nil {
-		return nil, 0, err
-	}
-
-	ts, err := app.ModTime(file)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	raw, err := app.ReadFile(file)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	var functions []Function
-	err = jsoniter.Unmarshal(raw, &functions)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return functions, ts.UnixNano(), nil
 }
 
 func loadPrompts(file string, root string) (string, int64, error) {
@@ -542,4 +615,34 @@ func (ast *Assistant) initialize() error {
 	}
 
 	return nil
+}
+
+func loadTools(file string) (*ToolCalls, int64, error) {
+
+	app, err := fs.Get("app")
+	if err != nil {
+		return nil, 0, err
+	}
+
+	content, err := app.ReadFile(file)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	ts, err := app.ModTime(file)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if len(content) == 0 {
+		return &ToolCalls{Tools: []Tool{}, Prompts: []Prompt{}}, ts.UnixNano(), nil
+	}
+
+	var tools ToolCalls
+	err = application.Parse(file, content, &tools)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return &tools, ts.UnixNano(), nil
 }

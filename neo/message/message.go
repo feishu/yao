@@ -16,11 +16,13 @@ import (
 
 // Message the message
 type Message struct {
+	ID              string                 `json:"id,omitempty"`               // id for the message
 	Text            string                 `json:"text,omitempty"`             // text content
 	Type            string                 `json:"type,omitempty"`             // error, text, plan, table, form, page, file, video, audio, image, markdown, json ...
 	Props           map[string]interface{} `json:"props,omitempty"`            // props for the types
 	IsDone          bool                   `json:"done,omitempty"`             // Mark as a done message from neo
 	IsNew           bool                   `json:"new,omitempty"`              // Mark as a new message from neo
+	IsDelta         bool                   `json:"delta,omitempty"`            // Mark as a delta message from neo
 	Actions         []Action               `json:"actions,omitempty"`          // Conversation Actions for frontend
 	Attachments     []Attachment           `json:"attachments,omitempty"`      // File attachments
 	Role            string                 `json:"role,omitempty"`             // user, assistant, system ...
@@ -29,7 +31,9 @@ type Message struct {
 	AssistantName   string                 `json:"assistant_name,omitempty"`   // assistant_name (for assistant role = assistant )
 	AssistantAvatar string                 `json:"assistant_avatar,omitempty"` // assistant_avatar (for assistant role = assistant )
 	Mentions        []Mention              `json:"menions,omitempty"`          // Mentions for the message ( for user  role = user )
-	Data            map[string]interface{} `json:"-"`
+	Data            map[string]interface{} `json:"-"`                          // data for the message
+	Pending         bool                   `json:"-"`                          // pending for the message
+	Hidden          bool                   `json:"hidden,omitempty"`           // hidden for the message (not show in the UI and history)
 }
 
 // Mention represents a mention
@@ -133,7 +137,7 @@ func NewContent(content string) ([]Message, error) {
 }
 
 // NewString create a new message from string
-func NewString(content string) (*Message, error) {
+func NewString(content string, id ...string) (*Message, error) {
 	if strings.HasPrefix(content, "{") && strings.HasSuffix(content, "}") {
 		var msg Message
 		if err := jsoniter.UnmarshalFromString(content, &msg); err != nil {
@@ -141,11 +145,46 @@ func NewString(content string) (*Message, error) {
 		}
 		return &msg, nil
 	}
+	if len(id) > 0 {
+		return &Message{ID: id[0], Text: content}, nil
+	}
 	return &Message{Text: content}, nil
 }
 
+// NewStringError create a new message from string error
+func NewStringError(content string) (*Message, error) {
+	if strings.HasPrefix(content, "{") && strings.HasSuffix(content, "}") {
+		var msg = New()
+		var errorMessage openai.ErrorMessage
+		if err := jsoniter.UnmarshalFromString(content, &errorMessage); err != nil {
+			msg.Text = err.Error() + "\n" + content
+			return msg, nil
+		}
+		msg.Type = "error"
+		msg.Text = errorMessage.Error.Message
+		return msg, nil
+	}
+	return &Message{Text: content}, nil
+}
+
+// NewMap create a new message from map
+func NewMap(content map[string]interface{}) (*Message, error) {
+	return New().Map(content), nil
+}
+
+// NewAny create a new message from any content
+func NewAny(content interface{}) (*Message, error) {
+	switch v := content.(type) {
+	case string:
+		return NewString(v)
+	case map[string]interface{}:
+		return NewMap(v)
+	}
+	return nil, fmt.Errorf("unknown content type: %T", content)
+}
+
 // NewOpenAI create a new message from OpenAI response
-func NewOpenAI(data []byte) *Message {
+func NewOpenAI(data []byte, isThinking bool) *Message {
 	if data == nil || len(data) == 0 {
 		return nil
 	}
@@ -158,11 +197,15 @@ func NewOpenAI(data []byte) *Message {
 	case strings.Contains(text, `"delta":{`) && strings.Contains(text, `"tool_calls"`):
 		var toolCalls openai.ToolCalls
 		if err := jsoniter.Unmarshal(data, &toolCalls); err != nil {
-			msg.Text = err.Error() + "\n" + string(data)
+			color.Red("JSON parse error: %s", err.Error())
+			color.White(string(data))
+			msg.Text = "JSON parse error\n" + string(data)
+			msg.Type = "error"
+			msg.IsDone = true
 			return msg
 		}
 
-		msg.Type = "tool_calls"
+		msg.Type = "tool_calls_native"
 		if len(toolCalls.Choices) > 0 && len(toolCalls.Choices[0].Delta.ToolCalls) > 0 {
 			msg.Props["id"] = toolCalls.Choices[0].Delta.ToolCalls[0].ID
 			msg.Props["function"] = toolCalls.Choices[0].Delta.ToolCalls[0].Function.Name
@@ -170,16 +213,69 @@ func NewOpenAI(data []byte) *Message {
 		}
 
 	case strings.Contains(text, `"delta":{`) && strings.Contains(text, `"content":`):
-		var message openai.Message
+		var message openai.MessageWithReasoningContent
 		if err := jsoniter.Unmarshal(data, &message); err != nil {
-			msg.Text = err.Error() + "\n" + string(data)
+			color.Red("JSON parse error: %s", err.Error())
+			color.White(string(data))
+			msg.Text = "JSON parse error\n" + string(data)
+			msg.Type = "error"
+			msg.IsDone = true
 			return msg
 		}
 
 		msg.Type = "text"
 		if len(message.Choices) > 0 {
-			msg.Text = message.Choices[0].Delta.Content
+			if reasoningContent, ok := message.Choices[0].Delta["reasoning_content"].(string); ok {
+				msg.Text = reasoningContent
+				msg.Type = "think"
+				return msg
+			}
+
+			if content, ok := message.Choices[0].Delta["content"].(string); ok && content != "" {
+				msg.Text = content
+				msg.Type = "text"
+				return msg
+			}
+
+			if isThinking {
+				msg.Type = "think"
+				msg.Text = ""
+				return msg
+			}
+
+			msg.Text = ""
+			return msg
 		}
+
+	case strings.Index(text, `{"code":`) == 0:
+		var errorMessage openai.Error
+		if err := jsoniter.UnmarshalFromString(text, &errorMessage); err != nil {
+			color.Red("JSON parse error: %s", err.Error())
+			color.White(string(data))
+			msg.Text = "JSON parse error\n" + string(data)
+			msg.Type = "error"
+			msg.IsDone = true
+			return msg
+		}
+		msg.Type = "error"
+		msg.Text = errorMessage.Message
+		msg.IsDone = true
+		break
+
+	case strings.Contains(text, `{"error":{`):
+		var errorMessage openai.ErrorMessage
+		if err := jsoniter.Unmarshal(data, &errorMessage); err != nil {
+			color.Red("JSON parse error: %s", err.Error())
+			color.White(string(data))
+			msg.Text = "JSON parse error\n" + string(data)
+			msg.Type = "error"
+			msg.IsDone = true
+			return msg
+		}
+		msg.Type = "error"
+		msg.Text = errorMessage.Error.Message
+		msg.IsDone = true
+		break
 
 	case strings.Contains(text, `[DONE]`):
 		msg.IsDone = true
@@ -189,6 +285,11 @@ func NewOpenAI(data []byte) *Message {
 
 	case strings.Contains(text, `"finish_reason":"tool_calls"`):
 		msg.IsDone = true
+
+	// Not a data message
+	case !strings.Contains(text, `data: `):
+		msg.Pending = true
+		msg.Text = text
 
 	default:
 		str := strings.TrimPrefix(strings.Trim(string(data), "\""), "data: ")
@@ -207,8 +308,12 @@ func (m *Message) String() string {
 	}
 
 	switch typ {
-	case "text":
+	case "text", "think", "tool":
 		return m.Text
+
+	case "error":
+		return m.Text
+
 	default:
 		raw, _ := jsoniter.MarshalToString(map[string]interface{}{"type": m.Type, "props": m.Props})
 		return raw
@@ -225,6 +330,12 @@ func (m *Message) SetText(text string) *Message {
 			}
 		}
 	}
+	return m
+}
+
+// SetProps set the props
+func (m *Message) SetProps(props map[string]interface{}) *Message {
+	m.Props = props
 	return m
 }
 
@@ -267,30 +378,34 @@ func (m *Message) AppendTo(contents *Contents) *Message {
 	}
 
 	switch m.Type {
-	case "text":
+	case "text", "think", "tool":
 		if m.Text != "" {
 			if m.IsNew {
-				contents.NewText([]byte(m.Text))
+				contents.NewText([]byte(m.Text), m.ID)
 				return m
 			}
-			contents.AppendText([]byte(m.Text))
+			contents.AppendText([]byte(m.Text), m.ID)
 			return m
 		}
 		return m
 
-	case "tool_calls":
+	case "tool_calls_native":
 
 		// Set function name
-		if name, ok := m.Props["function"].(string); ok && name != "" {
-			contents.NewFunction(name, []byte(m.Text))
+		new := false
+		if name, ok := m.Props["tool"].(string); ok && name != "" {
+			contents.NewTool(name, []byte(m.Text))
+			new = true
 		}
 
 		// Set id
 		if id, ok := m.Props["id"].(string); ok && id != "" {
-			contents.SetFunctionID(id)
+			contents.SetToolID(id)
 		}
 
-		contents.AppendFunction([]byte(m.Text))
+		if !new {
+			contents.AppendTool([]byte(m.Text))
+		}
 		return m
 
 	case "loading", "error", "action": // Ignore loading, action and error messages
@@ -374,6 +489,10 @@ func (m *Message) Map(msg map[string]interface{}) *Message {
 
 	if isNew, ok := msg["new"].(bool); ok {
 		m.IsNew = isNew
+	}
+
+	if isDelta, ok := msg["delta"].(bool); ok {
+		m.IsDelta = isDelta
 	}
 
 	if assistantID, ok := msg["assistant_id"].(string); ok {
