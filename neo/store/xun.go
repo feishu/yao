@@ -232,11 +232,12 @@ func (conv *Xun) initAssistantTable() error {
 			table.String("path", 200).Null()                          // assistant storage path
 			table.Integer("sort").SetDefault(9999).Index()            // assistant sort order
 			table.Boolean("built_in").SetDefault(false).Index()       // whether this is a built-in assistant
+			table.JSON("placeholder").Null()                          // assistant placeholder
 			table.JSON("options").Null()                              // assistant options
 			table.JSON("prompts").Null()                              // assistant prompts
 			table.JSON("flows").Null()                                // assistant flows
 			table.JSON("files").Null()                                // assistant files
-			table.JSON("functions").Null()                            // assistant functions
+			table.JSON("tools").Null()                                // assistant tools
 			table.JSON("tags").Null()                                 // assistant tags
 			table.Boolean("readonly").SetDefault(false).Index()       // assistant readonly
 			table.JSON("permissions").Null()                          // assistant permissions
@@ -258,7 +259,7 @@ func (conv *Xun) initAssistantTable() error {
 		return err
 	}
 
-	fields := []string{"id", "assistant_id", "type", "name", "avatar", "connector", "description", "path", "sort", "built_in", "options", "prompts", "flows", "files", "functions", "tags", "mentionable", "created_at", "updated_at"}
+	fields := []string{"id", "assistant_id", "type", "name", "avatar", "connector", "description", "path", "sort", "built_in", "placeholder", "options", "prompts", "flows", "files", "tools", "tags", "mentionable", "created_at", "updated_at"}
 	for _, field := range fields {
 		if !tab.HasColumn(field) {
 			return fmt.Errorf("%s is required", field)
@@ -766,7 +767,7 @@ func (conv *Xun) SaveAssistant(assistant map[string]interface{}) (interface{}, e
 	}
 
 	// Process JSON fields
-	jsonFields := []string{"tags", "options", "prompts", "flows", "files", "functions", "permissions"}
+	jsonFields := []string{"tags", "options", "prompts", "flows", "files", "tools", "permissions", "placeholder"}
 	for _, field := range jsonFields {
 		if val, ok := assistantCopy[field]; ok && val != nil {
 			// If it's a string, try to parse it first
@@ -886,6 +887,11 @@ func (conv *Xun) GetAssistants(filter AssistantFilter) (*AssistantResponse, erro
 		qb.Where("assistant_id", filter.AssistantID)
 	}
 
+	// Apply assistantIDs filter if provided
+	if filter.AssistantIDs != nil && len(filter.AssistantIDs) > 0 {
+		qb.WhereIn("assistant_id", filter.AssistantIDs)
+	}
+
 	// Apply mentionable filter if provided
 	if filter.Mentionable != nil {
 		qb.Where("mentionable", *filter.Mentionable)
@@ -948,7 +954,7 @@ func (conv *Xun) GetAssistants(filter AssistantFilter) (*AssistantResponse, erro
 
 	// Convert rows to map slice and parse JSON fields
 	data := make([]map[string]interface{}, len(rows))
-	jsonFields := []string{"tags", "options", "prompts", "flows", "files", "functions", "permissions"}
+	jsonFields := []string{"tags", "options", "prompts", "flows", "files", "tools", "permissions", "placeholder"}
 	for i, row := range rows {
 		data[i] = row
 		// Only parse JSON fields if they are selected or no select filter is provided
@@ -1002,7 +1008,7 @@ func (conv *Xun) GetAssistant(assistantID string) (map[string]interface{}, error
 	}
 
 	// Parse JSON fields
-	jsonFields := []string{"tags", "options", "prompts", "flows", "files", "functions", "permissions"}
+	jsonFields := []string{"tags", "options", "prompts", "flows", "files", "tools", "permissions", "placeholder"}
 	conv.parseJSONFields(data, jsonFields)
 
 	return data, nil
@@ -1043,6 +1049,11 @@ func (conv *Xun) DeleteAssistants(filter AssistantFilter) (int64, error) {
 	// Apply assistant_id filter if provided
 	if filter.AssistantID != "" {
 		qb.Where("assistant_id", filter.AssistantID)
+	}
+
+	// Apply assistantIDs filter if provided
+	if filter.AssistantIDs != nil && len(filter.AssistantIDs) > 0 {
+		qb.WhereIn("assistant_id", filter.AssistantIDs)
 	}
 
 	// Apply mentionable filter if provided
