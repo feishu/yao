@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/gou/fs"
+	"github.com/yaoapp/kun/log"
 	chatctx "github.com/yaoapp/yao/neo/context"
 	chatMessage "github.com/yaoapp/yao/neo/message"
 )
@@ -44,22 +46,22 @@ func GetByConnector(connector string, name string) (*Assistant, error) {
 }
 
 // Execute implements the execute functionality
-func (ast *Assistant) Execute(c *gin.Context, ctx chatctx.Context, input string, options map[string]interface{}) error {
+func (ast *Assistant) Execute(c *gin.Context, ctx chatctx.Context, input string, options map[string]interface{}, callback ...interface{}) error {
 	contents := chatMessage.NewContents()
 	messages, err := ast.withHistory(ctx, input)
 	if err != nil {
 		return err
 	}
-	return ast.execute(c, ctx, messages, options, contents)
+	return ast.execute(c, ctx, messages, options, contents, callback...)
 }
 
 // Execute implements the execute functionality
-func (ast *Assistant) execute(c *gin.Context, ctx chatctx.Context, input []chatMessage.Message, options map[string]interface{}, contents *chatMessage.Contents) error {
+func (ast *Assistant) execute(c *gin.Context, ctx chatctx.Context, input []chatMessage.Message, userOptions map[string]interface{}, contents *chatMessage.Contents, callback ...interface{}) error {
 
 	if contents == nil {
 		contents = chatMessage.NewContents()
 	}
-	options = ast.withOptions(options)
+	options := ast.withOptions(userOptions)
 
 	// Add RAG and Version support
 	ctx.RAG = rag != nil
@@ -76,25 +78,6 @@ func (ast *Assistant) execute(c *gin.Context, ctx chatctx.Context, input []chatM
 		return err
 	}
 
-	// Switch to the new assistant if necessary
-	if res != nil && res.AssistantID != ctx.AssistantID {
-		newAst, err := Get(res.AssistantID)
-		if err != nil {
-			chatMessage.New().
-				Assistant(ast.ID, ast.Name, ast.Avatar).
-				Error(err).
-				Done().
-				Write(c.Writer)
-			return err
-		}
-		*ast = *newAst
-	}
-
-	// Handle next action
-	if res != nil && res.Next != nil {
-		return res.Next.Execute(c, ctx, contents)
-	}
-
 	// Update options if provided
 	if res != nil && res.Options != nil {
 		options = res.Options
@@ -105,8 +88,46 @@ func (ast *Assistant) execute(c *gin.Context, ctx chatctx.Context, input []chatM
 		input = res.Input
 	}
 
+	// Handle next action
+	// It's not used, return the new assistant_id and chat_id
+	// if res != nil && res.Next != nil {
+	// 	return res.Next.Execute(c, ctx, contents)
+	// }
+
+	// Switch to the new assistant if necessary
+	if res != nil && res.AssistantID != "" && res.AssistantID != ctx.AssistantID {
+		newAst, err := Get(res.AssistantID)
+		if err != nil {
+			chatMessage.New().
+				Assistant(ast.ID, ast.Name, ast.Avatar).
+				Error(err).
+				Done().
+				Write(c.Writer)
+			return err
+		}
+
+		// Reset Message Contents
+		last := input[len(input)-1]
+		input, err = newAst.withHistory(ctx, last)
+		if err != nil {
+			return err
+		}
+
+		// Reset options
+		options = newAst.withOptions(userOptions)
+
+		// Update options if provided
+		if res.Options != nil {
+			options = res.Options
+		}
+
+		// Update assistant id
+		ctx.AssistantID = res.AssistantID
+		return newAst.handleChatStream(c, ctx, input, options, contents, callback...)
+	}
+
 	// Only proceed with chat stream if no specific next action was handled
-	return ast.handleChatStream(c, ctx, input, options, contents)
+	return ast.handleChatStream(c, ctx, input, options, contents, callback...)
 }
 
 // Execute the next action
@@ -169,6 +190,14 @@ func (next *NextAction) Execute(c *gin.Context, ctx chatctx.Context, contents *c
 			return fmt.Errorf("input is required")
 		}
 
+		// Retry mode
+		retry := false
+		_, has = next.Payload["retry"]
+		if has {
+			retry = next.Payload["retry"].(bool)
+			ctx.Retry = retry
+		}
+
 		switch v := next.Payload["input"].(type) {
 		case string:
 			messages := chatMessage.Message{}
@@ -201,7 +230,11 @@ func (next *NextAction) Execute(c *gin.Context, ctx chatctx.Context, contents *c
 			options = v
 		}
 
-		input.Hidden = true // not show in the history
+		input.Hidden = true                    // not show in the history
+		if input.Name == "" && ctx.Sid != "" { // add user id to the input
+			input.Name = ctx.Sid
+		}
+
 		messages, err := assistant.withHistory(ctx, input)
 		if err != nil {
 			return fmt.Errorf("with history error: %s", err.Error())
@@ -219,6 +252,8 @@ func (next *NextAction) Execute(c *gin.Context, ctx chatctx.Context, contents *c
 		msg.Write(c.Writer)
 		newContents := chatMessage.NewContents()
 
+		// Update the context id
+		ctx.AssistantID = assistant.ID
 		return assistant.execute(c, ctx, messages, options, newContents)
 
 	case "exit":
@@ -254,13 +289,13 @@ func (ast *Assistant) Call(c *gin.Context, payload APIPayload) (interface{}, err
 }
 
 // handleChatStream manages the streaming chat interaction with the AI
-func (ast *Assistant) handleChatStream(c *gin.Context, ctx chatctx.Context, messages []chatMessage.Message, options map[string]interface{}, contents *chatMessage.Contents) error {
+func (ast *Assistant) handleChatStream(c *gin.Context, ctx chatctx.Context, messages []chatMessage.Message, options map[string]interface{}, contents *chatMessage.Contents, callback ...interface{}) error {
 	clientBreak := make(chan bool, 1)
 	done := make(chan bool, 1)
 
 	// Chat with AI in background
 	go func() {
-		err := ast.streamChat(c, ctx, messages, options, clientBreak, done, contents)
+		err := ast.streamChat(c, ctx, messages, options, clientBreak, done, contents, callback...)
 		if err != nil {
 			chatMessage.New().Error(err).Done().Write(c.Writer)
 		}
@@ -285,12 +320,22 @@ func (ast *Assistant) streamChat(
 	options map[string]interface{},
 	clientBreak chan bool,
 	done chan bool,
-	contents *chatMessage.Contents) error {
+	contents *chatMessage.Contents,
+	callback ...interface{},
+) error {
+
+	var cb interface{}
+	if len(callback) > 0 {
+		cb = callback[0]
+	}
 
 	errorRaw := ""
 	isFirst := true
 	isFirstThink := true
 	isThinking := false
+
+	isFirstTool := true
+	isTool := false
 	currentMessageID := ""
 	err := ast.Chat(c.Request.Context(), messages, options, func(data []byte) int {
 		select {
@@ -308,6 +353,10 @@ func (ast *Assistant) streamChat(
 				return 1 // continue
 			}
 
+			// Retry mode
+			msg.Retry = ctx.Retry   // Retry mode
+			msg.Silent = ctx.Silent // Silent mode
+
 			// Handle error
 			if msg.Type == "error" {
 				value := msg.String()
@@ -318,7 +367,10 @@ func (ast *Assistant) streamChat(
 						value = res.Error
 					}
 				}
-				chatMessage.New().Error(value).Done().Write(c.Writer)
+				newMsg := chatMessage.New().Error(value).Done()
+				newMsg.Retry = ctx.Retry
+				newMsg.Silent = ctx.Silent
+				newMsg.Callback(cb).Write(c.Writer)
 				return 0 // break
 			}
 
@@ -335,14 +387,46 @@ func (ast *Assistant) streamChat(
 			if isThinking && msg.Type != "think" {
 				// add the think close tag
 				end := chatMessage.New().Map(map[string]interface{}{"text": "\n</think>\n", "type": "think", "delta": true})
-				end.Write(c.Writer)
 				end.ID = currentMessageID
+				end.Retry = ctx.Retry
+				end.Silent = ctx.Silent
+
+				end.Callback(cb).Write(c.Writer)
 				end.AppendTo(contents)
+				contents.UpdateType("think", map[string]interface{}{"text": contents.Text()}, currentMessageID)
 				isThinking = false
 
 				// Clear the token and make a new line
 				contents.NewText([]byte{}, currentMessageID)
 				contents.ClearToken()
+			}
+
+			// for native tool_calls response
+			if msg.Type == "tool_calls_native" {
+				if isFirstTool {
+					msg.Text = "\n<tool>\n" + msg.Text // add the tool_calls begin tag
+					isFirstTool = false
+					isTool = true
+				}
+			}
+
+			// for tool response
+			if isTool && msg.Type != "tool_calls_native" {
+
+				if msg.IsDone {
+					end := chatMessage.New().Map(map[string]interface{}{"text": "}\n</tool>\n", "type": "tool", "delta": true})
+					end.ID = currentMessageID
+					end.Retry = ctx.Retry
+					end.Silent = ctx.Silent
+					end.Callback(cb).Write(c.Writer)
+					end.AppendTo(contents)
+					contents.UpdateType("tool", map[string]interface{}{"text": contents.Text()}, currentMessageID)
+					isTool = false
+				} else {
+					msg.Text = "\n</tool>\n" + msg.Text // add the tool_calls close tag
+				}
+
+				isTool = false
 			}
 
 			delta := msg.String()
@@ -399,18 +483,25 @@ func (ast *Assistant) streamChat(
 				// ------------------------------------------------------------------------------
 
 				// Write the message to the stream
+				msgType := msg.Type
+				if msgType == "tool_calls_native" {
+					msgType = "tool"
+				}
+
 				output := chatMessage.New().Map(map[string]interface{}{
 					"text":  delta,
-					"type":  msg.Type,
+					"type":  msgType,
 					"done":  msg.IsDone,
 					"delta": true,
 				})
 
+				output.Retry = ctx.Retry   // Retry mode
+				output.Silent = ctx.Silent // Silent mode
 				if isFirst {
 					output.Assistant(ast.ID, ast.Name, ast.Avatar)
 					isFirst = false
 				}
-				output.Write(c.Writer)
+				output.Callback(cb).Write(c.Writer)
 			}
 
 			// Complete the stream
@@ -427,7 +518,10 @@ func (ast *Assistant) streamChat(
 							"type":             "text",
 							"delta":            true,
 							"done":             true,
+							"retry":            ctx.Retry,
+							"silent":           ctx.Silent,
 						}).
+						Callback(cb).
 						Write(c.Writer)
 				}
 
@@ -459,8 +553,10 @@ func (ast *Assistant) streamChat(
 				output := chatMessage.New().Done()
 				if res != nil && res.Output != nil {
 					output = chatMessage.New().Map(map[string]interface{}{"text": res.Output, "done": true})
+					output.Retry = ctx.Retry
+					output.Silent = ctx.Silent
 				}
-				output.Write(c.Writer)
+				output.Callback(cb).Write(c.Writer)
 				done <- true
 				return 0 // break
 			}
@@ -480,7 +576,9 @@ func (ast *Assistant) streamChat(
 		if err != nil {
 			return fmt.Errorf("error: %s", err.Error())
 		}
-		msg.Done().Write(c.Writer)
+		msg.Retry = ctx.Retry
+		msg.Silent = ctx.Silent
+		msg.Done().Callback(cb).Write(c.Writer)
 	}
 
 	return nil
@@ -499,7 +597,7 @@ func (ast *Assistant) saveChatHistory(ctx chatctx.Context, messages []chatMessag
 			{
 				"role":             "assistant",
 				"content":          contents.JSON(),
-				"name":             ctx.Sid,
+				"name":             ast.ID,
 				"assistant_id":     ast.ID,
 				"assistant_name":   ast.Name,
 				"assistant_avatar": ast.Avatar,
@@ -543,7 +641,7 @@ func (ast *Assistant) withOptions(options map[string]interface{}) map[string]int
 func (ast *Assistant) withPrompts(messages []chatMessage.Message) []chatMessage.Message {
 	if ast.Prompts != nil {
 		for _, prompt := range ast.Prompts {
-			name := ast.Name
+			name := strings.ReplaceAll(ast.ID, ".", "_") // OpenAI only supports underscore in the name
 			if prompt.Name != "" {
 				name = prompt.Name
 			}
@@ -556,32 +654,61 @@ func (ast *Assistant) withPrompts(messages []chatMessage.Message) []chatMessage.
 		settings, has := connectorSettings[ast.Connector]
 		if !has || !settings.Tools {
 			raw, _ := jsoniter.MarshalToString(ast.Tools.Tools)
-			messages = append(messages, *chatMessage.New().Map(map[string]interface{}{
-				"role":    "system",
-				"content": raw,
-			}))
 
-			// Add the default system prompts for tool calls
-			messages = append(messages, *chatMessage.New().Map(map[string]interface{}{
-				"role": "system",
-				"content": "## Tool Calls Match Rules:\n" +
-					"1. if the user's question is about the tool_calls, just answer one of the tool_calls, do not provide any additional information.\n" +
-					"2. if the user's question is not about the tool_calls, just answer the user's question directly.\n" +
-					"3. You can only use the functions defined in tool_calls. If none exist, reply directly to the user.",
-			}))
-			messages = append(messages, *chatMessage.New().Map(map[string]interface{}{
-				"role": "system",
-				"content": "## Tool Calls Response Rules:\n" +
-					"1. The response should be a valid JSON object:\n" +
-					"  1.1. e.g: <tool>{\"function\":\"function_name\",\"arguments\":{\"arg1\":\"xxxx\"}}</tool>\n" +
-					"  1.2. strict the example format, do not add any additional information.\n" +
-					"  1.3. The JSON object should be wrapped by <tool> and </tool>.\n" +
-					"2. The structure of the JSON object is { \"arguments\": {...}, function:\"function_name\"}\n" +
-					"3. The function_name should be the name of the function defined in tool_calls.\n" +
-					"4. The arguments should be the arguments of the function defined in tool_calls.\n",
-			}))
+			examples := []string{}
+			for _, tool := range ast.Tools.Tools {
+				example := tool.Example()
+				examples = append(examples, example)
+			}
 
-			// Add tool_calls prompts
+			examplesStr := ""
+			if len(examples) > 0 {
+				examplesStr = "Examples:\n" + strings.Join(examples, "\n\n")
+			}
+
+			prompts := []map[string]interface{}{
+				{
+					"role":    "system",
+					"name":    "TOOL_CALLS_SCHEMA",
+					"content": raw,
+				},
+				{
+					"role": "system",
+					"name": "TOOL_CALLS_SCHEMA",
+					"content": "## Tool Calls Schema Definition\n" +
+						"Each tool call is defined with:\n" +
+						"  - type: always 'function'\n" +
+						"  - function:\n" +
+						"    - name: function name\n" +
+						"    - description: function description\n" +
+						"    - parameters: function parameters with type and validation rules\n",
+				},
+				{
+					"role": "system",
+					"name": "TOOL_CALLS",
+					"content": "## Tool Response Format\n" +
+						"1. Only use tool calls when a function matches your task exactly\n" +
+						"2. Each tool call must be wrapped in <tool> and </tool> tags\n" +
+						"3. Tool call must be a valid JSON with:\n" +
+						"   {\"function\": \"function_name\", \"arguments\": {parameters}}\n" +
+						"4. Return the function's result as your response\n" +
+						"5. One tool call per response\n" +
+						"6. Arguments must match parameter types, rules and description\n\n" +
+						examplesStr,
+				},
+				{
+					"role": "system",
+					"name": "TOOL_CALLS",
+					"content": "## Tool Usage Guidelines\n" +
+						"1. Use functions defined in TOOL_CALLS_SCHEMA only when they match your needs\n" +
+						"2. If no matching function exists, respond normally as a helpful assistant\n" +
+						"3. When using tools, arguments must match the schema definition exactly\n" +
+						"4. All parameter values must strictly adhere to the validation rules specified in properties\n" +
+						"5. Never skip or ignore any validation requirements defined in the schema",
+				},
+			}
+
+			// Add tool_calls developer prompts
 			if ast.Tools.Prompts != nil && len(ast.Tools.Prompts) > 0 {
 				for _, prompt := range ast.Tools.Prompts {
 					messages = append(messages, *chatMessage.New().Map(map[string]interface{}{
@@ -591,6 +718,12 @@ func (ast *Assistant) withPrompts(messages []chatMessage.Message) []chatMessage.
 					}))
 				}
 			}
+
+			// Add the prompts
+			for _, prompt := range prompts {
+				messages = append(messages, *chatMessage.New().Map(prompt))
+			}
+
 		}
 	}
 
@@ -614,7 +747,7 @@ func (ast *Assistant) withHistory(ctx chatctx.Context, input interface{}) ([]cha
 	}
 
 	messages := []chatMessage.Message{}
-	messages = ast.withPrompts(messages)
+
 	if storage != nil {
 		history, err := storage.GetHistory(ctx.Sid, ctx.ChatID)
 		if err != nil {
@@ -630,6 +763,9 @@ func (ast *Assistant) withHistory(ctx chatctx.Context, input interface{}) ([]cha
 			messages = append(messages, msgs...)
 		}
 	}
+
+	// Add system prompts
+	messages = ast.withPrompts(messages)
 
 	// Add user message
 	messages = append(messages, *userMessage)
@@ -682,8 +818,13 @@ func (ast *Assistant) requestMessages(ctx context.Context, messages []chatMessag
 			"content": content,
 		}
 
+		// Keep the name for user messages
 		if name := message.Name; name != "" {
-			newMessage["name"] = name
+			if role != "system" {
+				newMessage["name"] = stringHash(name)
+			} else {
+				newMessage["name"] = name
+			}
 		}
 
 		// Special handling for user messages with JSON content last message
@@ -718,6 +859,15 @@ func (ast *Assistant) requestMessages(ctx context.Context, messages []chatMessag
 
 		newMessages = append(newMessages, newMessage)
 	}
+
+	// For debug environment, print the request messages
+	if os.Getenv("YAO_AGENT_PRINT_REQUEST_MESSAGES") == "true" {
+		for _, message := range newMessages {
+			raw, _ := jsoniter.MarshalToString(message)
+			log.Trace("[Request Message] %s", raw)
+		}
+	}
+
 	return newMessages, nil
 }
 

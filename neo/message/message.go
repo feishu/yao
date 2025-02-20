@@ -2,6 +2,7 @@ package message
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/fatih/color"
@@ -34,6 +35,8 @@ type Message struct {
 	Data            map[string]interface{} `json:"-"`                          // data for the message
 	Pending         bool                   `json:"-"`                          // pending for the message
 	Hidden          bool                   `json:"hidden,omitempty"`           // hidden for the message (not show in the UI and history)
+	Retry           bool                   `json:"retry,omitempty"`            // retry for the message
+	Silent          bool                   `json:"silent,omitempty"`           // silent for the message (not show in the UI and history)
 }
 
 // Mention represents a mention
@@ -185,6 +188,12 @@ func NewAny(content interface{}) (*Message, error) {
 
 // NewOpenAI create a new message from OpenAI response
 func NewOpenAI(data []byte, isThinking bool) *Message {
+
+	// For debug environment, print the response data
+	if os.Getenv("YAO_AGENT_PRINT_RESPONSE_DATA") == "true" {
+		log.Trace("[Response Data] %s", string(data))
+	}
+
 	if data == nil || len(data) == 0 {
 		return nil
 	}
@@ -192,112 +201,244 @@ func NewOpenAI(data []byte, isThinking bool) *Message {
 	msg := New()
 	text := string(data)
 	data = []byte(strings.TrimPrefix(text, "data: "))
+
 	switch {
-
-	case strings.Contains(text, `"delta":{`) && strings.Contains(text, `"tool_calls"`):
-		var toolCalls openai.ToolCalls
-		if err := jsoniter.Unmarshal(data, &toolCalls); err != nil {
+	case strings.Contains(text, `"object":"chat.completion.chunk"`): // Delta content
+		var chunk openai.ChatCompletionChunk
+		err := jsoniter.Unmarshal(data, &chunk)
+		if err != nil {
 			color.Red("JSON parse error: %s", err.Error())
 			color.White(string(data))
 			msg.Text = "JSON parse error\n" + string(data)
 			msg.Type = "error"
 			msg.IsDone = true
+		}
+
+		// Empty content, then it is a pending message
+		if len(chunk.Choices) == 0 {
+			msg.Pending = true
 			return msg
 		}
 
-		msg.Type = "tool_calls_native"
-		if len(toolCalls.Choices) > 0 && len(toolCalls.Choices[0].Delta.ToolCalls) > 0 {
-			msg.Props["id"] = toolCalls.Choices[0].Delta.ToolCalls[0].ID
-			msg.Props["function"] = toolCalls.Choices[0].Delta.ToolCalls[0].Function.Name
-			msg.Text = toolCalls.Choices[0].Delta.ToolCalls[0].Function.Arguments
+		// Tool calls
+		if len(chunk.Choices[0].Delta.ToolCalls) > 0 {
+			msg.Type = "tool_calls_native"
+			id := chunk.Choices[0].Delta.ToolCalls[0].ID
+			function := chunk.Choices[0].Delta.ToolCalls[0].Function.Name
+			arguments := chunk.Choices[0].Delta.ToolCalls[0].Function.Arguments
+			text := arguments
+			if id != "" {
+				text = fmt.Sprintf(`{"id": "%s", "function": "%s", "arguments": %s`, id, function, arguments)
+				msg.IsNew = true // mark as a new message
+			}
+
+			msg.Text = text
+			msg.IsDone = chunk.Choices[0].FinishReason == "tool_calls" // is done when tool calls are finished
+			return msg
 		}
 
-	case strings.Contains(text, `"delta":{`) && strings.Contains(text, `"content":`):
-		var message openai.MessageWithReasoningContent
-		if err := jsoniter.Unmarshal(data, &message); err != nil {
-			color.Red("JSON parse error: %s", err.Error())
-			color.White(string(data))
-			msg.Text = "JSON parse error\n" + string(data)
-			msg.Type = "error"
+		// Text content
+		if chunk.Choices[0].Delta.Content != "" {
+			msg.Type = "text"
+			msg.Text = chunk.Choices[0].Delta.Content
+			msg.IsDone = chunk.Choices[0].FinishReason == "stop" // is done when the content is finished
+			return msg
+		}
+
+		// Done messages
+		if chunk.Choices[0].FinishReason == "stop" || chunk.Choices[0].FinishReason == "tool_calls" {
 			msg.IsDone = true
 			return msg
 		}
 
-		msg.Type = "text"
-		if len(message.Choices) > 0 {
-			if reasoningContent, ok := message.Choices[0].Delta["reasoning_content"].(string); ok {
-				msg.Text = reasoningContent
-				msg.Type = "think"
-				return msg
-			}
-
-			if content, ok := message.Choices[0].Delta["content"].(string); ok && content != "" {
-				msg.Text = content
-				msg.Type = "text"
-				return msg
-			}
-
-			if isThinking {
-				msg.Type = "think"
-				msg.Text = ""
-				return msg
-			}
-
+		// Reasoning content
+		if chunk.Choices[0].Delta.ReasoningContent != "" {
+			msg.Type = "think"
+			msg.Text = chunk.Choices[0].Delta.ReasoningContent
+			return msg
+		}
+		// Content is empty and is thinking, then it is a thinking message pending
+		if isThinking {
+			msg.Type = "think"
 			msg.Text = ""
 			return msg
 		}
 
-	case strings.Index(text, `{"code":`) == 0:
-		var errorMessage openai.Error
-		if err := jsoniter.UnmarshalFromString(text, &errorMessage); err != nil {
-			color.Red("JSON parse error: %s", err.Error())
-			color.White(string(data))
-			msg.Text = "JSON parse error\n" + string(data)
-			msg.Type = "error"
-			msg.IsDone = true
-			return msg
-		}
-		msg.Type = "error"
-		msg.Text = errorMessage.Message
-		msg.IsDone = true
-		break
+		msg.Text = ""
+		return msg
 
-	case strings.Contains(text, `{"error":{`):
-		var errorMessage openai.ErrorMessage
-		if err := jsoniter.Unmarshal(data, &errorMessage); err != nil {
-			color.Red("JSON parse error: %s", err.Error())
-			color.White(string(data))
-			msg.Text = "JSON parse error\n" + string(data)
-			msg.Type = "error"
-			msg.IsDone = true
-			return msg
-		}
-		msg.Type = "error"
-		msg.Text = errorMessage.Error.Message
+	case strings.Contains(text, `"usage":`): // usage content
 		msg.IsDone = true
 		break
 
 	case strings.Contains(text, `[DONE]`):
 		msg.IsDone = true
+		return msg
 
-	case strings.Contains(text, `"finish_reason":"stop"`):
+	case len(data) > 2 && data[0] == '{' && data[len(data)-1] == '}': // JSON content (error)
+
+		var error openai.Error
+		var errorMessage openai.ErrorMessage
+		if strings.Contains(string(data), `"error":`) {
+			if err := jsoniter.Unmarshal(data, &errorMessage); err != nil {
+				color.Red("JSON parse error: %s", err.Error())
+				color.White(string(data))
+				msg.Text = "JSON parse error\n" + string(data)
+				msg.Type = "error"
+				msg.IsDone = true
+				return msg
+			}
+			error = errorMessage.Error
+		} else {
+			err := jsoniter.Unmarshal(data, &error)
+			if err != nil {
+				color.Red("JSON parse error: %s", err.Error())
+				color.White(string(data))
+				msg.Text = "JSON parse error\n" + string(data)
+				msg.Type = "error"
+				msg.IsDone = true
+				return msg
+			}
+		}
+
+		message := error.Message
+		if message == "" {
+			message = "Unknown error occurred\n" + string(data)
+		}
+
+		msg.Type = "error"
+		msg.Text = message
 		msg.IsDone = true
+		return msg
 
-	case strings.Contains(text, `"finish_reason":"tool_calls"`):
-		msg.IsDone = true
-
-	// Not a data message
-	case !strings.Contains(text, `data: `):
+	case !strings.Contains(text, `data: `): // unknown message or uncompleted message
 		msg.Pending = true
 		msg.Text = text
+		return msg
 
-	default:
+	default: // unknown message
 		str := strings.TrimPrefix(strings.Trim(string(data), "\""), "data: ")
 		msg.Type = "error"
 		msg.Text = str
+		return msg
 	}
 
 	return msg
+
+	// switch {
+
+	// case strings.Contains(text, `"delta":{`) && strings.Contains(text, `"tool_calls"`) && !strings.Contains(text, `"tool_calls":null`):
+	// 	var toolCalls openai.ToolCalls
+	// 	if err := jsoniter.Unmarshal(data, &toolCalls); err != nil {
+	// 		color.Red("JSON parse error: %s", err.Error())
+	// 		color.White(string(data))
+	// 		msg.Text = "JSON parse error\n" + string(data)
+	// 		msg.Type = "error"
+	// 		msg.IsDone = true
+	// 		return msg
+	// 	}
+
+	// 	msg.Type = "tool_calls_native"
+	// 	if len(toolCalls.Choices) > 0 && len(toolCalls.Choices[0].Delta.ToolCalls) > 0 {
+	// 		id := toolCalls.Choices[0].Delta.ToolCalls[0].ID
+	// 		function := toolCalls.Choices[0].Delta.ToolCalls[0].Function.Name
+	// 		arguments := toolCalls.Choices[0].Delta.ToolCalls[0].Function.Arguments
+	// 		text := arguments
+	// 		if id != "" {
+	// 			text = fmt.Sprintf(`{"id": "%s", "function": "%s", "arguments": %s`, id, function, arguments)
+	// 		}
+	// 		msg.Text = text
+	// 	}
+
+	// case strings.Contains(text, `"delta":{`) && strings.Contains(text, `"content":`):
+	// 	var message openai.MessageWithReasoningContent
+	// 	if err := jsoniter.Unmarshal(data, &message); err != nil {
+	// 		color.Red("JSON parse error: %s", err.Error())
+	// 		color.White(string(data))
+	// 		msg.Text = "JSON parse error\n" + string(data)
+	// 		msg.Type = "error"
+	// 		msg.IsDone = true
+	// 		return msg
+	// 	}
+
+	// 	msg.Type = "text"
+	// 	if len(message.Choices) > 0 {
+	// 		if reasoningContent, ok := message.Choices[0].Delta["reasoning_content"].(string); ok {
+	// 			msg.Text = reasoningContent
+	// 			msg.Type = "think"
+	// 			return msg
+	// 		}
+
+	// 		if content, ok := message.Choices[0].Delta["content"].(string); ok && content != "" {
+	// 			msg.Text = content
+	// 			msg.Type = "text"
+	// 			return msg
+	// 		}
+
+	// 		if isThinking {
+	// 			msg.Type = "think"
+	// 			msg.Text = ""
+	// 			return msg
+	// 		}
+
+	// 		msg.Text = ""
+	// 		return msg
+	// 	}
+
+	// case strings.Index(text, `{"code":`) == 0 || strings.Index(text, `"statusCode":`) > 0:
+	// 	var errorMessage openai.Error
+	// 	if err := jsoniter.UnmarshalFromString(text, &errorMessage); err != nil {
+	// 		color.Red("JSON parse error: %s", err.Error())
+	// 		color.White(string(data))
+	// 		msg.Text = "JSON parse error\n" + string(data)
+	// 		msg.Type = "error"
+	// 		msg.IsDone = true
+	// 		return msg
+	// 	}
+	// 	msg.Type = "error"
+	// 	msg.Text = errorMessage.Message
+	// 	msg.IsDone = true
+	// 	break
+
+	// case strings.Contains(text, `{"error":{`):
+	// 	var errorMessage openai.ErrorMessage
+	// 	if err := jsoniter.Unmarshal(data, &errorMessage); err != nil {
+	// 		color.Red("JSON parse error: %s", err.Error())
+	// 		color.White(string(data))
+	// 		msg.Text = "JSON parse error\n" + string(data)
+	// 		msg.Type = "error"
+	// 		msg.IsDone = true
+	// 		return msg
+	// 	}
+	// 	msg.Type = "error"
+	// 	msg.Text = errorMessage.Error.Message
+	// 	msg.IsDone = true
+	// 	break
+
+	// case strings.Contains(text, `"usage":`) && !strings.Contains(text, `"chat.completion.chunk`):
+	// 	msg.IsDone = true
+	// 	break
+
+	// case strings.Contains(text, `[DONE]`):
+	// 	msg.IsDone = true
+
+	// case strings.Contains(text, `"finish_reason":"stop"`):
+	// 	msg.IsDone = true
+
+	// case strings.Contains(text, `"finish_reason":"tool_calls"`):
+	// 	msg.IsDone = true
+
+	// // Not a data message
+	// case !strings.Contains(text, `data: `):
+	// 	msg.Pending = true
+	// 	msg.Text = text
+
+	// default:
+	// 	str := strings.TrimPrefix(strings.Trim(string(data), "\""), "data: ")
+	// 	msg.Type = "error"
+	// 	msg.Text = str
+	// }
+
 }
 
 // String returns the string representation
@@ -308,7 +449,7 @@ func (m *Message) String() string {
 	}
 
 	switch typ {
-	case "text", "think", "tool":
+	case "text", "think", "tool", "tool_calls_native":
 		return m.Text
 
 	case "error":
@@ -378,7 +519,7 @@ func (m *Message) AppendTo(contents *Contents) *Message {
 	}
 
 	switch m.Type {
-	case "text", "think", "tool":
+	case "text", "think", "tool", "tool_calls_native":
 		if m.Text != "" {
 			if m.IsNew {
 				contents.NewText([]byte(m.Text), m.ID)
@@ -386,25 +527,6 @@ func (m *Message) AppendTo(contents *Contents) *Message {
 			}
 			contents.AppendText([]byte(m.Text), m.ID)
 			return m
-		}
-		return m
-
-	case "tool_calls_native":
-
-		// Set function name
-		new := false
-		if name, ok := m.Props["tool"].(string); ok && name != "" {
-			contents.NewTool(name, []byte(m.Text))
-			new = true
-		}
-
-		// Set id
-		if id, ok := m.Props["id"].(string); ok && id != "" {
-			contents.SetToolID(id)
-		}
-
-		if !new {
-			contents.AppendTool([]byte(m.Text))
 		}
 		return m
 
@@ -571,6 +693,26 @@ func (m *Message) Bind(data map[string]interface{}) *Message {
 	return m
 }
 
+// Callback callback the message
+func (m *Message) Callback(fn interface{}) *Message {
+	if fn != nil {
+		switch v := fn.(type) {
+		case func(msg *Message):
+			v(m)
+			break
+
+		case func():
+			v()
+			break
+
+		default:
+			fmt.Println("no match callback")
+			break
+		}
+	}
+	return m
+}
+
 // Write writes the message to response writer
 func (m *Message) Write(w gin.ResponseWriter) bool {
 	defer func() {
@@ -579,6 +721,11 @@ func (m *Message) Write(w gin.ResponseWriter) bool {
 			color.Red(message, r)
 		}
 	}()
+
+	// Ignore silent messages
+	if m.Silent {
+		return true
+	}
 
 	data, err := jsoniter.Marshal(m)
 	if err != nil {
