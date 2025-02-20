@@ -26,7 +26,7 @@ type API interface {
 	ReadBase64(ctx context.Context, fileID string) (string, error)
 
 	GetPlaceholder() *Placeholder
-	Execute(c *gin.Context, ctx chatctx.Context, input string, options map[string]interface{}) error
+	Execute(c *gin.Context, ctx chatctx.Context, input string, options map[string]interface{}, callback ...interface{}) error
 	Call(c *gin.Context, payload APIPayload) (interface{}, error)
 }
 
@@ -92,16 +92,6 @@ type Prompt struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 	Name    string `json:"name,omitempty"`
-}
-
-// Tool represents a tool
-type Tool struct {
-	Type     string `json:"type"`
-	Function struct {
-		Name        string                 `json:"name"`
-		Description string                 `json:"description"`
-		Parameters  map[string]interface{} `json:"parameters"`
-	} `json:"function"`
 }
 
 // QueryParam the assistant query param

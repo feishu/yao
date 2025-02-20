@@ -26,6 +26,7 @@ require (
 	github.com/spf13/cast v1.7.1
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.10.0
+	github.com/watchfultele/jsonrepair v0.0.0-20250207052432-e4397ed42611
 	github.com/xuri/excelize/v2 v2.9.0
 	github.com/yaoapp/gou v0.10.3
 	github.com/yaoapp/kun v0.9.0
@@ -102,6 +103,7 @@ require (
 	github.com/richardlehane/mscfb v1.0.4 // indirect
 	github.com/richardlehane/msoleps v1.0.4 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/sergi/go-diff v1.3.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/tcnksm/go-gitconfig v0.1.2 // indirect
