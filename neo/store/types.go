@@ -24,6 +24,7 @@ type ChatFilter struct {
 	Page     int    `json:"page,omitempty"`     // Page number, starting from 1
 	PageSize int    `json:"pagesize,omitempty"` // Number of items per page
 	Order    string `json:"order,omitempty"`    // Sort order: desc/asc
+	Silent   *bool  `json:"silent,omitempty"`   // Include silent messages (default: false)
 }
 
 // ChatGroup represents the chat group structure
@@ -47,6 +48,7 @@ type ChatGroupResponse struct {
 // Used for filtering and pagination when retrieving assistant lists
 type AssistantFilter struct {
 	Tags         []string `json:"tags,omitempty"`          // Filter by tags
+	Type         string   `json:"type,omitempty"`          // Filter by type
 	Keywords     string   `json:"keywords,omitempty"`      // Search in name and description
 	Connector    string   `json:"connector,omitempty"`     // Filter by connector
 	AssistantID  string   `json:"assistant_id,omitempty"`  // Filter by assistant ID
@@ -86,11 +88,25 @@ type Store interface {
 	// Returns: Chat information and potential error
 	GetChat(sid string, cid string) (*ChatInfo, error)
 
+	// GetChatWithFilter retrieves a single chat's information with filter options
+	// sid: Session ID
+	// cid: Chat ID
+	// filter: Filter conditions
+	// Returns: Chat information and potential error
+	GetChatWithFilter(sid string, cid string, filter ChatFilter) (*ChatInfo, error)
+
 	// GetHistory retrieves chat history
 	// sid: Session ID
 	// cid: Chat ID
 	// Returns: History record list and potential error
 	GetHistory(sid string, cid string) ([]map[string]interface{}, error)
+
+	// GetHistoryWithFilter retrieves chat history with filter options
+	// sid: Session ID
+	// cid: Chat ID
+	// filter: Filter conditions
+	// Returns: History record list and potential error
+	GetHistoryWithFilter(sid string, cid string, filter ChatFilter) ([]map[string]interface{}, error)
 
 	// SaveHistory saves chat history
 	// sid: Session ID
