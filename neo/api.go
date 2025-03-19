@@ -230,8 +230,16 @@ func (neo *DSL) handleChat(c *gin.Context) {
 	// Set the context with validated chat_id
 	ctx, cancel := chatctx.NewWithCancel(sid, chatID, c.Query("context"))
 	defer cancel()
+	defer ctx.Release() // Release the context after the request is done
 
-	neo.Answer(ctx, content, c)
+	err := neo.Answer(ctx, content, c)
+
+	// Error handling
+	if err != nil {
+		message.New().Done().Error(err).Write(c.Writer)
+		c.Done()
+		return
+	}
 }
 
 // handleChatList handles the chat list request
@@ -954,6 +962,7 @@ func (neo *DSL) handleGenerateCustom(c *gin.Context) {
 func (neo *DSL) handleAssistantList(c *gin.Context) {
 	// Parse filter parameters
 	filter := store.AssistantFilter{
+		Type:     "assistant",
 		Page:     1,
 		PageSize: 20,
 	}
@@ -1098,6 +1107,7 @@ func (neo *DSL) handleAssistantDetail(c *gin.Context) {
 
 	filter := store.AssistantFilter{
 		AssistantID: assistantID,
+		Type:        "assistant",
 		Page:        1,
 		PageSize:    1,
 	}
@@ -1121,14 +1131,14 @@ func (neo *DSL) handleAssistantDetail(c *gin.Context) {
 
 // handleAssistantSave handles creating or updating an assistant
 func (neo *DSL) handleAssistantSave(c *gin.Context) {
-	var assistant map[string]interface{}
-	if err := c.BindJSON(&assistant); err != nil {
+	var assistantData map[string]interface{}
+	if err := c.BindJSON(&assistantData); err != nil {
 		c.JSON(400, gin.H{"message": "invalid request body", "code": 400})
 		c.Done()
 		return
 	}
 
-	id, err := neo.Store.SaveAssistant(assistant)
+	id, err := neo.Store.SaveAssistant(assistantData)
 	if err != nil {
 		c.JSON(500, gin.H{"message": err.Error(), "code": 500})
 		c.Done()
@@ -1136,11 +1146,24 @@ func (neo *DSL) handleAssistantSave(c *gin.Context) {
 	}
 
 	// Update the assistant map with the returned ID if it's not already set
-	if _, ok := assistant["assistant_id"]; !ok {
-		assistant["assistant_id"] = id
+	if _, ok := assistantData["assistant_id"]; !ok {
+		assistantData["assistant_id"] = id
 	}
 
-	c.JSON(200, gin.H{"message": "ok", "data": assistant})
+	// Remove the assistant from cache to ensure fresh data on next load
+	cache := assistant.GetCache()
+	if cache != nil {
+		cache.Remove(id.(string))
+	}
+
+	// Reload the assistant to ensure it's available in cache with updated data
+	_, err = assistant.Get(id.(string))
+	if err != nil {
+		// Just log the error, don't fail the request
+		fmt.Printf("Error reloading assistant %s: %v\n", id, err)
+	}
+
+	c.JSON(200, gin.H{"message": "ok", "data": assistantData})
 	c.Done()
 }
 
@@ -1158,6 +1181,12 @@ func (neo *DSL) handleAssistantDelete(c *gin.Context) {
 		c.JSON(500, gin.H{"message": err.Error(), "code": 500})
 		c.Done()
 		return
+	}
+
+	// Remove the assistant from cache to ensure it's fully deleted
+	cache := assistant.GetCache()
+	if cache != nil {
+		cache.Remove(assistantID)
 	}
 
 	c.JSON(200, gin.H{"message": "ok"})
