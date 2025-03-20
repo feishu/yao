@@ -233,7 +233,7 @@ artifacts-macos: clean
 
 #   Making artifacts
 	mkdir -p dist
-#	go mod tidy
+	go mod tidy
 	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -v -o dist/yao-${VERSION}-dev-darwin-amd64
 	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -v -o dist/yao-${VERSION}-dev-darwin-arm64
 
