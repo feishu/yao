@@ -9,6 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.71.1
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/caarlos0/env/v6 v6.10.1
+	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/dchest/captcha v1.1.0
 	github.com/elazarl/go-bindata-assetfs v1.0.1
 	github.com/evanw/esbuild v0.24.2
