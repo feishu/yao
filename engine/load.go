@@ -39,6 +39,7 @@ import (
 	"github.com/yaoapp/yao/store"
 	sui "github.com/yaoapp/yao/sui/api"
 	"github.com/yaoapp/yao/task"
+	"github.com/yaoapp/yao/volcengine"
 	"github.com/yaoapp/yao/websocket"
 	"github.com/yaoapp/yao/widget"
 	"github.com/yaoapp/yao/widgets"
@@ -246,6 +247,12 @@ func Load(cfg config.Config, options LoadOption) (warnings []Warning, err error)
 	if err != nil {
 		// printErr(cfg.Mode, "AIGC", err)
 		warnings = append(warnings, Warning{Widget: "AIGC", Error: err})
+	}
+
+	// Load Volcengine
+	err = volcengine.Load(cfg)
+	if err != nil {
+		printErr(cfg.Mode, "Volcengine", err)
 	}
 
 	// Load Custom Widget
@@ -537,6 +544,12 @@ func Reload(cfg config.Config, options LoadOption) (err error) {
 	_, err = openapi.Load(cfg)
 	if err != nil {
 		printErr(cfg.Mode, "OpenAPI", err)
+	}
+
+	// Load Volcengine
+	err = volcengine.Load(cfg)
+	if err != nil {
+		printErr(cfg.Mode, "Volcengine", err)
 	}
 
 	// Execute AfterLoad Process if exists

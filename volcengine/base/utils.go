@@ -218,7 +218,6 @@ func ToUrlValues(i interface{}) (values url.Values) {
 	return
 }
 
-// UnmarshalResultInto unmarshals the result into the given interface
 func UnmarshalResultInto(data []byte, result interface{}) error {
 	resp := new(CommonResponse)
 	if err := json.Unmarshal(data, resp); err != nil {
@@ -237,17 +236,4 @@ func UnmarshalResultInto(data []byte, result interface{}) error {
 		return fmt.Errorf("fail to unmarshal result, %v", err)
 	}
 	return nil
-}
-
-// MarshalToJson marshals the given interface to json
-func MarshalToJson(model interface{}) ([]byte, error) {
-	if model == nil {
-		return make([]byte, 0), nil
-	}
-
-	result, err := json.Marshal(model)
-	if err != nil {
-		return []byte{}, fmt.Errorf("can not marshal model to json, %v", err)
-	}
-	return result, nil
 }
