@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/yaoapp/yao/volcengine/base"
+	"github.com/yaoapp/yao/base"
 )
 
 // Im is the client for im service
