@@ -9,16 +9,10 @@ import (
 
 func init() {
 	process.RegisterGroup("volcengine.im", map[string]process.Handler{
-		"getConversationMarks":         ProcessGetConversationMarks,
-		"markConversation":             ProcessMarkConversation,
-		"createConversation":           ProcessCreateConversation,
-		"sendMessage":                  ProcessSendMessage,
-		"getMessages":                  ProcessGetMessages,
-		"deleteMessage":                ProcessDeleteMessage,
-		"batchAddBlockParticipants":    ProcessBatchAddBlockParticipants,
-		"batchDeleteBlockParticipants": ProcessBatchDeleteBlockParticipants,
-		"batchGetBlockParticipants":    ProcessBatchGetBlockParticipants,
-		"modifyParticipantReadIndex":   ProcessModifyParticipantReadIndex,
+		"getConversationMarks": ProcessGetConversationMarks,
+		"markConversation":     ProcessMarkConversation,
+		"createConversation":   ProcessCreateConversation,
+		"sendMessage":          ProcessSendMessage,
 	})
 }
 
@@ -78,96 +72,6 @@ func ProcessSendMessage(process *process.Process) interface{} {
 	res, err := im.SendMessage(ctx, arg)
 	if err != nil {
 		exception.New("SendMessage error: %s", 400, err).Throw()
-	}
-	return res
-}
-
-// ProcessGetMessages volcengine.im.getMessages
-func ProcessGetMessages(process *process.Process) interface{} {
-	process.ValidateArgNums(2)
-	region := process.ArgsString(0)
-	arg := process.Args[1]
-
-	im := NewInstanceWithRegion(region)
-	ctx := context.Background()
-	res, err := im.GetMessages(ctx, arg)
-	if err != nil {
-		exception.New("GetMessages error: %s", 400, err).Throw()
-	}
-	return res
-}
-
-// ProcessDeleteMessage volcengine.im.deleteMessage
-func ProcessDeleteMessage(process *process.Process) interface{} {
-	process.ValidateArgNums(2)
-	region := process.ArgsString(0)
-	arg := process.Args[1]
-
-	im := NewInstanceWithRegion(region)
-	ctx := context.Background()
-	res, err := im.DeleteMessage(ctx, arg)
-	if err != nil {
-		exception.New("DeleteMessage error: %s", 400, err).Throw()
-	}
-	return res
-}
-
-// ProcessBatchAddBlockParticipants volcengine.im.batchAddBlockParticipants
-func ProcessBatchAddBlockParticipants(process *process.Process) interface{} {
-	process.ValidateArgNums(2)
-	region := process.ArgsString(0)
-	arg := process.Args[1]
-
-	im := NewInstanceWithRegion(region)
-	ctx := context.Background()
-	res, err := im.BatchAddBlockParticipants(ctx, arg)
-	if err != nil {
-		exception.New("BatchAddBlockParticipants error: %s", 400, err).Throw()
-	}
-	return res
-}
-
-// ProcessBatchDeleteBlockParticipants volcengine.im.batchDeleteBlockParticipants
-func ProcessBatchDeleteBlockParticipants(process *process.Process) interface{} {
-	process.ValidateArgNums(2)
-	region := process.ArgsString(0)
-	arg := process.Args[1]
-
-	im := NewInstanceWithRegion(region)
-	ctx := context.Background()
-	res, err := im.BatchDeleteBlockParticipants(ctx, arg)
-	if err != nil {
-		exception.New("BatchDeleteBlockParticipants error: %s", 400, err).Throw()
-	}
-	return res
-}
-
-// ProcessBatchGetBlockParticipants volcengine.im.batchGetBlockParticipants
-func ProcessBatchGetBlockParticipants(process *process.Process) interface{} {
-	process.ValidateArgNums(2)
-	region := process.ArgsString(0)
-	arg := process.Args[1]
-
-	im := NewInstanceWithRegion(region)
-	ctx := context.Background()
-	res, err := im.BatchGetBlockParticipants(ctx, arg)
-	if err != nil {
-		exception.New("BatchGetBlockParticipants error: %s", 400, err).Throw()
-	}
-	return res
-}
-
-// ProcessModifyParticipantReadIndex volcengine.im.modifyParticipantReadIndex
-func ProcessModifyParticipantReadIndex(process *process.Process) interface{} {
-	process.ValidateArgNums(2)
-	region := process.ArgsString(0)
-	arg := process.Args[1]
-
-	im := NewInstanceWithRegion(region)
-	ctx := context.Background()
-	res, err := im.ModifyParticipantReadIndex(ctx, arg)
-	if err != nil {
-		exception.New("ModifyParticipantReadIndex error: %s", 400, err).Throw()
 	}
 	return res
 }
