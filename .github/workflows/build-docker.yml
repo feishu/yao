@@ -50,7 +50,7 @@ jobs:
             VERSION=${{ env.VERSION }}
             ARCH=amd64
           push: true
-          tags: yaoapp/yao:${{ env.VERSION }}-amd64-dev
+          tags: feishu888/yao:${{ env.VERSION }}-amd64-dev
 
       - name: Build Development Arm64
         uses: docker/build-push-action@v6
@@ -63,7 +63,7 @@ jobs:
             VERSION=${{ env.VERSION }} 
             ARCH=arm64
           push: true
-          tags: yaoapp/yao:${{ env.VERSION }}-arm64-dev
+          tags: feishu888/yao:${{ env.VERSION }}-arm64-dev
 
       - name: Build Production
         uses: docker/build-push-action@v6
@@ -76,7 +76,7 @@ jobs:
             VERSION=${{ env.VERSION }} 
             ARCH=amd64
           push: true
-          tags: yaoapp/yao:${{ env.VERSION }}-amd64
+          tags: feishu888/yao:${{ env.VERSION }}-amd64
 
       - name: Build Production Arm64
         uses: docker/build-push-action@v6
@@ -89,4 +89,4 @@ jobs:
             VERSION=${{ env.VERSION }} 
             ARCH=arm64
           push: true
-          tags: yaoapp/yao:${{ env.VERSION }}-arm64
+          tags: feishu888/yao:${{ env.VERSION }}-arm64

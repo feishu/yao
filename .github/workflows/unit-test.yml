@@ -1,12 +1,12 @@
 name: Unit Test
 
-on:
-  workflow_dispatch:
-    inputs:
-      tags:
-        description: "Version"
-  push:
-    branches: [main]
+# on:
+#   workflow_dispatch:
+#     inputs:
+#       tags:
+#         description: "Version"
+#   push:
+#     branches: [main]
 
 env:
   YAO_DEV: ${{ github.WORKSPACE }}
