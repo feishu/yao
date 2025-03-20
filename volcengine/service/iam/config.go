@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/yaoapp/yao/base"
+	"github.com/yaoapp/yao/volcengine/base"
 )
 
 const (

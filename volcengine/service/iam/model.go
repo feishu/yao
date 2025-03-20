@@ -1,6 +1,6 @@
 package iam
 
-import "github.com/yaoapp/yao/base"
+import "github.com/yaoapp/yao/volcengine/base"
 
 type NullResultResp struct {
 	ResponseMetadata *base.ResponseMetadata
