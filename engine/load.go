@@ -35,6 +35,7 @@ import (
 	"github.com/yaoapp/yao/store"
 	sui "github.com/yaoapp/yao/sui/api"
 	"github.com/yaoapp/yao/task"
+	"github.com/yaoapp/yao/volcengine"
 	"github.com/yaoapp/yao/websocket"
 	"github.com/yaoapp/yao/widget"
 	"github.com/yaoapp/yao/widgets"
@@ -207,6 +208,12 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 	err = neo.Load(cfg)
 	if err != nil {
 		printErr(cfg.Mode, "Neo", err)
+	}
+
+	// Load Volcengine
+	err = volcengine.Load(cfg)
+	if err != nil {
+		printErr(cfg.Mode, "Volcengine", err)
 	}
 
 	// Load Custom Widget
@@ -431,6 +438,12 @@ func Reload(cfg config.Config, options LoadOption) (err error) {
 	err = neo.Load(cfg)
 	if err != nil {
 		printErr(cfg.Mode, "Neo", err)
+	}
+
+	// Load Volcengine
+	err = volcengine.Load(cfg)
+	if err != nil {
+		printErr(cfg.Mode, "Volcengine", err)
 	}
 
 	// Execute AfterLoad Process if exists
