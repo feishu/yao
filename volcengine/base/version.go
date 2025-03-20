@@ -1,4 +1,5 @@
 package base
 
-// Version is the version of the SDK
-const Version = "v1.0.0"
+const SDKName = "volc-sdk-golang"
+
+const SDKVersion = "v1.0.198"

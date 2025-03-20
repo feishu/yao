@@ -20,28 +20,6 @@ const (
 	timeFormatV4 = "20060102T150405Z"
 )
 
-// Model is the base model
-type Model struct {
-	ResponseMetadata *ResponseMetadata `json:"ResponseMetadata"`
-}
-
-// ResponseMetadata is the metadata of response
-type ResponseMetadata struct {
-	RequestId string `json:"RequestId"`
-	Action    string `json:"Action"`
-	Version   string `json:"Version"`
-	Service   string `json:"Service"`
-	Region    string `json:"Region"`
-	Error     *Error `json:"Error,omitempty"`
-}
-
-// Error is the error of response
-type Error struct {
-	CodeN   int    `json:"CodeN,omitempty"`
-	Code    string `json:"Code,omitempty"`
-	Message string `json:"Message,omitempty"`
-}
-
 type ServiceInfo struct {
 	Timeout     time.Duration
 	Scheme      string
@@ -59,6 +37,14 @@ type ApiInfo struct {
 	Timeout time.Duration
 	Header  http.Header
 	Retry   RetrySettings
+}
+
+type Credentials struct {
+	AccessKeyID     string
+	SecretAccessKey string
+	Service         string
+	Region          string
+	SessionToken    string
 }
 
 type metadata struct {
@@ -86,6 +72,15 @@ type ErrorObj struct {
 	CodeN   int
 	Code    string
 	Message string
+}
+
+type ResponseMetadata struct {
+	RequestId string
+	Service   string    `json:",omitempty"`
+	Region    string    `json:",omitempty"`
+	Action    string    `json:",omitempty"`
+	Version   string    `json:",omitempty"`
+	Error     *ErrorObj `json:",omitempty"`
 }
 
 type Policy struct {

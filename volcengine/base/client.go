@@ -2,305 +2,401 @@ package base
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"time"
+
+	"github.com/cenkalti/backoff/v4"
+	"golang.org/x/net/http/httpproxy"
 )
 
-// ServiceInfo contains the info of service
-type ServiceInfo struct {
-	Timeout     time.Duration
-	Scheme      string
-	Host        string
-	Header      http.Header
-	Credentials Credentials
-}
+const (
+	accessKey = "VOLC_ACCESSKEY"
+	secretKey = "VOLC_SECRETKEY"
 
-// ApiInfo contains the api info
-type ApiInfo struct {
-	Method  string
-	Path    string
-	Query   url.Values
-	Form    url.Values
-	Header  http.Header
-	Timeout *time.Duration
-}
+	// volc proxy
+	httpProxy     = "VOLC_HTTP_PROXY"
+	httpsProxy    = "VOLC_HTTPS_PROXY"
+	noProxy       = "VOLC_NO_PROXY"
+	requestMethod = "REQUEST_METHOD"
 
-// Client is the base client
-type Client struct {
-	ServiceInfo *ServiceInfo
-	ApiInfoList map[string]*ApiInfo
-	httpClient  *http.Client
-}
+	defaultScheme = "http"
+)
 
-// CommonResponse is the common response of api
-type CommonResponse struct {
-	ResponseMetadata *ResponseMetadata `json:"ResponseMetadata"`
-}
+var (
+	_GlobalClient   *http.Client
+	emptyBytes      []byte
+	emptyReadSeeker = bytes.Buffer{}
+)
 
-// ResponseMetadata is the metadata of response
-type ResponseMetadata struct {
-	RequestId string `json:"RequestId"`
-	Action    string `json:"Action"`
-	Version   string `json:"Version"`
-	Service   string `json:"Service"`
-	Region    string `json:"Region"`
-	Error     *Error `json:"Error,omitempty"`
-}
-
-// Error is the error of response
-type Error struct {
-	CodeN   int    `json:"CodeN,omitempty"`
-	Code    string `json:"Code,omitempty"`
-	Message string `json:"Message,omitempty"`
-}
-
-// NewClient returns a new client
-func NewClient(info *ServiceInfo, apiInfoList map[string]*ApiInfo) *Client {
-	tr := &http.Transport{
-		MaxIdleConns:        1000,
-		MaxIdleConnsPerHost: 100,
-		IdleConnTimeout:     60 * time.Second,
+func volcProxy() func(req *http.Request) (*url.URL, error) {
+	c := &httpproxy.Config{
+		HTTPProxy:  os.Getenv(httpProxy),
+		HTTPSProxy: os.Getenv(httpsProxy),
+		NoProxy:    os.Getenv(noProxy),
+		CGI:        os.Getenv(requestMethod) != "",
 	}
+	p := c.ProxyFunc()
+	return func(req *http.Request) (*url.URL, error) { return p(req.URL) }
+}
 
-	client := &Client{
-		ServiceInfo: info,
-		ApiInfoList: apiInfoList,
-		httpClient: &http.Client{
-			Transport: tr,
-			Timeout:   info.Timeout,
+func init() {
+	_GlobalClient = &http.Client{
+		Transport: &http.Transport{
+			MaxIdleConns:        1000,
+			MaxIdleConnsPerHost: 100,
+			IdleConnTimeout:     10 * time.Second,
+			Proxy:               volcProxy(),
 		},
 	}
+}
 
+// Client
+type Client struct {
+	Client        *http.Client
+	ServiceInfo   *ServiceInfo
+	ApiInfoList   map[string]*ApiInfo
+	CustomTimeout time.Duration
+}
+
+// NewClient
+func NewClient(info *ServiceInfo, apiInfoList map[string]*ApiInfo) *Client {
+	client := &Client{Client: _GlobalClient, ServiceInfo: info.Clone(), ApiInfoList: apiInfoList}
+
+	if client.ServiceInfo.Scheme == "" {
+		client.ServiceInfo.Scheme = defaultScheme
+	}
+
+	if os.Getenv(accessKey) != "" && os.Getenv(secretKey) != "" {
+		client.ServiceInfo.Credentials.AccessKeyID = os.Getenv(accessKey)
+		client.ServiceInfo.Credentials.SecretAccessKey = os.Getenv(secretKey)
+	} else if _, err := os.Stat(os.Getenv("HOME") + "/.volc/config"); err == nil {
+		if content, err := ioutil.ReadFile(os.Getenv("HOME") + "/.volc/config"); err == nil {
+			m := make(map[string]string)
+			json.Unmarshal(content, &m)
+			if accessKey, ok := m["ak"]; ok {
+				client.ServiceInfo.Credentials.AccessKeyID = accessKey
+			}
+			if secretKey, ok := m["sk"]; ok {
+				client.ServiceInfo.Credentials.SecretAccessKey = secretKey
+			}
+		}
+	}
 	return client
 }
 
-// GetSignUrl returns the signed url
+func (serviceInfo *ServiceInfo) Clone() *ServiceInfo {
+	ret := new(ServiceInfo)
+	//base info
+	ret.Timeout = serviceInfo.Timeout
+	ret.Host = serviceInfo.Host
+	ret.Scheme = serviceInfo.Scheme
+
+	//credential
+	ret.Credentials = serviceInfo.Credentials.Clone()
+
+	// header
+	ret.Header = serviceInfo.Header.Clone()
+	return ret
+}
+
+func (cred Credentials) Clone() Credentials {
+	return Credentials{
+		Service:         cred.Service,
+		Region:          cred.Region,
+		SecretAccessKey: cred.SecretAccessKey,
+		AccessKeyID:     cred.AccessKeyID,
+		SessionToken:    cred.SessionToken,
+	}
+}
+
+// SetRetrySettings
+func (client *Client) SetRetrySettings(retrySettings *RetrySettings) {
+	if retrySettings != nil {
+		client.ServiceInfo.Retry = *retrySettings
+	}
+}
+
+// SetAccessKey
+func (client *Client) SetAccessKey(ak string) {
+	if ak != "" {
+		client.ServiceInfo.Credentials.AccessKeyID = ak
+	}
+}
+
+// SetSecretKey
+func (client *Client) SetSecretKey(sk string) {
+	if sk != "" {
+		client.ServiceInfo.Credentials.SecretAccessKey = sk
+	}
+}
+
+// SetSessionToken
+func (client *Client) SetSessionToken(token string) {
+	if token != "" {
+		client.ServiceInfo.Credentials.SessionToken = token
+	}
+}
+
+// SetHost
+func (client *Client) SetHost(host string) {
+	if host != "" {
+		client.ServiceInfo.Host = host
+	}
+}
+
+func (client *Client) SetScheme(scheme string) {
+	if scheme != "" {
+		client.ServiceInfo.Scheme = scheme
+	}
+}
+
+// SetCredential
+func (client *Client) SetCredential(c Credentials) {
+	if c.AccessKeyID != "" {
+		client.ServiceInfo.Credentials.AccessKeyID = c.AccessKeyID
+	}
+
+	if c.SecretAccessKey != "" {
+		client.ServiceInfo.Credentials.SecretAccessKey = c.SecretAccessKey
+	}
+
+	if c.Region != "" {
+		client.ServiceInfo.Credentials.Region = c.Region
+	}
+
+	if c.SessionToken != "" {
+		client.ServiceInfo.Credentials.SessionToken = c.SessionToken
+	}
+
+	if c.Service != "" {
+		client.ServiceInfo.Credentials.Service = c.Service
+	}
+}
+
+func (client *Client) SetTimeout(timeout time.Duration) {
+	if timeout > 0 {
+		client.ServiceInfo.Timeout = timeout
+	}
+}
+
+func (client *Client) SetCustomTimeout(timeout time.Duration) {
+	if timeout > 0 {
+		client.CustomTimeout = timeout
+	}
+}
+
+// GetSignUrl
 func (client *Client) GetSignUrl(api string, query url.Values) (string, error) {
 	apiInfo := client.ApiInfoList[api]
+
 	if apiInfo == nil {
-		return "", fmt.Errorf("no such api: %s", api)
+		return "", errors.New("The related api does not exist")
 	}
 
 	query = mergeQuery(query, apiInfo.Query)
 
-	return client.ServiceInfo.Scheme + "://" + client.ServiceInfo.Host + apiInfo.Path + "?" + query.Encode(), nil
-}
-
-// Json sends a json request
-func (client *Client) Json(api string, query url.Values, body string) ([]byte, int, error) {
-	return client.CtxJson(nil, api, query, body)
-}
-
-// CtxJson sends a json request with context
-func (client *Client) CtxJson(ctx interface{}, api string, query url.Values, body string) ([]byte, int, error) {
-	apiInfo := client.ApiInfoList[api]
-	if apiInfo == nil {
-		return nil, 0, fmt.Errorf("no such api: %s", api)
-	}
-
-	query = mergeQuery(query, apiInfo.Query)
-
-	form := mergeValues(url.Values{}, apiInfo.Form)
-
-	method := apiInfo.Method
-	path := apiInfo.Path
-
-	var req *http.Request
-	var err error
-	if method == http.MethodGet {
-		req, err = http.NewRequest(method, "", nil)
-	} else {
-		buf := bytes.NewBufferString(body)
-		req, err = http.NewRequest(method, "", buf)
-	}
-
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create request: %v", err)
-	}
-
-	scheme := client.ServiceInfo.Scheme
-	host := client.ServiceInfo.Host
-
-	req.URL = &url.URL{
-		Scheme:   scheme,
-		Host:     host,
-		Path:     path,
+	u := url.URL{
+		Scheme:   client.ServiceInfo.Scheme,
+		Host:     client.ServiceInfo.Host,
+		Path:     apiInfo.Path,
 		RawQuery: query.Encode(),
 	}
+	req, err := http.NewRequest(strings.ToUpper(apiInfo.Method), u.String(), nil)
 
-	for key, values := range apiInfo.Header {
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
-
-	for key, values := range client.ServiceInfo.Header {
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
-
-	if method != http.MethodGet {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	Sign(client.ServiceInfo.Credentials, req)
-
-	httpClient := client.httpClient
-	if apiInfo.Timeout != nil {
-		httpClient = &http.Client{
-			Transport: client.httpClient.Transport,
-			Timeout:   *apiInfo.Timeout,
-		}
-	}
-
-	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to do request: %v", err)
+		return "", errors.New("Failed to build request")
 	}
 
-	defer resp.Body.Close()
-
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("failed to read response body: %v", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return data, resp.StatusCode, fmt.Errorf("http status code: %d, message: %s", resp.StatusCode, string(data))
-	}
-
-	return data, resp.StatusCode, nil
+	return client.ServiceInfo.Credentials.SignUrl(req), nil
 }
 
-// Query sends a query request
+// SignSts2
+func (client *Client) SignSts2(inlinePolicy *Policy, expire time.Duration) (*SecurityToken2, error) {
+	var err error
+	sts := new(SecurityToken2)
+	if sts.AccessKeyID, sts.SecretAccessKey, err = createTempAKSK(); err != nil {
+		return nil, err
+	}
+
+	if expire < time.Minute {
+		expire = time.Minute
+	}
+
+	now := time.Now()
+	expireTime := now.Add(expire)
+	sts.CurrentTime = now.Format(time.RFC3339)
+	sts.ExpiredTime = expireTime.Format(time.RFC3339)
+
+	innerToken, err := createInnerToken(client.ServiceInfo.Credentials, sts, inlinePolicy, expireTime.Unix())
+	if err != nil {
+		return nil, err
+	}
+
+	b, _ := json.Marshal(innerToken)
+	sts.SessionToken = "STS2" + base64.StdEncoding.EncodeToString(b)
+	return sts, nil
+}
+
+// Query Initiate a Get query request
 func (client *Client) Query(api string, query url.Values) ([]byte, int, error) {
-	return client.CtxQuery(nil, api, query)
+	return client.CtxQuery(context.Background(), api, query)
 }
 
-// CtxQuery sends a query request with context
-func (client *Client) CtxQuery(ctx interface{}, api string, query url.Values) ([]byte, int, error) {
-	return client.CtxJson(ctx, api, query, "")
+func (client *Client) CtxQuery(ctx context.Context, api string, query url.Values) ([]byte, int, error) {
+	return client.request(ctx, api, query, emptyBytes, "")
 }
 
-// Post sends a post request
+// Json Initiate a Json post request
+func (client *Client) Json(api string, query url.Values, body string) ([]byte, int, error) {
+	return client.CtxJson(context.Background(), api, query, body)
+}
+
+func (client *Client) CtxJson(ctx context.Context, api string, query url.Values, body string) ([]byte, int, error) {
+	return client.request(ctx, api, query, []byte(body), "application/json")
+}
+func (client *Client) PostWithContentType(api string, query url.Values, body string, ct string) ([]byte, int, error) {
+	return client.CtxPostWithContentType(context.Background(), api, query, body, ct)
+}
+
+// CtxPostWithContentType Initiate a post request with a custom Content-Type, Content-Type cannot be empty
+func (client *Client) CtxPostWithContentType(ctx context.Context, api string, query url.Values, body string, ct string) ([]byte, int, error) {
+	return client.request(ctx, api, query, []byte(body), ct)
+}
+
 func (client *Client) Post(api string, query url.Values, form url.Values) ([]byte, int, error) {
-	return client.CtxPost(nil, api, query, form)
+	return client.CtxPost(context.Background(), api, query, form)
 }
 
-// CtxPost sends a post request with context
-func (client *Client) CtxPost(ctx interface{}, api string, query url.Values, form url.Values) ([]byte, int, error) {
+// CtxPost Initiate a Post request
+func (client *Client) CtxPost(ctx context.Context, api string, query url.Values, form url.Values) ([]byte, int, error) {
 	apiInfo := client.ApiInfoList[api]
-	if apiInfo == nil {
-		return nil, 0, fmt.Errorf("no such api: %s", api)
+	form = mergeQuery(form, apiInfo.Form)
+	return client.request(ctx, api, query, []byte(form.Encode()), "application/x-www-form-urlencoded")
+}
+
+func (client *Client) CtxMultiPart(ctx context.Context, api string, query url.Values, form []*MultiPartItem) ([]byte, int, error) {
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	for _, item := range form {
+		part, err := writer.CreatePart(item.header)
+		if err != nil {
+			return nil, 400, err
+		}
+		_, err = io.Copy(part, item.data)
+		if err != nil {
+			return nil, 400, err
+		}
+	}
+	writer.Close()
+	return client.request(ctx, api, query, body.Bytes(), writer.FormDataContentType())
+}
+
+func (client *Client) makeRequest(inputContext context.Context, api string, req *http.Request, timeout time.Duration) ([]byte, int, error, bool) {
+	req = client.ServiceInfo.Credentials.Sign(req)
+
+	ctx := inputContext
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
-	query = mergeQuery(query, apiInfo.Query)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req = req.WithContext(ctx)
 
-	form = mergeValues(form, apiInfo.Form)
-
-	method := apiInfo.Method
-	path := apiInfo.Path
-
-	var req *http.Request
-	var err error
-	if method == http.MethodGet {
-		req, err = http.NewRequest(method, "", nil)
-	} else {
-		buf := bytes.NewBufferString(form.Encode())
-		req, err = http.NewRequest(method, "", buf)
-	}
-
+	resp, err := client.Client.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create request: %v", err)
+		// should retry when client sends request error.
+		return []byte(""), 500, err, true
 	}
-
-	scheme := client.ServiceInfo.Scheme
-	host := client.ServiceInfo.Host
-
-	req.URL = &url.URL{
-		Scheme:   scheme,
-		Host:     host,
-		Path:     path,
-		RawQuery: query.Encode(),
-	}
-
-	for key, values := range apiInfo.Header {
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
-
-	for key, values := range client.ServiceInfo.Header {
-		for _, value := range values {
-			req.Header.Add(key, value)
-		}
-	}
-
-	if method != http.MethodGet {
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	}
-
-	Sign(client.ServiceInfo.Credentials, req)
-
-	httpClient := client.httpClient
-	if apiInfo.Timeout != nil {
-		httpClient = &http.Client{
-			Transport: client.httpClient.Transport,
-			Timeout:   *apiInfo.Timeout,
-		}
-	}
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to do request: %v", err)
-	}
-
 	defer resp.Body.Close()
 
-	data, err := ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("failed to read response body: %v", err)
+		return []byte(""), resp.StatusCode, err, false
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return data, resp.StatusCode, fmt.Errorf("http status code: %d, message: %s", resp.StatusCode, string(data))
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		needRetry := false
+		// should retry when server returns 5xx error.
+		if resp.StatusCode >= http.StatusInternalServerError {
+			needRetry = true
+		}
+		return body, resp.StatusCode, fmt.Errorf("api %s http code %d body %s", api, resp.StatusCode, string(body)), needRetry
 	}
 
-	return data, resp.StatusCode, nil
+	return body, resp.StatusCode, nil, false
 }
 
-func mergeQuery(query url.Values, apiQuery url.Values) url.Values {
-	if query == nil {
-		query = url.Values{}
-	}
+func (client *Client) request(ctx context.Context, api string, query url.Values, body []byte, ct string) ([]byte, int, error) {
+	apiInfo := client.ApiInfoList[api]
 
-	if apiQuery != nil {
-		for key, values := range apiQuery {
-			for _, value := range values {
-				query.Add(key, value)
-			}
-		}
+	if apiInfo == nil {
+		return []byte(""), 500, errors.New("The related api does not exist")
 	}
-
-	return query
+	return client.requestThumb(ctx, api, apiInfo, query, body, ct)
 }
 
-func mergeValues(form url.Values, apiForm url.Values) url.Values {
-	if form == nil {
-		form = url.Values{}
+func (client *Client) requestThumb(ctx context.Context, api string, apiInfo *ApiInfo, query url.Values, body []byte, ct string) ([]byte, int, error) {
+	timeout := getTimeout(client.ServiceInfo.Timeout, apiInfo.Timeout, client.CustomTimeout)
+	header := mergeHeader(client.ServiceInfo.Header, apiInfo.Header)
+	query = mergeQuery(query, apiInfo.Query)
+	retrySettings := getRetrySetting(&client.ServiceInfo.Retry, &apiInfo.Retry)
+
+	u := url.URL{
+		Scheme:   client.ServiceInfo.Scheme,
+		Host:     client.ServiceInfo.Host,
+		Path:     apiInfo.Path,
+		RawQuery: query.Encode(),
+	}
+	requestBody := bytes.NewReader(body)
+	req, err := http.NewRequest(strings.ToUpper(apiInfo.Method), u.String(), nil)
+	if err != nil {
+		return []byte(""), 500, errors.New("Failed to build request")
+	}
+	req.Header = header
+	if ct != "" {
+		req.Header.Set("Content-Type", ct)
 	}
 
-	if apiForm != nil {
-		for key, values := range apiForm {
-			for _, value := range values {
-				form.Add(key, value)
-			}
+	// Because service info could be changed by SetRegion, so set UA header for every request here.
+	req.Header.Set("User-Agent", strings.Join([]string{SDKName, SDKVersion}, "/"))
+
+	var resp []byte
+	var code int
+
+	err = backoff.Retry(func() error {
+		_, err = requestBody.Seek(0, io.SeekStart)
+		if err != nil {
+			// if seek failed, stop retry.
+			return backoff.Permanent(err)
 		}
-	}
+		req.Body = ioutil.NopCloser(requestBody)
+		var needRetry bool
+		resp, code, err, needRetry = client.makeRequest(ctx, api, req, timeout)
+		if needRetry {
+			return err
+		} else {
+			return backoff.Permanent(err)
+		}
+	}, backoff.WithMaxRetries(backoff.NewConstantBackOff(*retrySettings.RetryInterval), *retrySettings.RetryTimes))
+	return resp, code, err
+}
 
-	return form
+func (client *Client) CtxQueryThumb(ctx context.Context, api string, apiInfo *ApiInfo, query url.Values) ([]byte, int, error) {
+	return client.requestThumb(ctx, api, apiInfo, query, emptyBytes, "")
+}
+
+func (client *Client) CtxJsonThumb(ctx context.Context, api string, apiInfo *ApiInfo, query url.Values, body []byte) ([]byte, int, error) {
+	return client.requestThumb(ctx, api, apiInfo, query, body, "application/json")
 }
