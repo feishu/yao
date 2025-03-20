@@ -136,7 +136,6 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241230172942-26aa7a208def // indirect
 	google.golang.org/grpc v1.69.2 // indirect
 	google.golang.org/protobuf v1.36.1 // indirect
-	github.com/cenkalti/backoff/v4 v4.1.2 //go.mod h1:scbssz8iZGpm3xbr14ovlUdkxfGXNInqkPWOWmG2CLw=
 )
 
 // go env -w GOPRIVATE=github.com/yaoapp/*
