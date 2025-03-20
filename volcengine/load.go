@@ -6,7 +6,7 @@ import (
 
 	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/yao/config"
-	"github.com/yaoapp/yao/iam"
+	"github.com/yaoapp/yao/volcengine/service/iam"
 )
 
 // Config 存储volcengine的配置信息
