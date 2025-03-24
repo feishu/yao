@@ -207,13 +207,11 @@ func ProcessBatchGetUser(p *process.Process) interface{} {
 		exception.New("Batch get user failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res.Result
-
-	// jsonResult, err := json.Marshal(res.Result)
-	// if err != nil {
-	// 	exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
-	// }
-	// return string(jsonResult)
+	jsonResult, err := json.Marshal(res.Result)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
 
 // ProcessBatchUpdateUser 批量更新用户信息
