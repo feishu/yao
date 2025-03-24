@@ -129,10 +129,6 @@ func unmarshalResultInto(data []byte, result interface{}) error {
 		return fmt.Errorf("fail to unmarshal result, %v", err)
 	}
 
-	fmt.Printf("%+v\n", resp)
-	fmt.Printf("%+v\n", resp.Result)
-	fmt.Printf("%+v\n", resp.ResponseMetadata)
-	fmt.Printf("%+v\n", result)
 	return nil
 }
 
