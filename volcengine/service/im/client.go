@@ -27,18 +27,12 @@ func NewInstanceWithRegion(region string) *Im {
 		Client: common.NewClient(&serviceInfo, ApiListInfo),
 	}
 
+	instance.SetCredential(common.Credentials{
+		AccessKeyID:     volcengine.VolcEngine.Creds.AccessKeyID,
+		SecretAccessKey: volcengine.VolcEngine.Creds.AccessKeySecret,
+	})
+
 	fmt.Printf("ak = %s,sk = %s", instance.Client.ServiceInfo.Credentials.AccessKeyID, instance.Client.ServiceInfo.Credentials.SecretAccessKey)
 	fmt.Println()
-
-	fmt.Println("-------------AK&SK-------------------")
-
-	fmt.Printf("ak = %s", volcengine.VolcEngine.Creds.AccessKeyID)
-	fmt.Println()
-	fmt.Printf("sk = %s", volcengine.VolcEngine.Creds.AccessKeySecret)
-	fmt.Println()
-	fmt.Println("------------------------------------")
-
-	instance.Client.SetAccessKey(volcengine.VolcEngine.Creds.AccessKeyID)
-	instance.Client.SetSecretKey(volcengine.VolcEngine.Creds.AccessKeySecret)
 	return instance
 }
