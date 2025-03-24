@@ -2,7 +2,7 @@ package im
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"strconv"
 	"sync"
 
@@ -75,12 +75,18 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 		exception.New("Generate token failed: %s", 500, err.Error()).Throw()
 	}
 
-	return map[string]interface{}{
+	result := map[string]interface{}{
 		"Token":      token,
 		"UserId":     int64(userID),
 		"AppId":      appID,
 		"ExpireTime": expireTime,
 	}
+
+	jsonResult, err := json.Marshal(result)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
 
 // ProcessRegisterUsers 注册用户到IM系统
@@ -161,7 +167,11 @@ func ProcessRegisterUsers(p *process.Process) interface{} {
 		exception.New("Register users failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	jsonResult, err := json.Marshal(res)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
 
 // ProcessBatchGetUser 批量获取用户信息
@@ -193,13 +203,17 @@ func ProcessBatchGetUser(p *process.Process) interface{} {
 	ctx := context.Background()
 	res, err := GetInstance().BatchGetUser(ctx, body)
 
-	fmt.Printf("res: %+v\n,err: %+v\n", res, err)
-
 	if err != nil {
 		exception.New("Batch get user failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	return res.Result
+
+	// jsonResult, err := json.Marshal(res.Result)
+	// if err != nil {
+	// 	exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	// }
+	// return string(jsonResult)
 }
 
 // ProcessBatchUpdateUser 批量更新用户信息
@@ -281,7 +295,11 @@ func ProcessBatchUpdateUser(p *process.Process) interface{} {
 		exception.New("Batch update user failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	jsonResult, err := json.Marshal(res)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
 
 // ProcessUnRegisterUsers 注销用户
@@ -317,7 +335,11 @@ func ProcessUnRegisterUsers(p *process.Process) interface{} {
 		exception.New("Batch get user failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	jsonResult, err := json.Marshal(res)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
 
 // ProcessCreateConversation 创建会话（单聊或群聊）
@@ -400,7 +422,11 @@ func ProcessCreateConversation(p *process.Process) interface{} {
 		exception.New("Create conversation failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	jsonResult, err := json.Marshal(res)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
 
 // ProcessModifyConversation 修改会话信息
@@ -463,7 +489,11 @@ func ProcessModifyConversation(p *process.Process) interface{} {
 		exception.New("Modify conversation failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	jsonResult, err := json.Marshal(res)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
 
 // ProcessIsUserInConversation 检查用户是否在指定会话中
@@ -505,7 +535,11 @@ func ProcessIsUserInConversation(p *process.Process) interface{} {
 		exception.New("Check user in conversation failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	jsonResult, err := json.Marshal(res)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
 
 // ProcessSendMessage 发送消息
@@ -633,7 +667,11 @@ func ProcessSendMessage(p *process.Process) interface{} {
 		exception.New("Send message failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	jsonResult, err := json.Marshal(res)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
 
 // ProcessRecallMessage 撤回消息
@@ -686,7 +724,11 @@ func ProcessRecallMessage(p *process.Process) interface{} {
 		exception.New("Recall message failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	jsonResult, err := json.Marshal(res)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
 
 // ProcessDeleteConversationMessage 删除会话消息
@@ -732,7 +774,11 @@ func ProcessDeleteConversationMessage(p *process.Process) interface{} {
 		exception.New("Delete message failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	jsonResult, err := json.Marshal(res)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
 
 // ProcessGetConversationMessages 获取会话消息列表
@@ -801,7 +847,11 @@ func ProcessGetConversationMessages(p *process.Process) interface{} {
 			exception.New("Get conversation messages failed: %s", 500, err.Error()).Throw()
 		}
 
-		return res
+		jsonResult, err := json.Marshal(res)
+		if err != nil {
+			exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+		}
+		return string(jsonResult)
 	}
 
 	// 使用 GetConversationMessages API 获取会话消息
@@ -811,7 +861,11 @@ func ProcessGetConversationMessages(p *process.Process) interface{} {
 		exception.New("Get conversation messages failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	jsonResult, err := json.Marshal(res)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
 
 // ProcessDestroyConversation 销毁会话
@@ -842,5 +896,9 @@ func ProcessDestroyConversation(p *process.Process) interface{} {
 		exception.New("Destroy conversation failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	jsonResult, err := json.Marshal(res)
+	if err != nil {
+		exception.New("Convert result to JSON failed: %s", 500, err.Error()).Throw()
+	}
+	return string(jsonResult)
 }
