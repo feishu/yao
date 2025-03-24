@@ -27,7 +27,7 @@ func NewInstanceWithRegion(region string) *Im {
 		Client: common.NewClient(&serviceInfo, ApiListInfo),
 	}
 
-	fmt.Printf("ak = %s", instance.Client.ServiceInfo.Credentials)
+	fmt.Printf("ak = %s,sk = %s", instance.Client.ServiceInfo.Credentials.AccessKeyID, instance.Client.ServiceInfo.Credentials.SecretAccessKey)
 	fmt.Println()
 
 	fmt.Println("-------------AK&SK-------------------")
