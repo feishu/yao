@@ -6,6 +6,7 @@ package im
 import (
 	"fmt"
 
+	"github.com/yaoapp/yao/volcengine"
 	common "github.com/yaoapp/yao/volcengine/base"
 )
 
@@ -25,5 +26,19 @@ func NewInstanceWithRegion(region string) *Im {
 	instance := &Im{
 		Client: common.NewClient(&serviceInfo, ApiListInfo),
 	}
+
+	fmt.Printf("ak = %s", instance.Client.ServiceInfo.Credentials)
+	fmt.Println()
+
+	fmt.Println("-------------AK&SK-------------------")
+
+	fmt.Printf("ak = %s", volcengine.VolcEngine.Creds.AccessKeyID)
+	fmt.Println()
+	fmt.Printf("sk = %s", volcengine.VolcEngine.Creds.AccessKeySecret)
+	fmt.Println()
+	fmt.Println("------------------------------------")
+
+	instance.Client.SetAccessKey(volcengine.VolcEngine.Creds.AccessKeyID)
+	instance.Client.SetSecretKey(volcengine.VolcEngine.Creds.AccessKeySecret)
 	return instance
 }

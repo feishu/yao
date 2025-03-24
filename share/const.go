@@ -3,8 +3,13 @@ package share
 // VERSION Yao App Engine Version
 const VERSION = "1.0.0"
 
+<<<<<<< HEAD
 // PRVERSION Yao App Engine PR Commit
 const PRVERSION = "DEV"
+=======
+// PRVERSION  PreRelease Version
+const PRVERSION = "f393289387f0-2025-03-24T14:30:18+0800-debug"
+>>>>>>> d29d425f (在IM服务客户端中添加了对AccessKey和SecretKey的打印输出，便于调试和验证服务配置。)
 
 // CUI Version
 const CUI = "1.0.0"
