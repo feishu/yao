@@ -128,6 +128,9 @@ func unmarshalResultInto(data []byte, result interface{}) error {
 	if err := json.Unmarshal(data, result); err != nil {
 		return fmt.Errorf("fail to unmarshal result, %v", err)
 	}
+
+	fmt.Println(resp)
+
 	return nil
 }
 
