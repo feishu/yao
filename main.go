@@ -10,6 +10,7 @@ import (
 	_ "github.com/yaoapp/yao/crypto"
 	_ "github.com/yaoapp/yao/helper"
 	_ "github.com/yaoapp/yao/openai"
+	_ "github.com/yaoapp/yao/volcengine/service/im"
 	_ "github.com/yaoapp/yao/wework"
 	// _ "net/http/pprof"
 )
