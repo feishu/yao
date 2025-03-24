@@ -2,6 +2,7 @@ package im
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 
@@ -311,6 +312,8 @@ func ProcessUnRegisterUsers(p *process.Process) interface{} {
 	if err != nil {
 		exception.New("Batch get user failed: %s", 500, err.Error()).Throw()
 	}
+
+	fmt.Printf("resp: %+v\n", res)
 
 	return res
 }
