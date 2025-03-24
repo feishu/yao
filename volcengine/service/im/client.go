@@ -1,106 +1,29 @@
 package im
 
-import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"net/url"
+// client 这个文件由 Codegen 生成，但后续不再更新（如果没有，则会重新生成），包含配置结构体和创建服务实例的代码
+// 开发者可以在这里给服务结构体添加自定义扩展方法
 
-	"github.com/yaoapp/yao/volcengine/base"
+import (
+	"fmt"
+
+	common "github.com/yaoapp/yao/volcengine/base"
 )
 
-// Im is the client for im service
 type Im struct {
-	*base.Client
+	*common.Client
 }
 
-// NewInstance creates a new instance of Im
 func NewInstance() *Im {
 	return NewInstanceWithRegion("cn-north-1")
 }
 
-// NewInstanceWithRegion creates a new instance of Im with region
 func NewInstanceWithRegion(region string) *Im {
 	serviceInfo, ok := ServiceInfoMap[region]
 	if !ok {
 		panic(fmt.Errorf("Im not support region %s", region))
 	}
 	instance := &Im{
-		Client: base.NewClient(&serviceInfo, ApiListInfo),
+		Client: common.NewClient(&serviceInfo, ApiListInfo),
 	}
 	return instance
 }
-
-// GetConversationMarks gets conversation marks
-func (c *Im) GetConversationMarks(ctx context.Context, arg interface{}) (interface{}, error) {
-	body, err := json.Marshal(arg)
-	if err != nil {
-		return nil, err
-	}
-
-	data, _, err := c.Client.CtxJson(ctx, "GetConversationMarks", url.Values{}, string(body))
-	if err != nil {
-		return nil, err
-	}
-
-	var result map[string]interface{}
-	err = json.Unmarshal(data, &result)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-// MarkConversation marks conversation
-func (c *Im) MarkConversation(ctx context.Context, arg interface{}) (interface{}, error) {
-	body, err := json.Marshal(arg)
-	if err != nil {
-		return nil, err
-	}
-
-	data, _, err := c.Client.CtxJson(ctx, "MarkConversation", url.Values{}, string(body))
-	if err != nil {
-		return nil, err
-	}
-
-	var result map[string]interface{}
-	err = json.Unmarshal(data, &result)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-// CreateConversation creates conversation
-func (c *Im) CreateConversation(ctx context.Context, arg interface{}) (interface{}, error) {
-	body, err := json.Marshal(arg)
-	if err != nil {
-		return nil, err
-	}
-
-	data, _, err := c.Client.CtxJson(ctx, "CreateConversation", url.Values{}, string(body))
-	if err != nil {
-		return nil, err
-	}
-
-	var result map[string]interface{}
-	err = json.Unmarshal(data, &result)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
-// SendMessage sends message
-func (c *Im) SendMessage(ctx context.Context, arg interface{}) (interface{}, error) {
-	body, err := json.Marshal(arg)
-	if err != nil {
-		return nil, err
-	}
-
-	data, _, err := c.Client.CtxJson(ctx, "SendMessage", url.Values{}, string(body))
-	if err != nil {
-		return nil, err
