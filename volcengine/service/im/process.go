@@ -27,6 +27,9 @@ func GetInstance() *Im {
 func init() {
 	process.RegisterGroup("volc.im", map[string]process.Handler{
 		"registerUsers":             ProcessRegisterUsers,
+		"batchGetUser":              ProcessBatchGetUser,
+		"unRegisterUsers":           ProcessUnRegisterUsers,
+		"batchUpdateUser":           ProcessBatchUpdateUser,
 		"createConversation":        ProcessCreateConversation,
 		"modifyConversation":        ProcessModifyConversation,
 		"isUserInConversation":      ProcessIsUserInConversation,
@@ -155,6 +158,158 @@ func ProcessRegisterUsers(p *process.Process) interface{} {
 	res, err := GetInstance().RegisterUsers(ctx, body)
 	if err != nil {
 		exception.New("Register users failed: %s", 500, err.Error()).Throw()
+	}
+
+	return res
+}
+
+// ProcessBatchGetUser 批量获取用户信息
+// 支持批量获取多个用户信息，通过UserIds数组传入用户ID
+// 接口文档: https://www.volcengine.com/docs/6348/1125995
+func ProcessBatchGetUser(p *process.Process) interface{} {
+	p.ValidateArgNums(1)
+	args := p.ArgsMap(0)
+
+	// 使用配置文件中的AppId
+	appID := int32(volcengine.VolcEngine.IM.AppID)
+
+	userIDs, ok := args["UserIds"].([]interface{})
+	if !ok {
+		exception.New("UserIds is required", 400).Throw()
+	}
+
+	userIDsInt := make([]int64, 0, len(userIDs))
+	for _, userID := range userIDs {
+		userIDsInt = append(userIDsInt, int64(userID.(float64)))
+	}
+
+	body := &BatchGetUserBody{
+		AppID:   appID,
+		UserIDs: userIDsInt,
+	}
+
+	// 调用 API
+	ctx := context.Background()
+	res, err := GetInstance().BatchGetUser(ctx, body)
+	if err != nil {
+		exception.New("Batch get user failed: %s", 500, err.Error()).Throw()
+	}
+
+	return res
+}
+
+// ProcessBatchUpdateUser 批量更新用户信息
+// 支持批量更新多个用户信息，通过Users数组传入用户信息
+// 接口文档: https://www.volcengine.com/docs/6348/1125996
+func ProcessBatchUpdateUser(p *process.Process) interface{} {
+	p.ValidateArgNums(1)
+	args := p.ArgsMap(0)
+
+	// 使用配置文件中的AppId
+	appID := int32(volcengine.VolcEngine.IM.AppID)
+
+	users, ok := args["Users"].([]interface{})
+	if !ok {
+		exception.New("Users is required", 400).Throw()
+	}
+
+	userItems := make([]BatchUpdateUserBodyUsersItem, 0, len(users))
+
+	body := &BatchUpdateUserBody{
+		AppID: appID,
+		Users: []BatchUpdateUserBodyUsersItem{},
+	}
+
+	// 转换用户信息并构建用户项
+	for _, user := range users {
+		userMap, ok := user.(map[string]interface{})
+		if !ok {
+			exception.New("User must be an object", 400).Throw()
+		}
+
+		userID, ok := userMap["UserId"].(float64)
+		if !ok {
+			exception.New("User.UserId is required and must be a number", 400).Throw()
+		}
+
+		userItem := BatchUpdateUserBodyUsersItem{
+			UserID: int64(userID),
+		}
+
+		if nickName, ok := userMap["NickName"].(string); ok {
+			userItem.NickName = nickName
+		}
+
+		if portrait, ok := userMap["Portrait"].(string); ok {
+			userItem.Portrait = portrait
+		}
+
+		if tags, ok := userMap["Tags"].([]interface{}); ok {
+			tagStrings := make([]string, 0, len(tags))
+			for _, tag := range tags {
+				if tagStr, ok := tag.(string); ok {
+					tagStrings = append(tagStrings, tagStr)
+				}
+			}
+			userItem.Tags = tagStrings
+		}
+
+		if ext, ok := userMap["Ext"].(map[string]interface{}); ok {
+			extMap := make(map[string]string)
+			for k, v := range ext {
+				if vStr, ok := v.(string); ok {
+					extMap[k] = vStr
+				}
+			}
+			userItem.Ext = extMap
+		}
+
+		userItems = append(userItems, userItem)
+
+	}
+
+	body.Users = userItems
+
+	// 调用 API
+	ctx := context.Background()
+	res, err := GetInstance().BatchUpdateUser(ctx, body)
+	if err != nil {
+		exception.New("Batch update user failed: %s", 500, err.Error()).Throw()
+	}
+
+	return res
+}
+
+// ProcessUnRegisterUsers 注销用户
+// 支持批量注销多个用户，通过UserIds数组传入用户ID
+// 接口文档: https://www.volcengine.com/docs/6348/1125994
+func ProcessUnRegisterUsers(p *process.Process) interface{} {
+	p.ValidateArgNums(1)
+	args := p.ArgsMap(0)
+
+	// 使用配置文件中的AppId
+	appID := int32(volcengine.VolcEngine.IM.AppID)
+
+	userIDs, ok := args["UserIds"].([]interface{})
+	if !ok {
+		exception.New("UserIds is required", 400).Throw()
+	}
+
+	userIDsInt := make([]int64, 0, len(userIDs))
+	for _, userID := range userIDs {
+		userIDsInt = append(userIDsInt, int64(userID.(float64)))
+	}
+
+	body := &BatchGetUserBody{
+		AppID:   appID,
+		UserIDs: userIDsInt,
+	}
+
+	// 调用 API
+	ctx := context.Background()
+	res, err := GetInstance().BatchGetUser(ctx, body)
+	if err != nil {
+		exception.New("Batch get user failed: %s", 500, err.Error()).Throw()
 	}
 
 	return res
