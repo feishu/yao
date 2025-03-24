@@ -32,7 +32,5 @@ func NewInstanceWithRegion(region string) *Im {
 		SecretAccessKey: volcengine.VolcEngine.Creds.AccessKeySecret,
 	})
 
-	fmt.Printf("ak = %s,sk = %s", instance.Client.ServiceInfo.Credentials.AccessKeyID, instance.Client.ServiceInfo.Credentials.SecretAccessKey)
-	fmt.Println()
 	return instance
 }
