@@ -2,6 +2,7 @@ package im
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"sync"
 
@@ -191,6 +192,9 @@ func ProcessBatchGetUser(p *process.Process) interface{} {
 	// 调用 API
 	ctx := context.Background()
 	res, err := GetInstance().BatchGetUser(ctx, body)
+
+	fmt.Printf("res: %+v\n,err: %+v\n", res, err)
+
 	if err != nil {
 		exception.New("Batch get user failed: %s", 500, err.Error()).Throw()
 	}
@@ -308,6 +312,7 @@ func ProcessUnRegisterUsers(p *process.Process) interface{} {
 	// 调用 API
 	ctx := context.Background()
 	res, err := GetInstance().BatchGetUser(ctx, body)
+
 	if err != nil {
 		exception.New("Batch get user failed: %s", 500, err.Error()).Throw()
 	}
