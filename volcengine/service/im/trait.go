@@ -1226,10 +1226,6 @@ func (c *Im) BatchGetUser(ctx context.Context, arg *BatchGetUserBody) (*BatchGet
 	result := new(BatchGetUserRes)
 	err = unmarshalResultInto(data, result)
 
-	fmt.Printf("1 %+v\n", result)
-	fmt.Printf("2 %+v\n", result.Result)
-	fmt.Printf("3 %+v\n", result.ResponseMetadata)
-
 	if err != nil {
 		return nil, err
 	}
