@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/yao/config"
 )
@@ -20,6 +21,8 @@ func Load(cfg config.Config) error {
 		}
 
 		bytes, err := application.App.Read(file)
+		
+		log.Info("coze config file name %s ", file)
 
 		dsl := OAuthConfig{}
 
