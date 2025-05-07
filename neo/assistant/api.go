@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/gin-gonic/gin"
@@ -14,6 +15,7 @@ import (
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/kun/log"
 	chatctx "github.com/yaoapp/yao/neo/context"
+	"github.com/yaoapp/yao/neo/message"
 	chatMessage "github.com/yaoapp/yao/neo/message"
 )
 
@@ -108,6 +110,19 @@ func (ast *Assistant) execute(c *gin.Context, ctx chatctx.Context, userInput int
 	// messages
 	if res != nil && res.Input != nil {
 		input = res.Input
+	}
+
+	// Has result return directly
+	if res != nil && res.Result != nil {
+		// Has callback function
+		if len(callback) > 0 {
+			output := chatMessage.New()
+			output.Result = res.Result
+			output.Callback(callback[0]).Write(c.Writer)
+		}
+
+		// Return the result directly
+		return res.Result, nil
 	}
 
 	// Handle next action
@@ -262,18 +277,19 @@ func (next *NextAction) Execute(c *gin.Context, ctx chatctx.Context, contents *c
 			return nil, fmt.Errorf("with history error: %s", err.Error())
 		}
 
+		// Send the progress message from application side instead
 		// Create a new Text
 		// Send loading message and mark as new
-		if !ctx.Silent {
-			msg := chatMessage.New().Map(map[string]interface{}{
-				"new":   true,
-				"role":  "assistant",
-				"type":  "loading",
-				"props": map[string]interface{}{"placeholder": "Calling " + assistant.Name},
-			})
-			msg.Assistant(assistant.ID, assistant.Name, assistant.Avatar)
-			msg.Write(c.Writer)
-		}
+		// if !ctx.Silent {
+		// 	msg := chatMessage.New().Map(map[string]interface{}{
+		// 		"new":   true,
+		// 		"role":  "assistant",
+		// 		"type":  "loading",
+		// 		"props": map[string]interface{}{"placeholder": "Calling " + assistant.Name},
+		// 	})
+		// 	msg.Assistant(assistant.ID, assistant.Name, assistant.Avatar)
+		// 	msg.Write(c.Writer)
+		// }
 		newContents := chatMessage.NewContents()
 
 		// Update the context id
@@ -306,10 +322,15 @@ func (ast *Assistant) Call(c *gin.Context, payload APIPayload) (interface{}, err
 
 	// Check if the method exists
 	if !scriptCtx.Global().Has(method) {
+		color.Red("Assistant Call: %s Method %s not found", ast.ID, method)
 		return nil, fmt.Errorf(HookErrorMethodNotFound)
 	}
 
-	return scriptCtx.CallWith(ctx, method, payload.Payload)
+	if payload.Args == nil || len(payload.Args) == 0 {
+		return scriptCtx.CallWith(ctx, method)
+	}
+
+	return scriptCtx.CallWith(ctx, method, payload.Args...)
 }
 
 // handleChatStream manages the streaming chat interaction with the AI
@@ -364,6 +385,8 @@ func (ast *Assistant) streamChat(
 
 	toolsCount := 0
 	currentMessageID := ""
+	tokenID := ""
+	beganAt := int64(0)
 	var retry error = nil
 	var result interface{} = nil // To save the result
 	var content string = ""      // To save the content
@@ -408,6 +431,7 @@ func (ast *Assistant) streamChat(
 			// for api reasoning_content response
 			if msg.Type == "think" {
 				if isFirstThink {
+					msg.Begin = time.Now().UnixNano()
 					msg.Text = "<think>\n" + msg.Text // add the think begin tag
 					isFirstThink = false
 					isThinking = true
@@ -421,15 +445,22 @@ func (ast *Assistant) streamChat(
 				end.ID = currentMessageID
 				end.Retry = ctx.Retry
 				end.Silent = ctx.Silent
+				end.End = time.Now().UnixNano()
+				end.Begin = beganAt
+				end.ToolID = tokenID
 
 				end.Callback(cb).Write(c.Writer)
 				end.AppendTo(contents)
-				contents.UpdateType("think", map[string]interface{}{"text": contents.Text()}, currentMessageID)
+				contents.UpdateType("think", map[string]interface{}{"text": contents.Text()}, chatMessage.Extra{ID: currentMessageID, End: time.Now().UnixNano()})
 				isThinking = false
 
 				// Clear the token and make a new line
-				contents.NewText([]byte{}, currentMessageID)
-				contents.ClearToken()
+				contents.NewText([]byte{}, chatMessage.Extra{ID: currentMessageID})
+
+				// Clear the token
+				contents.ClearToken(tokenID)
+				beganAt = 0
+				tokenID = ""
 			}
 
 			// for native tool_calls response, keep the first tool_calls_native message
@@ -454,11 +485,12 @@ func (ast *Assistant) streamChat(
 					}
 
 					toolsCount++
-
+					msg.Begin = time.Now().UnixNano()
 				}
 
 				if msg.IsEndTool {
 					msg.Text = msg.Text + "\n</tool>\n" // add the tool_calls close tag
+					msg.End = time.Now().UnixNano()
 				}
 			}
 
@@ -467,24 +499,35 @@ func (ast *Assistant) streamChat(
 			// Chunk the delta
 			if delta != "" {
 
-				msg.AppendTo(contents) // Append content and send message
+				msg.AppendTo(contents) // Append content
 
 				// Scan the tokens
-				contents.ScanTokens(currentMessageID, func(token string, id string, begin bool, text string, tails string) {
-					currentMessageID = id
-					msg.ID = id
-					msg.Type = token
-					msg.Text = ""                                    // clear the text
-					msg.Props = map[string]interface{}{"text": text} // Update props
+				contents.ScanTokens(currentMessageID, tokenID, beganAt, func(params message.ScanCallbackParams) {
+					currentMessageID = params.MessageID
+					msg.ID = params.MessageID
+					msg.Type = params.Token
+					msg.Text = ""                                                                 // clear the text
+					msg.Props = map[string]interface{}{"text": params.Text, "id": params.TokenID} // Update props
+					msg.Begin = params.BeganAt
+					msg.End = params.EndAt
+					msg.ToolID = params.TokenID
 
 					// End of the token clear the text
-					if begin {
+					if params.Begin {
+						tokenID = params.TokenID
+						beganAt = params.BeganAt
+						return
+					}
+
+					if params.End {
+						tokenID = ""
+						beganAt = 0
 						return
 					}
 
 					// New message with the tails
-					if tails != "" {
-						newMsg, err := chatMessage.NewString(tails, id)
+					if params.Tails != "" {
+						newMsg, err := chatMessage.NewString(params.Tails, params.MessageID)
 						if err != nil {
 							return
 						}
@@ -539,6 +582,13 @@ func (ast *Assistant) streamChat(
 					output.Assistant(ast.ID, ast.Name, ast.Avatar)
 					isFirst = false
 				}
+
+				if msg.Type == "think" || msg.Type == "tool" {
+					output.Begin = msg.Begin
+					output.End = msg.End
+					output.ToolID = msg.ToolID
+				}
+
 				output.Callback(cb).Write(c.Writer)
 			}
 
@@ -637,9 +687,18 @@ func (ast *Assistant) streamChat(
 			return nil, retry
 		}
 
-		var prompt string = ""
+		// Default prompt
+		var prompt string = fmt.Sprintf("Try to fix the error following the error message. error:\n %s", exception.Trim(retry))
 		switch v := promptAny.(type) {
-		case NextAction:
+		case bool: // Ignore the error, and return the specific result
+			if v == false {
+				return nil, retry
+			}
+
+		case map[string]interface{}: // Ignore the error, and return the specific result
+			return v, nil
+
+		case NextAction: // Execute the next action
 			result, err := v.Execute(c, ctx, contents, cb)
 			if err != nil {
 				// chatMessage.New().Error(err.Error()).Done().Callback(cb).Write(c.Writer)
@@ -647,7 +706,7 @@ func (ast *Assistant) streamChat(
 			}
 			return result, nil
 
-		case string:
+		case string: // Add the prompt to the messages
 			prompt = v
 		}
 
@@ -949,7 +1008,12 @@ func (ast *Assistant) Chat(ctx context.Context, messages []chatMessage.Message, 
 // 5. Merges consecutive assistant messages from the same assistant
 func formatMessages(messages []map[string]interface{}) []map[string]interface{} {
 	// Filter out duplicate messages with identical content, role, and name
-	filteredMessages := []map[string]interface{}{}
+	filteredMessages := []map[string]interface{}{
+		{
+			"role":    "system",
+			"content": "Current time: " + time.Now().Format(time.RFC3339),
+		},
+	}
 	seen := make(map[string]bool)
 
 	for _, msg := range messages {
@@ -1086,6 +1150,11 @@ func (ast *Assistant) requestMessages(ctx context.Context, messages []chatMessag
 
 		role := message.Role
 		if role == "" {
+			if os.Getenv("YAO_AGENT_PRINT_REQUEST_MESSAGES") == "true" {
+				raw, _ := jsoniter.MarshalToString(message)
+				color.Red("Request Message Error, role is empty:")
+				fmt.Println(raw)
+			}
 			return nil, fmt.Errorf("role must be string")
 		}
 
