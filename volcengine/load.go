@@ -38,7 +38,7 @@ func Load(cfg config.Config) error {
 	}
 
 	// 读取配置文件
-	bytes, err := application.App.Read(filepath.Join("rtc", "volcengine.yml"))
+	bytes, err := application.App.Read(filepath.Join("conf/rtc", "volcengine.yml"))
 	if err != nil {
 		return fmt.Errorf("read volcengine.yml failed: %s", err.Error())
 	}
