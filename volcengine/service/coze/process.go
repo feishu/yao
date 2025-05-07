@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
-
+	
+	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 )
@@ -35,6 +36,8 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 	oauthConfPath := p.ArgsString(0)
 
 	ctx := context.Background()
+
+	log.Info("getAppToke %s", Configs)
 
 	var config = OAuthConfig{}
 	config = Configs["conf/agents/oauth.json"]
