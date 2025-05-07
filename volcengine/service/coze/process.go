@@ -2,6 +2,7 @@ package coze
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -42,9 +43,24 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 
 	log.Info("config %s", config)
 
-	mapToObj(ext, config, &conf)
+	// mapToObj(ext, config, &conf) // Comment out original call for diagnosis
 
-	log.Info("conf %s", mustToJson(conf))
+	// Diagnostic step: Try to use standard JSON marshaling/unmarshaling
+	jsonData, err := json.Marshal(config)
+	if err != nil {
+		log.Error("Failed to marshal config map to JSON: %v", err)
+		exception.New("failed to marshal config map: %v", 500, err.Error()).Throw()
+	}
+
+	conf = &OAuthConfig{} // Initialize conf before unmarshaling
+	err = json.Unmarshal(jsonData, conf)
+	if err != nil {
+		log.Error("Failed to unmarshal JSON to OAuthConfig: %v", err)
+		exception.New("failed to unmarshal config to OAuthConfig: %v", 500, err.Error()).Throw()
+	}
+	// End of diagnostic step
+
+	log.Info("conf after potential JSON unmarshal: %s", mustToJson(conf))
 
 	oauth, err := LoadOAuthAppFromConfig(conf)
 
