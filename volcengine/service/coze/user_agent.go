@@ -38,7 +38,7 @@ func (c *core) setCommonHeaders(req *http.Request) error {
 		// auth 相关请求, c.auth 为 nil
 		accessToken, err := c.auth.Token(req.Context())
 		if err != nil {
-			logger.Errorf(req.Context(), "failed to get access_token: %s", err)
+			//logger.Errorf(req.Context(), "failed to get access_token: %s", err)
 			return err
 		}
 		req.Header.Set("Authorization", "Bearer "+accessToken)
