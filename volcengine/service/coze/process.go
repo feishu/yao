@@ -32,7 +32,7 @@ func timestampToDateTime(timestamp int64) string {
 // 用于客户端鉴权使用
 // 接口文档: https://api.coze.cn/api/permission/oauth2/token
 func ProcessGetAppToken(p *process.Process) interface{} {
-	p.ValidateArgNums(1)
+	p.ValidateArgNums(2)
 	config := p.ArgsMap(0)
 	ext := p.ArgsString(1)
 
