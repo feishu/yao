@@ -7,6 +7,7 @@ import (
 
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
+	"github.com/yaoapp/kun/log"
 )
 
 type TokenResponse struct {
@@ -39,7 +40,11 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 
 	conf := OAuthConfig{}
 
+	log.Info("config %s", config)
+
 	mapToObj(ext, config, &conf)
+
+	log.Info("conf %s", conf)
 
 	oauth, err := LoadOAuthAppFromConfig(&conf)
 
