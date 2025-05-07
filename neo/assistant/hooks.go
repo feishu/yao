@@ -27,7 +27,7 @@ func (ast *Assistant) HookCreate(c *gin.Context, context chatctx.Context, input 
 		return nil, err
 	}
 
-	response := &ResHookInit{}
+	response := &ResHookInit{Result: nil}
 	switch v := v.(type) {
 	case map[string]interface{}:
 		if res, ok := v["assistant_id"].(string); ok {
@@ -46,6 +46,11 @@ func (ast *Assistant) HookCreate(c *gin.Context, context chatctx.Context, input 
 				return nil, err
 			}
 			response.Input = vv
+		}
+
+		// result
+		if result, has := v["result"]; has {
+			response.Result = result
 		}
 
 		if res, ok := v["next"].(map[string]interface{}); ok {
@@ -159,16 +164,25 @@ func (ast *Assistant) HookRetry(c *gin.Context, context chatctx.Context, input [
 	}
 
 	switch v := v.(type) {
-	case string:
+	case string, bool:
 		return v, nil
+
 	case map[string]interface{}:
-		var next NextAction
-		raw, _ := jsoniter.MarshalToString(v)
-		err := jsoniter.UnmarshalFromString(raw, &next)
-		if err != nil {
-			return nil, err
+
+		// Has Action
+		if _, has := v["action"]; has {
+			var next NextAction
+			raw, _ := jsoniter.MarshalToString(v)
+			err := jsoniter.UnmarshalFromString(raw, &next)
+			if err != nil {
+				return nil, err
+			}
+			return &next, nil
 		}
-		return &next, nil
+
+		// Ignore the error, and return the specific result
+		return v, nil
+
 	}
 
 	return nil, nil

@@ -1,6 +1,8 @@
 module github.com/yaoapp/yao
 
-go 1.23
+go 1.23.0
+
+toolchain go1.23.4
 
 require (
 	github.com/PuerkitoBio/goquery v1.10.1
@@ -13,15 +15,16 @@ require (
 	github.com/dchest/captcha v1.1.0
 	github.com/elazarl/go-bindata-assetfs v1.0.1
 	github.com/evanw/esbuild v0.24.2
-	github.com/expr-lang/expr v1.16.9
+	github.com/expr-lang/expr v1.17.2
 	github.com/fatih/color v1.18.0
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/gin-gonic/gin v1.10.0
-	github.com/golang-jwt/jwt v3.2.2+incompatible
+	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/joho/godotenv v1.5.1
 	github.com/json-iterator/go v1.1.12
+	github.com/mozillazg/go-pinyin v0.20.0
 	github.com/pkoukk/tiktoken-go v0.1.7
 	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/spf13/cast v1.7.1
@@ -32,9 +35,9 @@ require (
 	github.com/yaoapp/gou v0.10.3
 	github.com/yaoapp/kun v0.9.0
 	github.com/yaoapp/xun v0.9.0
-	golang.org/x/crypto v0.31.0
-	golang.org/x/net v0.33.0
-	golang.org/x/text v0.21.0
+	golang.org/x/crypto v0.36.0
+	golang.org/x/net v0.38.0
+	golang.org/x/text v0.23.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 	rogchap.com/v8go v0.9.0
@@ -89,7 +92,7 @@ require (
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lib/pq v1.10.9 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-sqlite3 v1.14.24 // indirect
 	github.com/miekg/dns v1.1.62 // indirect
@@ -130,8 +133,8 @@ require (
 	golang.org/x/image v0.23.0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/oauth2 v0.24.0 // indirect
-	golang.org/x/sync v0.10.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/sync v0.12.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/tools v0.28.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241230172942-26aa7a208def // indirect
 	google.golang.org/grpc v1.69.2 // indirect
