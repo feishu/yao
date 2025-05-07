@@ -38,7 +38,7 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 
 	ctx := context.Background()
 
-	conf := OAuthConfig{}
+	var conf *OAuthConfig
 
 	log.Info("config %s", config)
 
@@ -46,11 +46,7 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 
 	log.Info("conf %s", mustToJson(conf))
 
-	mapToObj(ext, config, conf)
-
-	log.Info("conf %s", mustToJson(conf))
-
-	oauth, err := LoadOAuthAppFromConfig(&conf)
+	oauth, err := LoadOAuthAppFromConfig(conf)
 
 	if err != nil {
 		exception.New("failed to load OAuth config: %v", 500, err.Error()).Throw()
