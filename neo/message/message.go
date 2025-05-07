@@ -21,6 +21,7 @@ var locker = sync.Mutex{}
 // Message the message
 type Message struct {
 	ID              string                 `json:"id,omitempty"`               // id for the message
+	ToolID          string                 `json:"tool_id,omitempty"`          // tool_id for the message
 	Text            string                 `json:"text,omitempty"`             // text content
 	Type            string                 `json:"type,omitempty"`             // error, text, plan, table, form, page, file, video, audio, image, markdown, json ...
 	Props           map[string]interface{} `json:"props,omitempty"`            // props for the types
@@ -44,6 +45,8 @@ type Message struct {
 	IsBeginTool     bool                   `json:"-"`                          // is new tool for the message for native tool_calls
 	IsEndTool       bool                   `json:"-"`                          // is end tool for the message for native tool_calls
 	Result          any                    `json:"result,omitempty"`           // result for the message
+	Begin           int64                  `json:"begin,omitempty"`            // begin at for the message // timestamp
+	End             int64                  `json:"end,omitempty"`              // end at for the message // timestamp
 }
 
 // Mention represents a mention
@@ -338,121 +341,6 @@ func NewOpenAI(data []byte, isThinking bool) *Message {
 	}
 
 	return msg
-
-	// switch {
-
-	// case strings.Contains(text, `"delta":{`) && strings.Contains(text, `"tool_calls"`) && !strings.Contains(text, `"tool_calls":null`):
-	// 	var toolCalls openai.ToolCalls
-	// 	if err := jsoniter.Unmarshal(data, &toolCalls); err != nil {
-	// 		color.Red("JSON parse error: %s", err.Error())
-	// 		color.White(string(data))
-	// 		msg.Text = "JSON parse error\n" + string(data)
-	// 		msg.Type = "error"
-	// 		msg.IsDone = true
-	// 		return msg
-	// 	}
-
-	// 	msg.Type = "tool_calls_native"
-	// 	if len(toolCalls.Choices) > 0 && len(toolCalls.Choices[0].Delta.ToolCalls) > 0 {
-	// 		id := toolCalls.Choices[0].Delta.ToolCalls[0].ID
-	// 		function := toolCalls.Choices[0].Delta.ToolCalls[0].Function.Name
-	// 		arguments := toolCalls.Choices[0].Delta.ToolCalls[0].Function.Arguments
-	// 		text := arguments
-	// 		if id != "" {
-	// 			text = fmt.Sprintf(`{"id": "%s", "function": "%s", "arguments": %s`, id, function, arguments)
-	// 		}
-	// 		msg.Text = text
-	// 	}
-
-	// case strings.Contains(text, `"delta":{`) && strings.Contains(text, `"content":`):
-	// 	var message openai.MessageWithReasoningContent
-	// 	if err := jsoniter.Unmarshal(data, &message); err != nil {
-	// 		color.Red("JSON parse error: %s", err.Error())
-	// 		color.White(string(data))
-	// 		msg.Text = "JSON parse error\n" + string(data)
-	// 		msg.Type = "error"
-	// 		msg.IsDone = true
-	// 		return msg
-	// 	}
-
-	// 	msg.Type = "text"
-	// 	if len(message.Choices) > 0 {
-	// 		if reasoningContent, ok := message.Choices[0].Delta["reasoning_content"].(string); ok {
-	// 			msg.Text = reasoningContent
-	// 			msg.Type = "think"
-	// 			return msg
-	// 		}
-
-	// 		if content, ok := message.Choices[0].Delta["content"].(string); ok && content != "" {
-	// 			msg.Text = content
-	// 			msg.Type = "text"
-	// 			return msg
-	// 		}
-
-	// 		if isThinking {
-	// 			msg.Type = "think"
-	// 			msg.Text = ""
-	// 			return msg
-	// 		}
-
-	// 		msg.Text = ""
-	// 		return msg
-	// 	}
-
-	// case strings.Index(text, `{"code":`) == 0 || strings.Index(text, `"statusCode":`) > 0:
-	// 	var errorMessage openai.Error
-	// 	if err := jsoniter.UnmarshalFromString(text, &errorMessage); err != nil {
-	// 		color.Red("JSON parse error: %s", err.Error())
-	// 		color.White(string(data))
-	// 		msg.Text = "JSON parse error\n" + string(data)
-	// 		msg.Type = "error"
-	// 		msg.IsDone = true
-	// 		return msg
-	// 	}
-	// 	msg.Type = "error"
-	// 	msg.Text = errorMessage.Message
-	// 	msg.IsDone = true
-	// 	break
-
-	// case strings.Contains(text, `{"error":{`):
-	// 	var errorMessage openai.ErrorMessage
-	// 	if err := jsoniter.Unmarshal(data, &errorMessage); err != nil {
-	// 		color.Red("JSON parse error: %s", err.Error())
-	// 		color.White(string(data))
-	// 		msg.Text = "JSON parse error\n" + string(data)
-	// 		msg.Type = "error"
-	// 		msg.IsDone = true
-	// 		return msg
-	// 	}
-	// 	msg.Type = "error"
-	// 	msg.Text = errorMessage.Error.Message
-	// 	msg.IsDone = true
-	// 	break
-
-	// case strings.Contains(text, `"usage":`) && !strings.Contains(text, `"chat.completion.chunk`):
-	// 	msg.IsDone = true
-	// 	break
-
-	// case strings.Contains(text, `[DONE]`):
-	// 	msg.IsDone = true
-
-	// case strings.Contains(text, `"finish_reason":"stop"`):
-	// 	msg.IsDone = true
-
-	// case strings.Contains(text, `"finish_reason":"tool_calls"`):
-	// 	msg.IsDone = true
-
-	// // Not a data message
-	// case !strings.Contains(text, `data: `):
-	// 	msg.Pending = true
-	// 	msg.Text = text
-
-	// default:
-	// 	str := strings.TrimPrefix(strings.Trim(string(data), "\""), "data: ")
-	// 	msg.Type = "error"
-	// 	msg.Text = str
-	// }
-
 }
 
 // String returns the string representation
@@ -536,15 +424,15 @@ func (m *Message) AppendTo(contents *Contents) *Message {
 	case "text", "think", "tool", "tool_calls_native":
 		if m.Text != "" {
 			if m.IsNew {
-				contents.NewText([]byte(m.Text), m.ID)
+				contents.NewText([]byte(m.Text), Extra{ID: m.ID, Begin: m.Begin, End: m.End})
 				return m
 			}
-			contents.AppendText([]byte(m.Text), m.ID)
+			contents.AppendText([]byte(m.Text), Extra{ID: m.ID, Begin: m.Begin, End: m.End})
 			return m
 		}
 		return m
 
-	case "loading", "error", "action": // Ignore loading, action and error messages
+	case "loading", "error", "action", "progress", "plan": // Ignore progress, loading, plan and error messages
 		return m
 
 	default:
@@ -733,52 +621,6 @@ func (m *Message) Callback(fn interface{}) *Message {
 	return m
 }
 
-// Write writes the message to response writer
-func (m *Message) Write(w gin.ResponseWriter) bool {
-
-	// Sync write to response writer
-	locker.Lock()
-	defer locker.Unlock()
-
-	defer func() {
-		if r := recover(); r != nil {
-
-			// Ignore if done is true
-			if m.IsDone {
-				return
-			}
-
-			message := "Write Response Exception: (if client close the connection, it's normal) \n  %s\n\n"
-			color.Red(message, r)
-
-			// Print the message
-			raw, _ := jsoniter.MarshalToString(m)
-			color.White("Message:\n %s", raw)
-		}
-	}()
-
-	// Ignore silent messages
-	if m.Silent {
-		return true
-	}
-
-	data, err := jsoniter.Marshal(m)
-	if err != nil {
-		log.Error("%s", err.Error())
-		return false
-	}
-
-	data = append([]byte("data: "), data...)
-	data = append(data, []byte("\n\n")...)
-
-	if _, err := w.Write(data); err != nil {
-		color.Red("Write JSON Message Error: %s", err.Error())
-		return false
-	}
-	w.Flush()
-	return true
-}
-
 // WriteError writes an error message to response writer
 func (m *Message) WriteError(w gin.ResponseWriter, message string) {
 	errMsg := strings.Trim(exception.New(message, 500).Message, "\"")
@@ -841,4 +683,9 @@ func (a *Action) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	return nil
+}
+
+// Write writes the message to response writer using the message queue
+func (m *Message) Write(w gin.ResponseWriter) bool {
+	return WriteMessageAsync(m, w)
 }
