@@ -29,15 +29,13 @@ func Load(cfg config.Config) error {
 		// 解析配置文件
 		err = application.Parse(file, bytes, &dsl)
 
-		log.Info("coze config body %s",dsl)
-
 		Configs[file] = dsl
+
+		log.Info("ClientID",dsl.ClientID)
 
 		if err != nil {
 			return fmt.Errorf("parse %s failed: %s", file, err.Error())
 		}
-
-		log.Info("Configs =  %s",Configs)
 
 		if err != nil {
 			messages = append(messages, err.Error())
