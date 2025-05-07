@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
+	"github.com/yaoapp/kun/log"
 )
 
 type TokenResponse struct {
@@ -37,13 +37,13 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 
 	ctx := context.Background()
 
-	log.Info("getAppToke %s", Configs)
-
 	var config = OAuthConfig{}
 	config = Configs["conf/agents/oauth.json"]
 	if oauthConfPath != "" {
 		config = Configs[oauthConfPath]
 	}
+
+	log.Info("getAppToke %s, \n %s", Configs, config)
 
 	oauth, err := LoadOAuthAppFromConfig(&config)
 	if err != nil {
