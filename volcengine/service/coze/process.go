@@ -44,7 +44,11 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 
 	mapToObj(ext, config, &conf)
 
-	log.Info("conf %s", conf)
+	log.Info("conf %s", mustToJson(conf))
+
+	mapToObj(ext, config, conf)
+
+	log.Info("conf %s", mustToJson(conf))
 
 	oauth, err := LoadOAuthAppFromConfig(&conf)
 
