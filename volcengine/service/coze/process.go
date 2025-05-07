@@ -7,7 +7,6 @@ import (
 
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
-	"github.com/yaoapp/kun/log"
 )
 
 type TokenResponse struct {
@@ -33,20 +32,17 @@ func timestampToDateTime(timestamp int64) string {
 // 接口文档: https://api.coze.cn/api/permission/oauth2/token
 func ProcessGetAppToken(p *process.Process) interface{} {
 	p.ValidateArgNums(1)
-	oauthConfPath := p.ArgsString(0)
+	config := p.ArgsMap(0)
+	ext := p.ArgsString(1)
 
 	ctx := context.Background()
 
-	configID := "conf/agents/oauth.json" // 默认配置ID
-	if oauthConfPath != "" {
-		configID = oauthConfPath
-	}
+	conf := OAuthConfig{}
 
-	config, err := Select(configID)
+	mapToObj(ext, config, &conf)
 
-	log.Info("getAppToke %s ", config)
+	oauth, err := LoadOAuthAppFromConfig(&conf)
 
-	oauth, err := LoadOAuthAppFromConfig(&config)
 	if err != nil {
 		exception.New("failed to load OAuth config: %v", 500, err.Error()).Throw()
 		// return nil, fmt.Errorf("failed to load OAuth config: %v", err)
