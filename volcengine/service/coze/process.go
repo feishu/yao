@@ -37,13 +37,14 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 
 	ctx := context.Background()
 
-	var config = OAuthConfig{}
-	config = Configs["conf/agents/oauth.json"]
+	configID := "conf/agents/oauth.json" // 默认配置ID
 	if oauthConfPath != "" {
-		config = Configs[oauthConfPath]
+		configID = oauthConfPath
 	}
 
-	log.Info("getAppToke %s, \n %s", Configs, config)
+	config, err := Select(configID)
+
+	log.Info("getAppToke %s ", config)
 
 	oauth, err := LoadOAuthAppFromConfig(&config)
 	if err != nil {
