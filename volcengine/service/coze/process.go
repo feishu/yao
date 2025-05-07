@@ -32,14 +32,14 @@ func timestampToDateTime(timestamp int64) string {
 // 接口文档: https://api.coze.cn/api/permission/oauth2/token
 func ProcessGetAppToken(p *process.Process) interface{} {
 	p.ValidateArgNums(1)
-	oauthAppId := p.ArgsString(0)
+	oauthConfPath := p.ArgsString(0)
 
 	ctx := context.Background()
 
 	var config = OAuthConfig{}
-	config = Configs["oauth"]
-	if oauthAppId != "" {
-		config = Configs[oauthAppId]
+	config = Configs["conf/agents/oauth.json"]
+	if oauthConfPath != "" {
+		config = Configs[oauthConfPath]
 	}
 
 	oauth, err := LoadOAuthAppFromConfig(&config)
