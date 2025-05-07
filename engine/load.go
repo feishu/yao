@@ -40,6 +40,7 @@ import (
 	sui "github.com/yaoapp/yao/sui/api"
 	"github.com/yaoapp/yao/task"
 	"github.com/yaoapp/yao/volcengine"
+	coze "github.com/yaoapp/yao/volcengine/service/coze"
 	"github.com/yaoapp/yao/websocket"
 	"github.com/yaoapp/yao/widget"
 	"github.com/yaoapp/yao/widgets"
@@ -253,6 +254,12 @@ func Load(cfg config.Config, options LoadOption) (warnings []Warning, err error)
 	err = volcengine.Load(cfg)
 	if err != nil {
 		printErr(cfg.Mode, "Volcengine", err)
+	}
+
+	// Load OAuth
+	err = coze.Load(cfg)
+	if err != nil {
+		printErr(cfg.Mode, "OAuth", err)
 	}
 
 	// Load Custom Widget
