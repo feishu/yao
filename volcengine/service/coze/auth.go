@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/yaoapp/kun/log"
 )
 
 // DeviceAuthReq represents the device authorization request
@@ -781,7 +782,7 @@ func parsePrivateKey(privateKeyPEM string) (*rsa.PrivateKey, error) {
 
 // LoadOAuthAppFromConfig creates an OAuth client based on the provided JSON configuration bytes
 func LoadOAuthAppFromConfig(config *OAuthConfig) (interface{}, error) {
-	log.Info("loadOAuthApp === %s",config,config.ClientID)
+	log.Info("loadOAuthApp == %s clientID %s", config, config.ClientID)
 	if config.ClientID == "" {
 		return nil, errors.New("client_id is required")
 	}
