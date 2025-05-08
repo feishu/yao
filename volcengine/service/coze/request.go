@@ -9,6 +9,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/yaoapp/kun/log"
 )
 
 // HTTPClient an interface for making HTTP requests
@@ -123,7 +125,7 @@ func packInstance(ctx context.Context, instance any, resp *http.Response) error 
 	httpResponse := newHTTPResponse(resp)
 	err = json.Unmarshal(bodyBytes, instance)
 	if err != nil {
-		//logger.Errorf(ctx, fmt.Sprintf("unmarshal response body: %s", string(bodyBytes)))
+		log.Error("unmarshal response body: %s, log_id: %s", string(bodyBytes), httpResponse.LogID())
 		return err
 	}
 	if baseResp, ok := instance.(baseRespInterface); ok {
@@ -135,7 +137,7 @@ func packInstance(ctx context.Context, instance any, resp *http.Response) error 
 func isResponseSuccess(ctx context.Context, baseResp baseRespInterface, bodyBytes []byte, httpResponse *httpResponse) error {
 	baseResp.SetHTTPResponse(httpResponse)
 	if baseResp.GetCode() != 0 {
-		//logger.Warnf(ctx, "request failed, body=%s, log_id=%s", string(bodyBytes), httpResponse.LogID())
+		log.Warn("request failed, code: %d, msg: %s, body: %s, log_id: %s", baseResp.GetCode(), baseResp.GetMsg(), string(bodyBytes), httpResponse.LogID())
 		return NewError(baseResp.GetCode(), baseResp.GetMsg(), httpResponse.LogID())
 	}
 	return nil
@@ -152,7 +154,7 @@ func checkHttpResp(ctx context.Context, resp *http.Response) error {
 		errorInfo := authErrorFormat{}
 		err = json.Unmarshal(bodyBytes, &errorInfo)
 		if err != nil {
-			//logger.Errorf(ctx, fmt.Sprintf("unmarshal response body: %s", string(bodyBytes)))
+			log.Error("unmarshal auth error response body: %s, log_id: %s", string(bodyBytes), logID)
 			return errors.New(string(bodyBytes) + " log_id: " + logID)
 		}
 		return NewAuthError(&errorInfo, resp.StatusCode, logID)

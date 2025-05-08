@@ -3,6 +3,8 @@ package coze
 import (
 	"context"
 	"time"
+
+	"github.com/yaoapp/kun/log"
 )
 
 type Auth interface {
@@ -83,19 +85,23 @@ func (r *jwtOAuthImpl) needRefresh() bool {
 
 func (r *jwtOAuthImpl) Token(ctx context.Context) (string, error) {
 	if !r.needRefresh() {
+		log.Debug("jwtOAuthImpl: Token for account %v, session %s is still valid, using cached token", r.accountID, ptrValue(r.SessionName))
 		return ptrValue(r.accessToken), nil
 	}
-	resp, err := r.client.GetAccessToken(ctx, &GetJWTAccessTokenReq{
+	log.Info("jwtOAuthImpl: Refreshing token for account %v, session %s", r.accountID, ptrValue(r.SessionName))
+	resp, err := r.client.GetJWTAccessToken(ctx, &GetJWTAccessTokenReq{
 		TTL:         r.TTL,
 		SessionName: r.SessionName,
 		Scope:       r.Scope,
 		AccountID:   r.accountID,
 	})
 	if err != nil {
+		log.Error("jwtOAuthImpl: Failed to refresh token for account %v, session %s: %v", r.accountID, ptrValue(r.SessionName), err)
 		return "", err
 	}
 	r.accessToken = ptr(resp.AccessToken)
 	r.expireIn = resp.ExpiresIn
 	r.refreshAt = resp.ExpiresIn - r.refreshBefore
+	log.Info("jwtOAuthImpl: Token refreshed successfully for account %v, session %s. New expiry: %d, refresh_at: %d", r.accountID, ptrValue(r.SessionName), r.expireIn, r.refreshAt)
 	return resp.AccessToken, nil
 }

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/yaoapp/kun/log"
 )
 
 // DeviceAuthReq represents the device authorization request
@@ -159,8 +158,8 @@ func (m CodeChallengeMethod) Ptr() *CodeChallengeMethod {
 	return &m
 }
 
-// OAuthClient represents the base OAuth core structure
-type OAuthClient struct {
+// AuthClientImpl represents the base OAuth core structure
+type AuthClientImpl struct {
 	core *core
 
 	clientID     string
@@ -207,7 +206,7 @@ func WithAuthHttpClient(client HTTPClient) OAuthClientOption {
 }
 
 // newOAuthClient creates a new OAuth core
-func newOAuthClient(clientID, clientSecret string, opts ...OAuthClientOption) (*OAuthClient, error) {
+func newOAuthClient(clientID, clientSecret string, opts ...OAuthClientOption) (*AuthClientImpl, error) {
 	initSettings := &oauthOption{
 		baseURL:    ComBaseURL,
 		wwwURL:     "",
@@ -239,7 +238,7 @@ func newOAuthClient(clientID, clientSecret string, opts ...OAuthClientOption) (*
 		initSettings.wwwURL = strings.Replace(initSettings.baseURL, "api.", "www.", 1)
 	}
 
-	return &OAuthClient{
+	return &AuthClientImpl{
 		clientID:     clientID,
 		clientSecret: clientSecret,
 		baseURL:      initSettings.baseURL,
@@ -253,7 +252,7 @@ func newOAuthClient(clientID, clientSecret string, opts ...OAuthClientOption) (*
 }
 
 // getOAuthURL generates OAuth URL
-func (c *OAuthClient) getOAuthURL(redirectURI, state string, opts ...urlOption) string {
+func (c *AuthClientImpl) getOAuthURL(redirectURI, state string, opts ...urlOption) string {
 	params := url.Values{}
 	params.Set("response_type", "code")
 	if c.clientID != "" {
@@ -275,7 +274,7 @@ func (c *OAuthClient) getOAuthURL(redirectURI, state string, opts ...urlOption) 
 }
 
 // getWorkspaceOAuthURL generates OAuth URL with workspace
-func (c *OAuthClient) getWorkspaceOAuthURL(redirectURI, state, workspaceID string, opts ...urlOption) string {
+func (c *AuthClientImpl) getWorkspaceOAuthURL(redirectURI, state, workspaceID string, opts ...urlOption) string {
 	params := url.Values{}
 	params.Set("response_type", "code")
 	if c.clientID != "" {
@@ -305,7 +304,7 @@ type getAccessTokenParams struct {
 	Request      *getAccessTokenReq
 }
 
-func (c *OAuthClient) getAccessToken(ctx context.Context, params getAccessTokenParams) (*OAuthToken, error) {
+func (c *AuthClientImpl) getAccessToken(ctx context.Context, params getAccessTokenParams) (*OAuthToken, error) {
 	// If Request is provided, use it directly
 	result := &OAuthToken{}
 	var req *getAccessTokenReq
@@ -338,7 +337,7 @@ func (c *OAuthClient) getAccessToken(ctx context.Context, params getAccessTokenP
 }
 
 // refreshAccessToken is a convenience method that internally calls getAccessToken
-func (c *OAuthClient) refreshAccessToken(ctx context.Context, refreshToken string) (*OAuthToken, error) {
+func (c *AuthClientImpl) refreshAccessToken(ctx context.Context, refreshToken string) (*OAuthToken, error) {
 	return c.getAccessToken(ctx, getAccessTokenParams{
 		Type:         GrantTypeRefreshToken,
 		RefreshToken: refreshToken,
@@ -346,7 +345,7 @@ func (c *OAuthClient) refreshAccessToken(ctx context.Context, refreshToken strin
 }
 
 // refreshAccessToken is a convenience method that internally calls getAccessToken
-func (c *OAuthClient) refreshAccessTokenWithClientSecret(ctx context.Context, refreshToken string) (*OAuthToken, error) {
+func (c *AuthClientImpl) refreshAccessTokenWithClientSecret(ctx context.Context, refreshToken string) (*OAuthToken, error) {
 	return c.getAccessToken(ctx, getAccessTokenParams{
 		Secret:       c.clientSecret,
 		Type:         GrantTypeRefreshToken,
@@ -356,7 +355,7 @@ func (c *OAuthClient) refreshAccessTokenWithClientSecret(ctx context.Context, re
 
 // PKCEOAuthClient PKCE OAuth core
 type PKCEOAuthClient struct {
-	*OAuthClient
+	*AuthClientImpl
 }
 
 // NewPKCEOAuthClient creates a new PKCE OAuth core
@@ -366,7 +365,7 @@ func NewPKCEOAuthClient(clientID string, opts ...OAuthClientOption) (*PKCEOAuthC
 		return nil, err
 	}
 	return &PKCEOAuthClient{
-		OAuthClient: client,
+		AuthClientImpl: client,
 	}, err
 }
 
@@ -470,7 +469,7 @@ func withCodeChallengeMethod(method string) urlOption {
 
 // DeviceOAuthClient represents the device OAuth core
 type DeviceOAuthClient struct {
-	*OAuthClient
+	*AuthClientImpl
 }
 
 // NewDeviceOAuthClient creates a new device OAuth core
@@ -480,7 +479,7 @@ func NewDeviceOAuthClient(clientID string, opts ...OAuthClientOption) (*DeviceOA
 		return nil, err
 	}
 	return &DeviceOAuthClient{
-		OAuthClient: client,
+		AuthClientImpl: client,
 	}, err
 }
 
@@ -579,9 +578,9 @@ func (c *DeviceOAuthClient) RefreshToken(ctx context.Context, refreshToken strin
 	return c.refreshAccessToken(ctx, refreshToken)
 }
 
-// JWTOAuthClient represents the JWT OAuth core
+// JWTOAuthClient JWT OAuth core
 type JWTOAuthClient struct {
-	*OAuthClient
+	*AuthClientImpl
 	ttl        int
 	privateKey *rsa.PrivateKey
 	publicKey  string
@@ -609,10 +608,10 @@ func NewJWTOAuthClient(param NewJWTOAuthClientParam, opts ...OAuthClientOption) 
 		ttl = ptr(900) // Default 15 minutes
 	}
 	jwtClient := &JWTOAuthClient{
-		OAuthClient: client,
-		ttl:         *ttl,
-		privateKey:  privateKey,
-		publicKey:   param.PublicKey,
+		AuthClientImpl: client,
+		ttl:            *ttl,
+		privateKey:     privateKey,
+		publicKey:      param.PublicKey,
 	}
 
 	return jwtClient, nil
@@ -628,8 +627,55 @@ type GetJWTAccessTokenReq struct {
 	SessionContext *SessionContext `json:"session_context,omitempty"` // SessionContext
 }
 
-// GetAccessToken gets the access token, using options pattern
-func (c *JWTOAuthClient) GetAccessToken(ctx context.Context, opts *GetJWTAccessTokenReq) (*OAuthToken, error) {
+// ClientID 返回客户端ID
+func (c *JWTOAuthClient) ClientID() string {
+	return c.clientID
+}
+
+// GetOAuthAPIToken 获取OAuth API令牌，实现OAuthClient接口
+func (c *JWTOAuthClient) GetAccessToken(ctx context.Context) (*TokenResponse, error) {
+	// 从JWTOAuthClient.GetJWTAccessToken获取令牌
+	token, err := c.GetJWTAccessToken(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为TokenResponse
+	return ConvertOAuthTokenToTokenResponse(token), nil
+}
+
+// GetJWTAccessToken 获取JWT访问令牌，保留原有方法名
+func (c *JWTOAuthClient) GetJWTAccessToken(ctx context.Context, opts *GetJWTAccessTokenReq) (*OAuthToken, error) {
+	// 生成缓存键
+	var scopeStr, accountStr, enterpriseStr, sessionStr string
+	if opts != nil {
+		if opts.Scope != nil {
+			scopeStr = mustToJson(opts.Scope)
+		}
+		if opts.AccountID != nil {
+			accountStr = fmt.Sprintf("%d", *opts.AccountID)
+		}
+		if opts.EnterpriseID != nil {
+			enterpriseStr = *opts.EnterpriseID
+		}
+		if opts.SessionName != nil {
+			sessionStr = *opts.SessionName
+		}
+	}
+
+	cacheKey := GenerateCacheKey(c.clientID, scopeStr, accountStr, enterpriseStr, sessionStr)
+
+	// 检查缓存中是否有有效的令牌
+	if cachedToken, found := DefaultTokenCache.Get(cacheKey); found {
+		// 转换为OAuthToken返回
+		return &OAuthToken{
+			AccessToken:  cachedToken.AccessToken,
+			ExpiresIn:    cachedToken.ExpiresIn,
+			RefreshToken: cachedToken.RefreshToken,
+		}, nil
+	}
+
+	// 缓存中没有找到有效令牌，重新生成
 	if opts == nil {
 		opts = &GetJWTAccessTokenReq{}
 	}
@@ -656,7 +702,18 @@ func (c *JWTOAuthClient) GetAccessToken(ctx context.Context, opts *GetJWTAccessT
 			EnterpriseID:    opts.EnterpriseID,
 		},
 	}
-	return c.getAccessToken(ctx, req)
+
+	// 获取新令牌
+	token, err := c.getAccessToken(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为TokenResponse并缓存
+	tokenResp := ConvertOAuthTokenToTokenResponse(token)
+	DefaultTokenCache.Set(cacheKey, tokenResp)
+
+	return token, nil
 }
 
 func (c *JWTOAuthClient) generateJWT(ttl int, sessionName *string, sessionContext *SessionContext) (string, error) {
@@ -702,7 +759,7 @@ func (c *JWTOAuthClient) generateJWT(ttl int, sessionName *string, sessionContex
 
 // WebOAuthClient Web OAuth core
 type WebOAuthClient struct {
-	*OAuthClient
+	AuthClientImpl
 }
 
 // NewWebOAuthClient creates a new Web OAuth core
@@ -712,7 +769,7 @@ func NewWebOAuthClient(clientID, clientSecret string, opts ...OAuthClientOption)
 		return nil, err
 	}
 	return &WebOAuthClient{
-		OAuthClient: client,
+		AuthClientImpl: *client,
 	}, err
 }
 
@@ -781,8 +838,8 @@ func parsePrivateKey(privateKeyPEM string) (*rsa.PrivateKey, error) {
 }
 
 // LoadOAuthAppFromConfig creates an OAuth client based on the provided JSON configuration bytes
-func LoadOAuthAppFromConfig(config *OAuthConfig) (interface{}, error) {
-	log.Info("loadOAuthApp == %s clientID %s", config, config.ClientID)
+// The returned OAuthClient is the interface from base_model.go
+func LoadOAuthAppFromConfig(config *OAuthConfig) (OAuthClient, error) {
 	if config.ClientID == "" {
 		return nil, errors.New("client_id is required")
 	}
@@ -800,9 +857,7 @@ func LoadOAuthAppFromConfig(config *OAuthConfig) (interface{}, error) {
 	}
 
 	switch config.ClientType {
-	case "pkce":
-		return NewPKCEOAuthClient(config.ClientID, opts...)
-	case "jwt":
+	case ClientTypeJWT:
 		if config.PrivateKey == "" {
 			return nil, errors.New("private_key is required for JWT client")
 		}
@@ -814,14 +869,76 @@ func LoadOAuthAppFromConfig(config *OAuthConfig) (interface{}, error) {
 			PublicKey:     config.PublicKeyID,
 			PrivateKeyPEM: config.PrivateKey,
 		}, opts...)
-	case "device":
-		return NewDeviceOAuthClient(config.ClientID, opts...)
-	case "web":
-		if config.ClientSecret == "" {
-			return nil, errors.New("client_secret is required for Web client")
-		}
-		return NewWebOAuthClient(config.ClientID, config.ClientSecret, opts...)
 	default:
 		return nil, fmt.Errorf("invalid OAuth client_type: %s", config.ClientType)
 	}
+}
+
+// 为各类客户端实现适配器以支持OAuthClient接口
+
+// pkceOAuthAdapter 是PKCEOAuthClient的适配器
+type pkceOAuthAdapter struct {
+	*PKCEOAuthClient
+}
+
+func (a *pkceOAuthAdapter) GetAccessToken(ctx context.Context) (*TokenResponse, error) {
+	// 这里仅为演示，实际可能需要从某处获取这些参数
+	token, err := a.PKCEOAuthClient.GetAccessToken(ctx, &GetPKCEAccessTokenReq{})
+	if err != nil {
+		return nil, err
+	}
+	return ConvertOAuthTokenToTokenResponse(token), nil
+}
+
+func (a *pkceOAuthAdapter) ClientID() string {
+	return a.PKCEOAuthClient.clientID
+}
+
+// deviceOAuthAdapter 是DeviceOAuthClient的适配器
+type deviceOAuthAdapter struct {
+	*DeviceOAuthClient
+}
+
+func (a *deviceOAuthAdapter) GetAccessToken(ctx context.Context) (*TokenResponse, error) {
+	// 这里仅为演示，实际可能需要从某处获取这些参数
+	token, err := a.DeviceOAuthClient.GetAccessToken(ctx, &GetDeviceOAuthAccessTokenReq{})
+	if err != nil {
+		return nil, err
+	}
+	return ConvertOAuthTokenToTokenResponse(token), nil
+}
+
+func (a *deviceOAuthAdapter) ClientID() string {
+	return a.DeviceOAuthClient.clientID
+}
+
+// webOAuthAdapter 是WebOAuthClient的适配器
+type webOAuthAdapter struct {
+	*WebOAuthClient
+}
+
+func (a *webOAuthAdapter) GetAccessToken(ctx context.Context) (*TokenResponse, error) {
+	// 这里仅为演示，实际可能需要从某处获取这些参数
+	token, err := a.WebOAuthClient.GetAccessToken(ctx, &GetWebOAuthAccessTokenReq{})
+	if err != nil {
+		return nil, err
+	}
+	return ConvertOAuthTokenToTokenResponse(token), nil
+}
+
+func (a *webOAuthAdapter) ClientID() string {
+	return a.WebOAuthClient.clientID
+}
+
+// 为JWTOAuthClient也添加适配器以统一接口
+type jwtOAuthAdapter struct {
+	*JWTOAuthClient
+}
+
+func (a *jwtOAuthAdapter) GetAccessToken(ctx context.Context) (*TokenResponse, error) {
+	token, err := a.JWTOAuthClient.GetAccessToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return token, nil
 }

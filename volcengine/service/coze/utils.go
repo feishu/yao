@@ -1,15 +1,12 @@
 package coze
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/gob"
-	"encoding/json"
 	"fmt"
+	"time"
 
 	jsoniter "github.com/json-iterator/go"
-	"github.com/yaoapp/kun/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -49,20 +46,6 @@ func hexChar(b byte) byte {
 	return 'a' + (b - 10)
 }
 
-func mustToJson(obj any) string {
-	jsonArray, err := json.Marshal(obj)
-	if err != nil {
-		return "{}"
-	}
-	return string(jsonArray)
-}
-
-func strToObj(ext string, data string, vPtr interface{}) error {
-	bytes := make([]byte, len(data))
-	copy(bytes, data)
-	return byteToObj(ext, bytes, vPtr)
-}
-
 func byteToObj(ext string, data []byte, vPtr interface{}) error {
 	switch ext {
 	case ".yao", ".jsonc":
@@ -89,18 +72,6 @@ func byteToObj(ext string, data []byte, vPtr interface{}) error {
 	}
 
 	return fmt.Errorf("[Parse] %s Error %s does not support", ext, ext)
-}
-
-func mapToObj(ext string, data map[string]interface{}, vPtr interface{}) error {
-	var buffer bytes.Buffer
-	enc := gob.NewEncoder(&buffer)
-	err := enc.Encode(data)
-	if err != nil {
-		log.Fatal("Error happened in Gob encoding. Err: %s", err)
-	}
-
-	return byteToObj(ext, buffer.Bytes(), vPtr)
-
 }
 
 type contextKey string
@@ -194,4 +165,44 @@ func trim(src, dst []byte) []byte {
 		}
 	}
 	return dst
+}
+
+// ConvertOAuthTokenToTokenResponse 将OAuthToken转换为TokenResponse
+func ConvertOAuthTokenToTokenResponse(token *OAuthToken) *TokenResponse {
+	if token == nil {
+		return nil
+	}
+
+	return &TokenResponse{
+		TokenType:    TokenTypeBearer,
+		AccessToken:  token.AccessToken,
+		RefreshToken: token.RefreshToken,
+		ExpiresIn:    token.ExpiresIn,
+		GeneratedAt:  time.Now().Unix(), // 记录生成时间
+	}
+}
+
+// GenerateCacheKey 根据ClientID和可选参数生成缓存键
+func GenerateCacheKey(clientID string, params ...string) string {
+	key := clientID
+	for _, param := range params {
+		if param != "" {
+			key += "|" + param
+		}
+	}
+	return key
+}
+
+// mustToJson 将任意值转为JSON字符串，若失败则返回空字符串
+func mustToJson(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+
+	data, err := jsoniter.Marshal(v)
+	if err != nil {
+		return ""
+	}
+
+	return string(data)
 }
