@@ -35,7 +35,7 @@ func timestampToDateTime(timestamp int64) string {
 func ProcessGetAppToken(p *process.Process) interface{} {
 	p.ValidateArgNums(2)
 	config := p.ArgsMap(0)
-	ext := p.ArgsString(1)
+	//ext := p.ArgsString(1)
 
 	ctx := context.Background()
 
