@@ -60,7 +60,7 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 	}
 	// End of diagnostic step
 
-	log.Info("conf after potential JSON unmarshal: %s", mustToJson(conf))
+	// log.Info("conf after potential JSON unmarshal: %s", mustToJson(conf))
 
 	oauth, err := LoadOAuthAppFromConfig(conf)
 
@@ -76,7 +76,7 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 
 	resp, err := jwtClient.GetAccessToken(ctx, nil)
 	if err != nil {
-		exception.New("GetAppToken failed", 500).Throw()
+		exception.New("GetAppToken failed %s", 500, err.Error()).Throw()
 	}
 
 	expiresStr := fmt.Sprintf("%d (%s)", resp.ExpiresIn, timestampToDateTime(resp.ExpiresIn))
