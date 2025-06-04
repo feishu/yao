@@ -15,6 +15,7 @@ import (
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/kun/log"
 	chatctx "github.com/yaoapp/yao/neo/context"
+	"github.com/yaoapp/yao/neo/i18n"
 	"github.com/yaoapp/yao/neo/message"
 	chatMessage "github.com/yaoapp/yao/neo/message"
 )
@@ -87,15 +88,17 @@ func (ast *Assistant) execute(c *gin.Context, ctx chatctx.Context, userInput int
 	}
 	options := ast.withOptions(userOptions)
 
-	// Add RAG and Version support
-	ctx.RAG = rag != nil
-	ctx.Version = ast.vision
+	// Add RAG、Vision and Search support
+	// ctx.RAG = rag != nil
+	ctx.Knowledge = false
+	ctx.Vision = ast.vision
+	ctx.Search = ast.search && search != nil
 
 	// Run init hook
 	res, err := ast.HookCreate(c, ctx, input, options, contents)
 	if err != nil {
 		chatMessage.New().
-			Assistant(ast.ID, ast.Name, ast.Avatar).
+			// Assistant(ast.ID, ast.Name, ast.Avatar).
 			Error(err).
 			Done().
 			Write(c.Writer)
@@ -114,29 +117,26 @@ func (ast *Assistant) execute(c *gin.Context, ctx chatctx.Context, userInput int
 
 	// Has result return directly
 	if res != nil && res.Result != nil {
+		output := chatMessage.New().
+			// Assistant(ast.ID, ast.Name, ast.Avatar).
+			SetResult(res.Result).
+			Done()
+
 		// Has callback function
 		if len(callback) > 0 {
-			output := chatMessage.New()
-			output.Result = res.Result
 			output.Callback(callback[0]).Write(c.Writer)
+			return res.Result, nil
 		}
-
-		// Return the result directly
+		output.Write(c.Writer)
 		return res.Result, nil
 	}
-
-	// Handle next action
-	// It's not used, return the new assistant_id and chat_id
-	// if res != nil && res.Next != nil {
-	// 	return res.Next.Execute(c, ctx, contents)
-	// }
 
 	// Switch to the new assistant if necessary
 	if res != nil && res.AssistantID != "" && res.AssistantID != ctx.AssistantID {
 		newAst, err := Get(res.AssistantID)
 		if err != nil {
 			chatMessage.New().
-				Assistant(ast.ID, ast.Name, ast.Avatar).
+				// Assistant(ast.ID, ast.Name, ast.Avatar).
 				Error(err).
 				Done().
 				Write(c.Writer)
@@ -170,38 +170,6 @@ func (ast *Assistant) execute(c *gin.Context, ctx chatctx.Context, userInput int
 // Execute the next action
 func (next *NextAction) Execute(c *gin.Context, ctx chatctx.Context, contents *chatMessage.Contents, callback ...interface{}) (interface{}, error) {
 	switch next.Action {
-
-	// It's not used, because the process could be executed in the hook script
-	// It may remove in the future
-	// case "process":
-	// 	if next.Payload == nil {
-	// 		return fmt.Errorf("payload is required")
-	// 	}
-
-	// 	name, ok := next.Payload["name"].(string)
-	// 	if !ok {
-	// 		return fmt.Errorf("process name should be string")
-	// 	}
-
-	// 	args := []interface{}{}
-	// 	if v, ok := next.Payload["args"].([]interface{}); ok {
-	// 		args = v
-	// 	}
-
-	// 	// Add context and writer to args
-	// 	args = append(args, ctx, c.Writer)
-	// 	p, err := process.Of(name, args...)
-	// 	if err != nil {
-	// 		return fmt.Errorf("get process error: %s", err.Error())
-	// 	}
-
-	// 	err = p.Execute()
-	// 	if err != nil {
-	// 		return fmt.Errorf("execute process error: %s", err.Error())
-	// 	}
-	// 	defer p.Release()
-
-	// 	return nil
 
 	case "assistant":
 		if next.Payload == nil {
@@ -276,20 +244,6 @@ func (next *NextAction) Execute(c *gin.Context, ctx chatctx.Context, contents *c
 		if err != nil {
 			return nil, fmt.Errorf("with history error: %s", err.Error())
 		}
-
-		// Send the progress message from application side instead
-		// Create a new Text
-		// Send loading message and mark as new
-		// if !ctx.Silent {
-		// 	msg := chatMessage.New().Map(map[string]interface{}{
-		// 		"new":   true,
-		// 		"role":  "assistant",
-		// 		"type":  "loading",
-		// 		"props": map[string]interface{}{"placeholder": "Calling " + assistant.Name},
-		// 	})
-		// 	msg.Assistant(assistant.ID, assistant.Name, assistant.Avatar)
-		// 	msg.Write(c.Writer)
-		// }
 		newContents := chatMessage.NewContents()
 
 		// Update the context id
@@ -305,8 +259,29 @@ func (next *NextAction) Execute(c *gin.Context, ctx chatctx.Context, contents *c
 }
 
 // GetPlaceholder returns the placeholder of the assistant
-func (ast *Assistant) GetPlaceholder() *Placeholder {
-	return ast.Placeholder
+func (ast *Assistant) GetPlaceholder(locale string) *Placeholder {
+
+	prompts := []string{}
+	if ast.Placeholder.Prompts != nil {
+		prompts = i18n.Translate(ast.ID, locale, ast.Placeholder.Prompts).([]string)
+	}
+	title := i18n.Translate(ast.ID, locale, ast.Placeholder.Title).(string)
+	description := i18n.Translate(ast.ID, locale, ast.Placeholder.Description).(string)
+	return &Placeholder{
+		Title:       title,
+		Description: description,
+		Prompts:     prompts,
+	}
+}
+
+// GetName returns the name of the assistant
+func (ast *Assistant) GetName(locale string) string {
+	return i18n.Translate(ast.ID, locale, ast.Name).(string)
+}
+
+// GetDescription returns the description of the assistant
+func (ast *Assistant) GetDescription(locale string) string {
+	return i18n.Translate(ast.ID, locale, ast.Description).(string)
 }
 
 // Call implements the call functionality
@@ -535,29 +510,6 @@ func (ast *Assistant) streamChat(
 					}
 				})
 
-				// Handle stream
-				// The stream hook is not used, because there's no need to handle the stream output
-				// if some thing need to be handled in future, we can use the stream hook again
-				// ------------------------------------------------------------------------------
-				// res, err := ast.HookStream(c, ctx, messages, msg, contents)
-				// if err == nil && res != nil {
-
-				// 	if res.Next != nil {
-				// 		err = res.Next.Execute(c, ctx, contents)
-				// 		if err != nil {
-				// 			chatMessage.New().Error(err.Error()).Done().Write(c.Writer)
-				// 		}
-
-				// 		done <- true
-				// 		return 0 // break
-				// 	}
-
-				// 	if res.Silent {
-				// 		return 1 // continue
-				// 	}
-				// }
-				// ------------------------------------------------------------------------------
-
 				// Write the message to the stream
 				msgType := msg.Type
 				if msgType == "tool_calls_native" {
@@ -579,7 +531,7 @@ func (ast *Assistant) streamChat(
 				output.Retry = ctx.Retry   // Retry mode
 				output.Silent = ctx.Silent // Silent mode
 				if isFirst {
-					output.Assistant(ast.ID, ast.Name, ast.Avatar)
+					output.Assistant(ast.ID, ast.GetName(ctx.Locale), ast.Avatar)
 					isFirst = false
 				}
 
@@ -600,7 +552,7 @@ func (ast *Assistant) streamChat(
 					chatMessage.New().
 						Map(map[string]interface{}{
 							"assistant_id":     ast.ID,
-							"assistant_name":   ast.Name,
+							"assistant_name":   ast.GetName(ctx.Locale),
 							"assistant_avatar": ast.Avatar,
 							"text":             delta,
 							"type":             "text",
@@ -649,11 +601,16 @@ func (ast *Assistant) streamChat(
 				}
 
 				// has result
-				if res != nil && res.Result != nil && cb != nil {
-					output.Result = res.Result // Add the result to the output  message
+				if res != nil && res.Result != nil {
+					output.SetResult(res.Result)
+					if cb != nil {
+						output.Callback(cb).Write(c.Writer)
+						return 0 // break
+					}
 				}
 
-				output.Callback(cb).Write(c.Writer)
+				// Send the result to the client
+				output.Write(c.Writer)
 				return 0 // break
 			}
 
@@ -784,7 +741,7 @@ func (ast *Assistant) saveChatHistory(ctx chatctx.Context, messages []chatMessag
 				"content":          contents.JSON(),
 				"name":             ast.ID,
 				"assistant_id":     ast.ID,
-				"assistant_name":   ast.Name,
+				"assistant_name":   ast.GetName(ctx.Locale),
 				"assistant_avatar": ast.Avatar,
 			},
 		}
@@ -1011,7 +968,8 @@ func formatMessages(messages []map[string]interface{}) []map[string]interface{} 
 	filteredMessages := []map[string]interface{}{
 		{
 			"role":    "system",
-			"content": "Current time: " + time.Now().Format(time.RFC3339),
+			"name":    "SYSTEM_TIME",
+			"content": "System Time: " + time.Now().Format(time.RFC3339) + "\n\n" + "It's the system time, please use it for reference.",
 		},
 	}
 	seen := make(map[string]bool)
@@ -1135,6 +1093,7 @@ func formatMessages(messages []map[string]interface{}) []map[string]interface{} 
 		lastMessage = msg
 	}
 
+	// Development log for DUI platform
 	return mergedMessages
 }
 

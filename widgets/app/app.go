@@ -159,12 +159,11 @@ func exportAPI() error {
 
 	process = "yao.app.Menu"
 	args := []interface{}{}
-	if Setting.Menu.Process != "" {
-		if Setting.Menu.Args != nil {
-			args = Setting.Menu.Args
-		}
+	if Setting.Menu.Args != nil {
+		args = Setting.Menu.Args
 	}
 
+	args = append(args, "$query.locale")
 	path = api.Path{
 		Label:       "App Menu",
 		Description: "App Menu",
@@ -386,36 +385,21 @@ func processIcons(process *process.Process) interface{} {
 
 func processMenu(p *process.Process) interface{} {
 
-	if Setting.Menu.Process != "" {
-
-		return process.
-			New(Setting.Menu.Process, p.Args...).
-			WithGlobal(p.Global).
-			WithSID(p.Sid).
-			Run()
+	if Setting.Menu.Process == "" {
+		exception.New("menu.process is required", 400).Throw()
 	}
 
-	args := map[string]interface{}{
-		"select": []string{"id", "name", "icon", "parent", "path", "blocks", "visible_menu"},
-		"withs": map[string]interface{}{
-			"children": map[string]interface{}{
-				"query": map[string]interface{}{
-					"select": []string{"id", "name", "icon", "parent", "path", "blocks", "visible_menu"},
-				},
-			},
-		},
-		"wheres": []map[string]interface{}{
-			{"column": "status", "value": "enabled"},
-			{"column": "parent", "op": "null"},
-		},
-		"limit":  200,
-		"orders": []map[string]interface{}{{"column": "rank", "option": "asc"}},
+	handle, err := process.Of(Setting.Menu.Process, p.Args...)
+	if err != nil {
+		exception.New(err.Error(), 400).Throw()
 	}
-	return process.
-		New("models.xiang.menu.get", args).
-		WithGlobal(p.Global).
-		WithSID(p.Sid).
-		Run()
+
+	err = handle.WithGlobal(p.Global).WithSID(p.Sid).Execute()
+	if err != nil {
+		exception.New(err.Error(), 500).Throw()
+	}
+	defer handle.Dispose()
+	return handle.Value()
 }
 
 func processSetting(process *process.Process) interface{} {
@@ -466,6 +450,7 @@ func processXgen(process *process.Process) interface{} {
 	}
 
 	// Set User ENV
+	lang := config.Conf.Lang
 	if process.NumOfArgs() > 0 {
 		payload := process.ArgsMap(0, map[string]interface{}{
 			"now":  time.Now().Unix(),
@@ -476,8 +461,7 @@ func processXgen(process *process.Process) interface{} {
 		if v, ok := payload["sid"].(string); ok && v != "" {
 			sid = v
 		}
-
-		lang := strings.ToLower(fmt.Sprintf("%v", payload["lang"]))
+		lang = strings.ToLower(fmt.Sprintf("%v", payload["lang"]))
 		session.Global().ID(sid).Set("__yao_lang", lang)
 	}
 
@@ -571,10 +555,31 @@ func processXgen(process *process.Process) interface{} {
 				"assistant_name":       ast.Name,
 				"assistant_avatar":     ast.Avatar,
 				"assistant_deleteable": false,
-				"placeholder":          ast.Placeholder,
+				"placeholder":          ast.GetPlaceholder(lang),
 			}
 		}
+
+		// Available connectors
 		agent["connectors"] = connector.AIConnectors
+
+		// Available storages
+		agent["storages"] = map[string]interface{}{
+			"chat": map[string]interface{}{
+				"max_size":      neo.Neo.UploadSetting.Chat.MaxSize,
+				"chunk_size":    neo.Neo.UploadSetting.Chat.ChunkSize,
+				"allowed_types": neo.Neo.UploadSetting.Chat.AllowedTypes,
+			},
+			"assets": map[string]interface{}{
+				"max_size":      neo.Neo.UploadSetting.Assets.MaxSize,
+				"chunk_size":    neo.Neo.UploadSetting.Assets.ChunkSize,
+				"allowed_types": neo.Neo.UploadSetting.Assets.AllowedTypes,
+			},
+			"knowledge": map[string]interface{}{
+				"max_size":      neo.Neo.UploadSetting.Knowledge.MaxSize,
+				"chunk_size":    neo.Neo.UploadSetting.Knowledge.ChunkSize,
+				"allowed_types": neo.Neo.UploadSetting.Knowledge.AllowedTypes,
+			},
+		}
 	}
 
 	xgenSetting := map[string]interface{}{
@@ -585,6 +590,10 @@ func processXgen(process *process.Process) interface{} {
 		"yao": map[string]interface{}{
 			"version":   share.VERSION,
 			"prversion": share.PRVERSION,
+		},
+		"cui": map[string]interface{}{
+			"version":   share.CUI,
+			"prversion": share.PRCUI,
 		},
 		"theme":     Setting.Theme,
 		"lang":      Setting.Lang,
@@ -627,7 +636,7 @@ func (dsl *DSL) replaceAdminRoot() error {
 	// 	return err
 	// }
 
-	return data.ReplaceXGen("__yao_admin_root", root)
+	return data.ReplaceCUI("__yao_admin_root", root)
 }
 
 // icons
