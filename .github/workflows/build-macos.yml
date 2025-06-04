@@ -49,7 +49,7 @@ jobs:
       - name: Checkout Gou
         uses: actions/checkout@v4
         with:
-          repository: yaoapp/gou
+          repository: feishu/gou
           path: gou
 
       - name: Checkout V8Go
