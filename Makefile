@@ -285,7 +285,7 @@ release: clean
 #   ** XGEN will be renamed to DUI in the feature. and move to the new repository. **
 #   ** new repository: https://github.com/YaoApp/dui.git **
 	export NODE_ENV=production
-	git clone https://github.com/YaoApp/xgen.git .tmp/xgen/v1.0
+	git clone https://github.com/feishu/xgen.git .tmp/xgen/v1.0
 # 	cd .tmp/xgen/v1.0 && git checkout 5002c3fded585aaa69a4366135b415ea3234964e
 	echo "BASE=__yao_admin_root" > .tmp/xgen/v1.0/packages/xgen/.env
 	cd .tmp/xgen/v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
@@ -349,7 +349,7 @@ linux-release: clean
 #   ** XGEN will be renamed to DUI in the feature. and move to the new repository. **
 #   ** new repository: https://github.com/YaoApp/dui.git **
 	export NODE_ENV=production
-	git clone https://github.com/YaoApp/xgen.git .tmp/xgen/v1.0
+	git clone https://github.com/feishu/xgen.git .tmp/xgen/v1.0
 	rm -f .tmp/xgen/v1.0/pnpm-lock.yaml
 	echo "BASE=__yao_admin_root" > .tmp/xgen/v1.0/packages/xgen/.env
 	cd .tmp/xgen/v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
