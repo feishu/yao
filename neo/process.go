@@ -395,12 +395,7 @@ func processAssistantSearch(process *process.Process) interface{} {
 		exception.New("Neo store is not initialized", 500).Throw()
 	}
 
-	locale := "en"
-	if len(process.Args) > 1 {
-		locale = process.ArgsString(1)
-	}
-
-	res, err := neo.Store.GetAssistants(filter, locale)
+	res, err := neo.Store.GetAssistants(filter)
 	if err != nil {
 		exception.New("get assistants error: %s", 500, err).Throw()
 	}
@@ -424,11 +419,7 @@ func processAssistantFind(process *process.Process) interface{} {
 		PageSize:    1,
 	}
 
-	locale := "en"
-	if len(process.Args) > 1 {
-		locale = process.ArgsString(1)
-	}
-	res, err := neo.Store.GetAssistants(filter, locale)
+	res, err := neo.Store.GetAssistants(filter)
 	if err != nil {
 		exception.New("Failed to find assistant: %s", 500, err.Error()).Throw()
 	}

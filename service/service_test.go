@@ -16,7 +16,7 @@ func TestStartStop(t *testing.T) {
 
 	cfg := config.Conf
 	cfg.Port = 0
-	_, err := engine.Load(cfg, engine.LoadOption{})
+	err := engine.Load(cfg, engine.LoadOption{})
 	if err != nil {
 		t.Fatal(err)
 	}

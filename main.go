@@ -1,6 +1,9 @@
 package main
 
 import (
+	"github.com/yaoapp/yao/cmd"
+	"github.com/yaoapp/yao/utils"
+
 	_ "github.com/yaoapp/gou/diff"
 	_ "github.com/yaoapp/gou/encoding"
 	_ "github.com/yaoapp/yao/aigc"
@@ -11,10 +14,6 @@ import (
 	_ "github.com/yaoapp/yao/volcengine/service/coze"
 	_ "github.com/yaoapp/yao/volcengine/service/im"
 	_ "github.com/yaoapp/yao/wework"
-
-	"github.com/yaoapp/yao/cmd"
-	"github.com/yaoapp/yao/utils"
-	//
 	// _ "net/http/pprof"
 )
 

@@ -18,11 +18,6 @@ import (
 	"github.com/yaoapp/yao/studio"
 )
 
-// *********************************************************************************
-// !! Yao Studio Command has been deprecated.
-// !! Do not use this command in your project.
-// *********************************************************************************
-
 // RunCmd command
 var RunCmd = &cobra.Command{
 	Use:   "run",
@@ -48,7 +43,7 @@ var RunCmd = &cobra.Command{
 			return
 		}
 
-		_, err := engine.Load(cfg, engine.LoadOption{Action: "studio.run"})
+		err := engine.Load(cfg, engine.LoadOption{Action: "studio.run"})
 		if err != nil {
 			fmt.Println(color.RedString(L("Engine: %s"), err.Error()))
 		}

@@ -39,16 +39,10 @@ var WatchCmd = &cobra.Command{
 		Boot()
 
 		cfg := config.Conf
-		loadWarnings, err := engine.Load(cfg, engine.LoadOption{Action: "sui.watch"})
+		err := engine.Load(cfg, engine.LoadOption{Action: "sui.watch"})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
 			return
-		}
-
-		if len(loadWarnings) > 0 {
-			for _, warning := range loadWarnings {
-				fmt.Println(color.YellowString("[%s] %s", warning.Widget, warning.Error))
-			}
 		}
 
 		id := args[0]

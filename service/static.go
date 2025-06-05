@@ -15,8 +15,8 @@ import (
 // AppFileServer static file server
 var AppFileServer http.Handler
 
-// CUIFileServerV1 CUI v1.0
-var CUIFileServerV1 http.Handler = http.FileServer(data.CuiV1())
+// XGenFileServerV1 XGen v1.0
+var XGenFileServerV1 http.Handler = http.FileServer(data.XgenV1())
 
 // AdminRoot cache
 var AdminRoot = ""

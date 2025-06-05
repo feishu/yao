@@ -1,21 +1,15 @@
 package share
 
-// VERSION Yao App Engine Version
-const VERSION = "0.10.5"
+// VERSION 版本号
+const VERSION = "0.10.4"
 
-// PRVERSION Yao App Engine PR Commit
-const PRVERSION = "DEV"
+// PRVERSION  PreRelease Version
+const PRVERSION = "f393289387f0-2025-03-24T14:30:18+0800-debug"
 
-// CUI Version
-const CUI = "0.10.5"
-
-// PRCUI CUI PR Commit
-const PRCUI = "DEV"
-
-// BUILDIN If true, the application will be built into a single artifact
+// BUILDIN 打包应用合成一个制品
 const BUILDIN = false
 
-// BUILDNAME The name of the artifact
+// BUILDNAME 制品名称
 const BUILDNAME = "yao"
 
 // MoapiHosts the master mirror
