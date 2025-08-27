@@ -483,12 +483,18 @@ func ProcessIsUserInConversation(p *process.Process) interface{} {
 
 	// 优先使用 ParticipantUserId，如果没有则使用 UserId
 	var userID int64
+	var err error
+	
 	if participantUserID, ok := args["ParticipantUserId"].(float64); ok {
-		userID = int64(participantUserID)
-	} else if userId, ok := args["UserId"].(string); ok {
-		userID, err := strconv.ParseInt(userId, 10, 64)
+	    userID = int64(participantUserID)
+	} else if userIdStr, ok := args["UserId"].(string); ok {
+	    userID, err = strconv.ParseInt(userIdStr, 10, 64)
+	    if err != nil {
+	        // 处理解析错误
+	        return exception.New(fmt.Sprintf("Invalid UserId format: %v", err), 400)
+	    }
 	} else {
-		exception.New("UserId or ParticipantUserId is required", 400).Throw()
+	    return exception.New("UserId or ParticipantUserId is required", 400)
 	}
 
 	// 构建请求体
