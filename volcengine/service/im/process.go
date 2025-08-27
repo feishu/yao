@@ -51,7 +51,7 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 	args := p.ArgsMap(0)
 
 	// 获取用户ID
-	userID, ok := args["UserId"]
+	userID, ok := args["UserId"].(string)
 	if !ok {
 		exception.New("UserId is required", 400).Throw()
 	}
@@ -485,7 +485,7 @@ func ProcessIsUserInConversation(p *process.Process) interface{} {
 	var userID int64
 	if participantUserID, ok := args["ParticipantUserId"].(float64); ok {
 		userID = int64(participantUserID)
-	} else if userId, ok := args["UserId"].(float64); ok {
+	} else if userId, ok := args["UserId"].(string); ok {
 		userID = int64(userId)
 	} else {
 		exception.New("UserId or ParticipantUserId is required", 400).Throw()
