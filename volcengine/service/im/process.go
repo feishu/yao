@@ -51,7 +51,7 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 	args := p.ArgsMap(0)
 
 	// 获取用户ID
-	userID, ok := args["UserId"].(string)
+	userID, ok := strconv.ParseInt(args["UserId"].(string),10,64)
 	if !ok {
 		exception.New("UserId is required", 400).Throw()
 	}
@@ -70,14 +70,14 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 	appKey := volcengine.VolcEngine.IM.AppKey
 
 	// 生成Token，调用token.go中的GenerateToken函数
-	token, err := GenerateToken(appID, int64(userID), expireTime, appKey)
+	token, err := GenerateToken(appID, userID, expireTime, appKey)
 	if err != nil {
 		exception.New("Generate token failed: %s", 500, err.Error()).Throw()
 	}
 
 	return map[string]interface{}{
 		"Token":      token,
-		"UserId":     int64(userID),
+		"UserId":     userID,
 		"AppId":      appID,
 		"ExpireTime": expireTime,
 	}
