@@ -58,11 +58,11 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 
 	// 获取过期时间，默认30分钟
 	var expireTime int64
-	if expire, ok := args["ExpireTime"].(float64); ok {
-		expireTime = int64(expire)
+	if expire, ok := args["ExpireTime"].(int64); ok {
+		expireTime = generateExpireTime(int64(expire))
 	} else {
 		// 默认30分钟后过期
-		expireTime = GetDefaultExpireTime()
+		expireTime = generateExpireTime(30)
 	}
 
 	// 使用配置文件中的AppID和AppKey
