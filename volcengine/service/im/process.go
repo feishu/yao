@@ -486,7 +486,7 @@ func ProcessIsUserInConversation(p *process.Process) interface{} {
 	if participantUserID, ok := args["ParticipantUserId"].(float64); ok {
 		userID = int64(participantUserID)
 	} else if userId, ok := args["UserId"].(string); ok {
-		userID = int64(userId)
+		userID, err := strconv.ParseInt(userId, 10, 64)
 	} else {
 		exception.New("UserId or ParticipantUserId is required", 400).Throw()
 	}
