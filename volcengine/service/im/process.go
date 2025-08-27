@@ -58,16 +58,16 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 
 	// 获取过期时间，默认30分钟
 	var expireTime int64
-	if expire, ok := args["ExpireTime"].(float64); ok {
-		expireTime = int64(expire)
+	if expire, ok := args["ExpireTime"].(int64); ok {
+		expireTime = time.Now().UnixNano()/int64(time.Millisecond) + (1000 * 60 * int32(expire))
 	} else {
 		// 默认30分钟后过期
 		expireTime = GetDefaultExpireTime()
 	}
 
 	// 使用配置文件中的AppID和AppKey
-	appID := int32(volcengine.VolcEngine.IM.AppID)
-	appKey := volcengine.VolcEngine.IM.AppKey
+	appID := int32(909941)                                   //int32(volcengine.VolcEngine.IM.AppID)
+	appKey := "/KJnWEQijfa80uRP2DG43OoXz/hXDqMaZCP3VfReUEg=" //volcengine.VolcEngine.IM.AppKey
 
 	// 生成Token，调用token.go中的GenerateToken函数
 	token, err := GenerateToken(appID, int64(userID), expireTime, appKey)
