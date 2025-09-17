@@ -3,6 +3,7 @@ package im
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"sync"
 
@@ -81,7 +82,46 @@ func init() {
 		"getConversationMessages":   ProcessGetConversationMessages,
 		"destroyConversation":       ProcessDestroyConversation,
 		"getAppToken":               ProcessGetAppToken,
+		"Client":                    ProcessClient,
 	})
+}
+
+func ProcessClient(p *process.Process) interface{} {
+	p.ValidateArgNums(1)
+	args := p.ArgsMap(0)
+
+	// 获取方法名
+	method, ok := args["method"].(string)
+	if !ok {
+		exception.New("method is required", 400).Throw()
+	}
+
+	// 获取请求体参数
+	body, ok := args["body"]
+	if !ok {
+		exception.New("body is required", 400).Throw()
+	}
+
+	// 将body序列化为JSON
+	bodyBytes, err := marshalToJson(body)
+	if err != nil {
+		exception.New("Failed to marshal body to JSON: %s", 500, err.Error()).Throw()
+	}
+
+	// 调用Client.CtxJson方法
+	ctx := context.Background()
+	data, _, err := GetInstance().Client.CtxJson(ctx, method, url.Values{}, string(bodyBytes))
+	if err != nil {
+		exception.New("Client request failed: %s", 500, err.Error()).Throw()
+	}
+
+	// 解析响应
+	var result interface{}
+	if err := unmarshalResultInto(data, &result); err != nil {
+		exception.New("Failed to unmarshal response: %s", 500, err.Error()).Throw()
+	}
+
+	return result
 }
 
 // ProcessGetAppToken 获取火山引擎IM的AppToken
