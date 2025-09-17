@@ -11,6 +11,47 @@ import (
 	"github.com/yaoapp/yao/volcengine"
 )
 
+// parseInt64FromArgs 从参数中解析int64值，支持字符串和数值类型以保持兼容性
+func parseInt64FromArgs(args map[string]interface{}, key string) (int64, error) {
+	if strVal, ok := args[key].(string); ok {
+		return strconv.ParseInt(strVal, 10, 64)
+	} else if floatVal, ok := args[key].(float64); ok {
+		return int64(floatVal), nil
+	}
+	return 0, fmt.Errorf("%s is required", key)
+}
+
+// parseInt64ArrayFromArgs 从参数中解析int64数组，支持字符串和数值类型
+func parseInt64ArrayFromArgs(args []interface{}) []int64 {
+	result := make([]int64, 0, len(args))
+	for _, arg := range args {
+		if strVal, ok := arg.(string); ok {
+			if val, err := strconv.ParseInt(strVal, 10, 64); err == nil {
+				result = append(result, val)
+			}
+		} else if floatVal, ok := arg.(float64); ok {
+			result = append(result, int64(floatVal))
+		}
+	}
+	return result
+}
+
+// parseInt64PointerArrayFromArgs 从参数中解析int64指针数组，支持字符串和数值类型
+func parseInt64PointerArrayFromArgs(args []interface{}) []*int64 {
+	result := make([]*int64, 0, len(args))
+	for _, arg := range args {
+		if strVal, ok := arg.(string); ok {
+			if val, err := strconv.ParseInt(strVal, 10, 64); err == nil {
+				result = append(result, &val)
+			}
+		} else if floatVal, ok := arg.(float64); ok {
+			val := int64(floatVal)
+			result = append(result, &val)
+		}
+	}
+	return result
+}
+
 // 单例模式实现
 var (
 	instance *Im
@@ -111,13 +152,13 @@ func ProcessRegisterUsers(p *process.Process) interface{} {
 			exception.New("User must be an object", 400).Throw()
 		}
 
-		userID, ok := userMap["UserId"].(float64)
-		if !ok {
-			exception.New("User.UserId is required and must be a number", 400).Throw()
+		userID, err := parseInt64FromArgs(userMap, "UserId")
+		if err != nil {
+			exception.New("User.UserId is required and must be a valid integer", 400).Throw()
 		}
 
 		userItem := RegisterUsersBodyUsersItem{
-			UserID: int64(userID),
+			UserID: userID,
 		}
 
 		// 设置可选字段
@@ -179,10 +220,7 @@ func ProcessBatchGetUser(p *process.Process) interface{} {
 		exception.New("UserIds is required", 400).Throw()
 	}
 
-	userIDsInt := make([]int64, 0, len(userIDs))
-	for _, userID := range userIDs {
-		userIDsInt = append(userIDsInt, int64(userID.(float64)))
-	}
+	userIDsInt := parseInt64ArrayFromArgs(userIDs)
 
 	body := &BatchGetUserBody{
 		AppID:   appID,
@@ -231,13 +269,13 @@ func ProcessBatchUpdateUser(p *process.Process) interface{} {
 			exception.New("User must be an object", 400).Throw()
 		}
 
-		userID, ok := userMap["UserId"].(float64)
-		if !ok {
-			exception.New("User.UserId is required and must be a number", 400).Throw()
+		userID, err := parseInt64FromArgs(userMap, "UserId")
+		if err != nil {
+			exception.New("User.UserId is required and must be a valid integer", 400).Throw()
 		}
 
 		userItem := BatchUpdateUserBodyUsersItem{
-			UserID: int64(userID),
+			UserID: userID,
 		}
 
 		if nickName, ok := userMap["NickName"].(string); ok {
@@ -299,10 +337,7 @@ func ProcessUnRegisterUsers(p *process.Process) interface{} {
 		exception.New("UserIds is required", 400).Throw()
 	}
 
-	userIDsInt := make([]int64, 0, len(userIDs))
-	for _, userID := range userIDs {
-		userIDsInt = append(userIDsInt, int64(userID.(float64)))
-	}
+	userIDsInt := parseInt64ArrayFromArgs(userIDs)
 
 	body := &BatchGetUserBody{
 		AppID:   appID,
@@ -346,8 +381,8 @@ func ProcessCreateConversation(p *process.Process) interface{} {
 		body.ConversationCoreInfo.ConversationType = convType
 	}
 
-	if owner, ok := args["Owner"].(float64); ok {
-		body.OwnerUserID = int64(owner)
+	if ownerID, err := parseInt64FromArgs(args, "Owner"); err == nil {
+		body.OwnerUserID = ownerID
 	}
 
 	// 处理 Description 参数
@@ -377,8 +412,7 @@ func ProcessCreateConversation(p *process.Process) interface{} {
 	}
 
 	// 处理 OtherUserId 参数（单聊时另一个用户的ID）
-	if otherUserId, ok := args["OtherUserId"].(float64); ok {
-		otherUserID := int64(otherUserId)
+	if otherUserID, err := parseInt64FromArgs(args, "OtherUserId"); err == nil {
 		body.OtherUserID = &otherUserID
 	}
 
@@ -413,16 +447,16 @@ func ProcessModifyConversation(p *process.Process) interface{} {
 	// 使用配置文件中的AppId
 	appID := int32(volcengine.VolcEngine.IM.AppID)
 
-	conversationID, ok := args["ConversationShortId"].(float64)
-	if !ok {
-		exception.New("ConversationShortId is required", 400).Throw()
+	conversationID, err := parseInt64FromArgs(args, "ConversationShortId")
+	if err != nil {
+		exception.New("ConversationShortId is required and must be a valid integer", 400).Throw()
 	}
 
 	// 构建请求体
 	body := &ModifyConversationBody{
 		AppID: appID,
 		ConversationCoreInfo: ModifyConversationBodyConversationCoreInfo{
-			ConversationShortID: int64(conversationID),
+			ConversationShortID: conversationID,
 		},
 	}
 
@@ -476,31 +510,26 @@ func ProcessIsUserInConversation(p *process.Process) interface{} {
 	// 使用配置文件中的AppId
 	appID := int32(volcengine.VolcEngine.IM.AppID)
 
-	conversationID, ok := args["ConversationShortId"].(float64)
-	if !ok {
-		exception.New("ConversationShortId is required", 400).Throw()
+	conversationID, err := parseInt64FromArgs(args, "ConversationShortId")
+	if err != nil {
+		exception.New("ConversationShortId is required and must be a valid integer", 400).Throw()
 	}
 
 	// 优先使用 ParticipantUserId，如果没有则使用 UserId
 	var userID int64
-	var err error
-	
-	if participantUserID, ok := args["ParticipantUserId"].(float64); ok {
-	    userID = int64(participantUserID)
-	} else if userIdStr, ok := args["UserId"].(string); ok {
-	    userID, err = strconv.ParseInt(userIdStr, 10, 64)
-	    if err != nil {
-	        // 处理解析错误
-	        return exception.New(fmt.Sprintf("Invalid UserId format: %v", err), 400)
-	    }
+
+	if participantUserID, err := parseInt64FromArgs(args, "ParticipantUserId"); err == nil {
+		userID = participantUserID
+	} else if userIdFromArgs, err := parseInt64FromArgs(args, "UserId"); err == nil {
+		userID = userIdFromArgs
 	} else {
-	    return exception.New("UserId or ParticipantUserId is required", 400)
+		return exception.New("UserId or ParticipantUserId is required", 400)
 	}
 
 	// 构建请求体
 	body := &IsUserInConversationBody{
 		AppID:               appID,
-		ConversationShortID: int64(conversationID),
+		ConversationShortID: conversationID,
 		ParticipantUserID:   userID,
 	}
 
@@ -524,14 +553,14 @@ func ProcessSendMessage(p *process.Process) interface{} {
 	// 使用配置文件中的AppId
 	appID := int32(volcengine.VolcEngine.IM.AppID)
 
-	conversationID, ok := args["ConversationShortId"].(float64)
-	if !ok {
-		exception.New("ConversationShortId is required", 400).Throw()
+	conversationID, err := parseInt64FromArgs(args, "ConversationShortId")
+	if err != nil {
+		exception.New("ConversationShortId is required and must be a valid integer", 400).Throw()
 	}
 
-	senderID, ok := args["SenderUserId"].(float64)
-	if !ok {
-		exception.New("SenderUserId is required", 400).Throw()
+	senderID, err := parseInt64FromArgs(args, "SenderUserId")
+	if err != nil {
+		exception.New("SenderUserId is required and must be a valid integer", 400).Throw()
 	}
 
 	content, ok := args["Content"].(string)
@@ -542,8 +571,8 @@ func ProcessSendMessage(p *process.Process) interface{} {
 	// 构建请求体
 	body := &SendMessageBody{
 		AppID:               appID,
-		ConversationShortID: int64(conversationID),
-		Sender:              int64(senderID),
+		ConversationShortID: conversationID,
+		Sender:              senderID,
 		Content:             content,
 	}
 
@@ -566,38 +595,17 @@ func ProcessSendMessage(p *process.Process) interface{} {
 
 	// 处理 MentionedUsers 参数（@的用户列表）
 	if mentionedUsers, ok := args["MentionedUsers"].([]interface{}); ok {
-		mentionedUserIDs := make([]*int64, 0, len(mentionedUsers))
-		for _, user := range mentionedUsers {
-			if userFloat, ok := user.(float64); ok {
-				userID := int64(userFloat)
-				mentionedUserIDs = append(mentionedUserIDs, &userID)
-			}
-		}
-		body.MentionedUsers = mentionedUserIDs
+		body.MentionedUsers = parseInt64PointerArrayFromArgs(mentionedUsers)
 	}
 
 	// 处理 VisibleUsers 参数（可见用户列表）
 	if visibleUsers, ok := args["VisibleUsers"].([]interface{}); ok {
-		visibleUserIDs := make([]*int64, 0, len(visibleUsers))
-		for _, user := range visibleUsers {
-			if userFloat, ok := user.(float64); ok {
-				userID := int64(userFloat)
-				visibleUserIDs = append(visibleUserIDs, &userID)
-			}
-		}
-		body.VisibleUsers = visibleUserIDs
+		body.VisibleUsers = parseInt64PointerArrayFromArgs(visibleUsers)
 	}
 
 	// 处理 InvisibleUsers 参数（不可见用户列表）
 	if invisibleUsers, ok := args["InvisibleUsers"].([]interface{}); ok {
-		invisibleUserIDs := make([]*int64, 0, len(invisibleUsers))
-		for _, user := range invisibleUsers {
-			if userFloat, ok := user.(float64); ok {
-				userID := int64(userFloat)
-				invisibleUserIDs = append(invisibleUserIDs, &userID)
-			}
-		}
-		body.InvisibleUsers = invisibleUserIDs
+		body.InvisibleUsers = parseInt64PointerArrayFromArgs(invisibleUsers)
 	}
 
 	// 处理 Priority 参数（消息优先级）
@@ -612,17 +620,16 @@ func ProcessSendMessage(p *process.Process) interface{} {
 	}
 
 	// 处理 CreateTime 参数（消息创建时间）
-	if createTime, ok := args["CreateTime"].(float64); ok {
-		createTimeInt := int64(createTime)
-		body.CreateTime = &createTimeInt
+	if createTime, err := parseInt64FromArgs(args, "CreateTime"); err == nil {
+		body.CreateTime = &createTime
 	}
 
 	// 处理 RefMsgInfo 参数（引用消息）
 	if refMsgInfo, ok := args["RefMsgInfo"].(map[string]interface{}); ok {
 		refInfo := &SendMessageBodyRefMsgInfo{}
 
-		if referencedMsgId, ok := refMsgInfo["ReferencedMessageId"].(float64); ok {
-			refInfo.ReferencedMessageID = int64(referencedMsgId)
+		if referencedMsgId, err := parseInt64FromArgs(refMsgInfo, "ReferencedMessageId"); err == nil {
+			refInfo.ReferencedMessageID = referencedMsgId
 		}
 
 		if hint, ok := refMsgInfo["Hint"].(string); ok {
@@ -652,35 +659,27 @@ func ProcessRecallMessage(p *process.Process) interface{} {
 	// 使用配置文件中的AppId
 	appID := int32(volcengine.VolcEngine.IM.AppID)
 
-	conversationID, ok := args["ConversationShortId"].(float64)
-	if !ok {
-		exception.New("ConversationShortId is required", 400).Throw()
+	conversationID, err := parseInt64FromArgs(args, "ConversationShortId")
+	if err != nil {
+		exception.New("ConversationShortId is required and must be a valid integer", 400).Throw()
 	}
 
 	// 获取消息ID并转换为int64
-	var messageIDInt64 int64
-	if messageIDStr, ok := args["MessageId"].(string); ok {
-		var err error
-		messageIDInt64, err = strconv.ParseInt(messageIDStr, 10, 64)
-		if err != nil {
-			exception.New("MessageId must be a valid integer", 400).Throw()
-		}
-	} else if messageIDFloat, ok := args["MessageId"].(float64); ok {
-		messageIDInt64 = int64(messageIDFloat)
-	} else {
-		exception.New("MessageId is required", 400).Throw()
+	messageIDInt64, err := parseInt64FromArgs(args, "MessageId")
+	if err != nil {
+		exception.New("MessageId is required and must be a valid integer", 400).Throw()
 	}
 
 	// 获取用户ID（可选）
 	var participantUserID int64
-	if userID, ok := args["ParticipantUserId"].(float64); ok {
-		participantUserID = int64(userID)
+	if userID, err := parseInt64FromArgs(args, "ParticipantUserId"); err == nil {
+		participantUserID = userID
 	}
 
 	// 构建请求体
 	body := &RecallMessageBody{
 		AppID:               appID,
-		ConversationShortID: int64(conversationID),
+		ConversationShortID: conversationID,
 		MessageID:           messageIDInt64,
 		ParticipantUserID:   participantUserID,
 	}
@@ -705,29 +704,21 @@ func ProcessDeleteConversationMessage(p *process.Process) interface{} {
 	// 使用配置文件中的AppId
 	appID := int32(volcengine.VolcEngine.IM.AppID)
 
-	conversationID, ok := args["ConversationShortId"].(float64)
-	if !ok {
-		exception.New("ConversationShortId is required", 400).Throw()
+	conversationID, err := parseInt64FromArgs(args, "ConversationShortId")
+	if err != nil {
+		exception.New("ConversationShortId is required and must be a valid integer", 400).Throw()
 	}
 
 	// 获取消息ID并转换为int64
-	var messageIDInt64 int64
-	if messageIDStr, ok := args["MessageId"].(string); ok {
-		var err error
-		messageIDInt64, err = strconv.ParseInt(messageIDStr, 10, 64)
-		if err != nil {
-			exception.New("MessageId must be a valid integer", 400).Throw()
-		}
-	} else if messageIDFloat, ok := args["MessageId"].(float64); ok {
-		messageIDInt64 = int64(messageIDFloat)
-	} else {
-		exception.New("MessageId is required", 400).Throw()
+	messageIDInt64, err := parseInt64FromArgs(args, "MessageId")
+	if err != nil {
+		exception.New("MessageId is required and must be a valid integer", 400).Throw()
 	}
 
 	// 构建请求体
 	body := &DeleteConversationMessageBody{
 		AppID:               appID,
-		ConversationShortID: int64(conversationID),
+		ConversationShortID: conversationID,
 		MessageID:           messageIDInt64,
 	}
 
@@ -751,25 +742,25 @@ func ProcessGetConversationMessages(p *process.Process) interface{} {
 	// 使用配置文件中的AppId
 	appID := int32(volcengine.VolcEngine.IM.AppID)
 
-	conversationID, ok := args["ConversationShortId"].(float64)
-	if !ok {
-		exception.New("ConversationShortId is required", 400).Throw()
+	conversationID, err := parseInt64FromArgs(args, "ConversationShortId")
+	if err != nil {
+		exception.New("ConversationShortId is required and must be a valid integer", 400).Throw()
 	}
 
 	// 构建请求体
 	body := &GetConversationMessagesBody{
 		AppID:               appID,
-		ConversationShortID: int64(conversationID),
+		ConversationShortID: conversationID,
 	}
 
 	// 处理 Cursor 参数（查询起始位置）
-	if cursor, ok := args["Cursor"].(float64); ok {
-		body.Cursor = int64(cursor)
+	if cursor, err := parseInt64FromArgs(args, "Cursor"); err == nil {
+		body.Cursor = cursor
 	}
 
 	// 处理 Limit 参数（查询条数）
-	if limit, ok := args["Limit"].(float64); ok {
-		body.Limit = int64(limit)
+	if limit, err := parseInt64FromArgs(args, "Limit"); err == nil {
+		body.Limit = limit
 	}
 
 	// 处理 Reverse 参数（查询方向）
@@ -781,23 +772,14 @@ func ProcessGetConversationMessages(p *process.Process) interface{} {
 	// 构建消息ID列表
 	var messageIDs []int64
 	if msgIDList, ok := args["MessageIds"].([]interface{}); ok {
-		for _, id := range msgIDList {
-			if idFloat, ok := id.(float64); ok {
-				messageIDs = append(messageIDs, int64(idFloat))
-			} else if idStr, ok := id.(string); ok {
-				idInt64, err := strconv.ParseInt(idStr, 10, 64)
-				if err == nil {
-					messageIDs = append(messageIDs, idInt64)
-				}
-			}
-		}
+		messageIDs = parseInt64ArrayFromArgs(msgIDList)
 	}
 
 	// 如果提供了消息ID列表，则使用 GetMessages API
 	if len(messageIDs) > 0 {
 		getMsgBody := &GetMessagesBody{
 			AppID:               appID,
-			ConversationShortID: int64(conversationID),
+			ConversationShortID: conversationID,
 			MessageIDs:          messageIDs,
 		}
 
@@ -830,15 +812,15 @@ func ProcessDestroyConversation(p *process.Process) interface{} {
 	// 使用配置文件中的AppId
 	appID := int32(volcengine.VolcEngine.IM.AppID)
 
-	conversationID, ok := args["ConversationShortId"].(float64)
-	if !ok {
-		exception.New("ConversationShortId is required", 400).Throw()
+	conversationID, err := parseInt64FromArgs(args, "ConversationShortId")
+	if err != nil {
+		exception.New("ConversationShortId is required and must be a valid integer", 400).Throw()
 	}
 
 	// 构建请求体
 	body := &BatchDeleteConversationParticipantBody{
 		AppID:               appID,
-		ConversationShortID: int64(conversationID),
+		ConversationShortID: conversationID,
 	}
 
 	// 调用 API
