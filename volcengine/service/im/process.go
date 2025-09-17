@@ -816,7 +816,7 @@ func ProcessGetConversationMessages(p *process.Process) interface{} {
 	if err != nil {
 		exception.New("Get conversation messages failed: %s", 500, err.Error()).Throw()
 	}
-
+    res.request = body
 	return res
 }
 
