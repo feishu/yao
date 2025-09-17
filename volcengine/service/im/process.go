@@ -2,6 +2,7 @@ package im
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"sync"
@@ -484,17 +485,17 @@ func ProcessIsUserInConversation(p *process.Process) interface{} {
 	// 优先使用 ParticipantUserId，如果没有则使用 UserId
 	var userID int64
 	var err error
-	
+
 	if participantUserID, ok := args["ParticipantUserId"].(float64); ok {
-	    userID = int64(participantUserID)
+		userID = int64(participantUserID)
 	} else if userIdStr, ok := args["UserId"].(string); ok {
-	    userID, err = strconv.ParseInt(userIdStr, 10, 64)
-	    if err != nil {
-	        // 处理解析错误
-	        return exception.New(fmt.Sprintf("Invalid UserId format: %v", err), 400)
-	    }
+		userID, err = strconv.ParseInt(userIdStr, 10, 64)
+		if err != nil {
+			// 处理解析错误
+			return exception.New(fmt.Sprintf("Invalid UserId format: %v", err), 400)
+		}
 	} else {
-	    return exception.New("UserId or ParticipantUserId is required", 400)
+		return exception.New("UserId or ParticipantUserId is required", 400)
 	}
 
 	// 构建请求体
@@ -807,7 +808,12 @@ func ProcessGetConversationMessages(p *process.Process) interface{} {
 			exception.New("Get conversation messages failed: %s", 500, err.Error()).Throw()
 		}
 
-		return res
+		// 获取原始响应体
+		bodyBytes, _ := json.Marshal(getMsgBody)
+		return map[string]interface{}{
+			"data": res,
+			"body": string(bodyBytes),
+		}
 	}
 
 	// 使用 GetConversationMessages API 获取会话消息
@@ -816,8 +822,13 @@ func ProcessGetConversationMessages(p *process.Process) interface{} {
 	if err != nil {
 		exception.New("Get conversation messages failed: %s", 500, err.Error()).Throw()
 	}
-    res.request = body
-	return res
+
+	// 获取原始响应体
+	bodyBytes, _ := json.Marshal(body)
+	return map[string]interface{}{
+		"data": res,
+		"body": string(bodyBytes),
+	}
 }
 
 // ProcessDestroyConversation 销毁会话
