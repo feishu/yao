@@ -2,6 +2,7 @@ package im
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -14,12 +15,27 @@ import (
 
 // parseInt64FromArgs 从参数中解析int64值，支持字符串和数值类型以保持兼容性
 func parseInt64FromArgs(args map[string]interface{}, key string) (int64, error) {
-	if strVal, ok := args[key].(string); ok {
-		return strconv.ParseInt(strVal, 10, 64)
-	} else if floatVal, ok := args[key].(float64); ok {
-		return int64(floatVal), nil
+	val, exists := args[key]
+	if !exists {
+		return 0, fmt.Errorf("%s is required", key)
 	}
-	return 0, fmt.Errorf("%s is required", key)
+
+	switch v := val.(type) {
+	case string:
+		return strconv.ParseInt(v, 10, 64)
+	case float64:
+		return int64(v), nil
+	case int:
+		return int64(v), nil
+	case int64:
+		return v, nil
+	case json.Number: // 处理 JSON 数字类型
+		return v.Int64()
+	default:
+		// 尝试通过格式化字符串转换
+		strVal := fmt.Sprintf("%v", v)
+		return strconv.ParseInt(strVal, 10, 64)
+	}
 }
 
 // parseInt64ArrayFromArgs 从参数中解析int64数组，支持字符串和数值类型
