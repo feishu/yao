@@ -150,7 +150,7 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 	// 获取用户ID
 	userID, err := parseInt64FromArgs(args, "UserId")
 	if err != nil {
-		exception.New("UserId is required", 400).Throw()
+		exception.New("UserId is required", 400, err.Error()).Throw()
 	}
 
 	// 获取过期时间，默认30分钟
