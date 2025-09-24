@@ -132,7 +132,7 @@ func ProcessGetAppToken(p *process.Process) interface{} {
 	args := p.ArgsMap(0)
 
 	// 获取用户ID
-	userID, err := strconv.ParseInt(args["UserId"].(string), 10, 64)
+	userID, err := parseInt64FromArgs(args, "UserId")
 	if err != nil {
 		exception.New("UserId is required", 400).Throw()
 	}
