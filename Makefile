@@ -220,7 +220,7 @@ artifacts-macos: clean
 #	Packing
 #   ** XGEN will be renamed to DUI in the feature. and move to the new repository. **
 #   ** new repository: https://github.com/YaoApp/dui.git **
-#	mkdir -p .tmp/data/xgen
+	mkdir -p .tmp/data/xgen
 #	cp -r ./ui .tmp/data/ui
 #	cp -r ../xgen-v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
 	cp -r ../yao-init .tmp/data/init
