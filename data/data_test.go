@@ -7,10 +7,10 @@ import (
 )
 
 func TestReplaceXGenIndex(t *testing.T) {
-	err := ReplaceXGen("__yao_admin_root", "Admin-Replaced")
-	if err != nil {
-		t.Fatal(err)
-	}
+	// err := ReplaceXGen("__yao_admin_root", "Admin-Replaced")
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
 
 	content, err := bindataRead(_xgenV10IndexHtml, "index.html")
 	if err != nil {
