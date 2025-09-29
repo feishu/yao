@@ -19,7 +19,6 @@ import (
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/yao/config"
-	"github.com/yaoapp/yao/data"
 	"github.com/yaoapp/yao/i18n"
 	"github.com/yaoapp/yao/neo"
 	"github.com/yaoapp/yao/neo/assistant"
@@ -622,12 +621,8 @@ func (dsl *DSL) replaceAdminRoot() error {
 
 	root := strings.TrimPrefix(dsl.AdminRoot, "/")
 	root = strings.TrimSuffix(root, "/")
-	// err := data.ReplaceXGen("/__yao_admin_root/", fmt.Sprintf("/%s/", root))
-	// if err != nil {
-	// 	return err
-	// }
-
-	return data.ReplaceXGen("__yao_admin_root", root)
+	// return data.ReplaceXGen("__yao_admin_root", root)
+	return nil
 }
 
 // icons
