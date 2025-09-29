@@ -16,13 +16,13 @@ jobs:
         go: [1.23.4]
     runs-on: "macos-latest"
     steps:
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
+      # - name: Setup Node.js
+      #   uses: actions/setup-node@v4
+      #   with:
+      #     node-version: 18
 
-      - name: Install pnpm
-        run: npm install -g pnpm
+      # - name: Install pnpm
+      #   run: npm install -g pnpm
 
       - name: Setup Cache
         uses: actions/cache@v4
@@ -68,21 +68,21 @@ jobs:
             rm -rf $dir/__MACOSX
           done
 
-      - name: Checkout XGen v1.0
-        #  ** XGEN will be renamed to DUI in the feature. and move to the new repository. **
-        #  ** new repository: https://github.com/YaoApp/dui.git **
-        uses: actions/checkout@v4
-        with:
-          repository: feishu/xgen
-          path: xgen-v1.0
+      # - name: Checkout XGen v1.0
+      #   #  ** XGEN will be renamed to DUI in the feature. and move to the new repository. **
+      #   #  ** new repository: https://github.com/YaoApp/dui.git **
+      #   uses: actions/checkout@v4
+      #   with:
+      #     repository: feishu/xgen
+      #     path: xgen-v1.0
 
-      - name: Checkout Yao-Init
-        uses: actions/checkout@v4
-        with:
-          repository: yaoapp/yao-init
-          path: yao-init
+      # - name: Checkout Yao-Init
+      #   uses: actions/checkout@v4
+      #   with:
+      #     repository: yaoapp/yao-init
+      #     path: yao-init
 
-      - name: Move Kun, Xun, Gou, UI, V8Go
+      # - name: Move Kun, Xun, Gou, UI, V8Go
         run: |
           mv kun ../
           mv xun ../
