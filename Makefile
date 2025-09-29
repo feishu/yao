@@ -127,12 +127,11 @@ bindata:
 	
 #	Copy Files
 	cp -r .tmp/yao-init .tmp/data/init
-#	cp -r ui .tmp/data/
-#	cp -r ui .tmp/data/public
-#	cp -r xgen .tmp/data/
+	cp -r ui .tmp/data/
+	cp -r ui .tmp/data/public
+	cp -r xgen .tmp/data/
 	cp -r yao .tmp/data/
-#	# 去掉UI部份
-#	# cp -r sui/libsui .tmp/data/
+	cp -r sui/libsui .tmp/data/
 	find .tmp/data -name ".DS_Store" -type f -delete
 	go-bindata -fs -pkg data -o data/bindata.go -prefix ".tmp/data/" .tmp/data/...
 	rm -rf .tmp/data
@@ -146,8 +145,8 @@ artifacts-linux: clean
 #	Building XGEN v1.0
 	export NODE_ENV=production
 # 	rm -f ../xgen-v1.0/pnpm-lock.yaml
-#	echo "BASE=__yao_admin_root" > ../xgen-v1.0/packages/xgen/.env
-#	cd ../xgen-v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
+	echo "BASE=__yao_admin_root" > ../xgen-v1.0/packages/xgen/.env
+	cd ../xgen-v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
 
 #	Init Application
 	cd ../yao-init && rm -rf .git
@@ -165,13 +164,12 @@ artifacts-linux: clean
 #	Packing
 #   ** XGEN will be renamed to DUI in the feature. and move to the new repository. **
 #   ** new repository: https://github.com/YaoApp/dui.git **
-#	mkdir -p .tmp/data/xgen
-#	cp -r ./ui .tmp/data/ui
-#	cp -r ../xgen-v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
+	mkdir -p .tmp/data/xgen
+	cp -r ./ui .tmp/data/ui
+	cp -r ../xgen-v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
 	cp -r ../yao-init .tmp/data/init
 	cp -r yao .tmp/data/
-#	# 去掉UI部份
-#	# cp -r sui/libsui .tmp/data/
+	cp -r sui/libsui .tmp/data/
 	go-bindata -fs -pkg data -o data/bindata.go -prefix ".tmp/data/" .tmp/data/...
 	rm -rf .tmp/data
 
@@ -222,13 +220,12 @@ artifacts-macos: clean
 #	Packing
 #   ** XGEN will be renamed to DUI in the feature. and move to the new repository. **
 #   ** new repository: https://github.com/YaoApp/dui.git **
-#	mkdir -p .tmp/data/xgen
+	mkdir -p .tmp/data/xgen
 #	cp -r ./ui .tmp/data/ui
 #	cp -r ../xgen-v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
 	cp -r ../yao-init .tmp/data/init
 	cp -r yao .tmp/data/
-#	# 去掉UI部份
-#	# cp -r sui/libsui .tmp/data/
+#	cp -r sui/libsui .tmp/data/
 	go-bindata -fs -pkg data -o data/bindata.go -prefix ".tmp/data/" .tmp/data/...
 	rm -rf .tmp/data
 
@@ -288,10 +285,10 @@ release: clean
 #   ** XGEN will be renamed to DUI in the feature. and move to the new repository. **
 #   ** new repository: https://github.com/YaoApp/dui.git **
 	export NODE_ENV=production
-#	git clone https://github.com/feishu/xgen.git .tmp/xgen/v1.0
+	git clone https://github.com/feishu/xgen.git .tmp/xgen/v1.0
 # 	cd .tmp/xgen/v1.0 && git checkout 5002c3fded585aaa69a4366135b415ea3234964e
-#	echo "BASE=__yao_admin_root" > .tmp/xgen/v1.0/packages/xgen/.env
-#	cd .tmp/xgen/v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
+	echo "BASE=__yao_admin_root" > .tmp/xgen/v1.0/packages/xgen/.env
+	cd .tmp/xgen/v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
 
 #	Checkout init
 	git clone https://github.com/YaoApp/yao-init.git .tmp/yao-init
@@ -308,14 +305,12 @@ release: clean
 #	rm -rf .tmp/yao-builder-latest.tar.gz
 
 #	Packing
-# 去掉UI部份
-#	 mkdir -p .tmp/data/xgen
-#	cp -r ./ui .tmp/data/ui
+	mkdir -p .tmp/data/xgen
+	cp -r ./ui .tmp/data/ui
 	cp -r ./yao .tmp/data/yao
-#	# 去掉UI部份
-#	# cp -r ./sui/libsui .tmp/data/libsui
-#	cp -r .tmp/xgen/v0.9/dist .tmp/data/xgen/v0.9
-#	cp -r .tmp/xgen/v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
+	cp -r ./sui/libsui .tmp/data/libsui
+	cp -r .tmp/xgen/v0.9/dist .tmp/data/xgen/v0.9
+	cp -r .tmp/xgen/v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
 	cp -r .tmp/yao-init .tmp/data/init
 	go-bindata -fs -pkg data -o data/bindata.go -prefix ".tmp/data/" .tmp/data/...
 	rm -rf .tmp/data
@@ -354,10 +349,10 @@ linux-release: clean
 #   ** XGEN will be renamed to DUI in the feature. and move to the new repository. **
 #   ** new repository: https://github.com/YaoApp/dui.git **
 	export NODE_ENV=production
-#	git clone https://github.com/feishu/xgen.git .tmp/xgen/v1.0
-#	rm -f .tmp/xgen/v1.0/pnpm-lock.yaml
-#	echo "BASE=__yao_admin_root" > .tmp/xgen/v1.0/packages/xgen/.env
-#	cd .tmp/xgen/v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
+	git clone https://github.com/feishu/xgen.git .tmp/xgen/v1.0
+	rm -f .tmp/xgen/v1.0/pnpm-lock.yaml
+	echo "BASE=__yao_admin_root" > .tmp/xgen/v1.0/packages/xgen/.env
+	cd .tmp/xgen/v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
 
 #   Setup UI
 	cd .tmp/xgen/v1.0/packages/setup  && pnpm install --no-frozen-lockfile && pnpm run build
@@ -378,12 +373,12 @@ linux-release: clean
 # 	rm -rf .tmp/yao-builder-latest.tar.gz
 
 #	Packing
-#	mkdir -p .tmp/data/xgen
-#	cp -r ./ui .tmp/data/ui
+	mkdir -p .tmp/data/xgen
+	cp -r ./ui .tmp/data/ui
 	cp -r ./yao .tmp/data/yao
-#	cp -r .tmp/xgen/v0.9/dist .tmp/data/xgen/v0.9
-#	cp -r .tmp/xgen/v1.0/packages/setup/build .tmp/data/xgen/setup
-#	cp -r .tmp/xgen/v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
+	cp -r .tmp/xgen/v0.9/dist .tmp/data/xgen/v0.9
+	cp -r .tmp/xgen/v1.0/packages/setup/build .tmp/data/xgen/setup
+	cp -r .tmp/xgen/v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
 	cp -r .tmp/yao-init .tmp/data/init
 	go-bindata -fs -pkg data -o data/bindata.go -prefix ".tmp/data/" .tmp/data/...
 	rm -rf .tmp/data
