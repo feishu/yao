@@ -82,8 +82,8 @@ var RootCmd = rootCmd
 
 var rootCmd = &cobra.Command{
 	Use:   share.BUILDNAME,
-	Short: "Yao App Engine",
-	Long:  `Yao App Engine`,
+	Short: "ZBao AI IH Engine",
+	Long:  `Zhenbao AI Internet Hospital Engine`,
 	Args:  cobra.MinimumNArgs(1),
 	CompletionOptions: cobra.CompletionOptions{
 		DisableDefaultCmd: true,
