@@ -238,9 +238,29 @@ func convertLongFieldsRecursiveWithPath(data interface{}, longFields []string, c
 		return result
 	case []interface{}:
 		result := make([]interface{}, len(v))
+		
+		// 检查当前路径是否在longFields中
+		currentPathStr := buildCurrentPath(currentPath)
+		isCurrentFieldLong := false
+		for _, field := range longFields {
+			if field == currentPathStr {
+				isCurrentFieldLong = true
+				break
+			}
+		}
+		
 		for i, item := range v {
-			// 数组元素不改变路径上下文
-			result[i] = convertLongFieldsRecursiveWithPath(item, longFields, currentPath, toLongString)
+			if isCurrentFieldLong {
+				// 如果当前数组字段在longFields中，尝试转换数组元素
+				if toLongString {
+					result[i] = convertToLongString(item)
+				} else {
+					result[i] = convertToLongInt(item)
+				}
+			} else {
+				// 数组元素不改变路径上下文
+				result[i] = convertLongFieldsRecursiveWithPath(item, longFields, currentPath, toLongString)
+			}
 		}
 		return result
 	default:

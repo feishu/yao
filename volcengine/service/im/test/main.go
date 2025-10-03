@@ -3,193 +3,371 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
+	"regexp"
 )
 
-func main() {
-	fmt.Println("=== 测试大整数转换功能 ===")
-
-	// 测试用例1: 包含_longFields的请求体
-	testCase1 := map[string]interface{}{
-		"user_id":         "7556830587647361305", // 大整数字符串
-		"conversation_id": "9876543210123456789", // 大整数字符串
-		"message":         "Hello World",
-		"timestamp":       "1640995200000", // 时间戳字符串
-		"_longFields":     []string{"user_id", "conversation_id", "timestamp"},
+// 测试数组字符串转长整型的问题
+func testArrayConversion() {
+	fmt.Println("=== 测试数组字符串转长整型问题 ===")
+	
+	// 用户提供的测试数据
+	testData := map[string]interface{}{
+		"ConversationShortId": []interface{}{"7556830587647361305"},
+		"_longFields": []string{"ConversationShortId"},
 	}
 
-	fmt.Println("测试用例1 - 包含_longFields的请求体:")
-	testMarshalWithLongSupport(testCase1)
-
-	// 测试用例2: 不包含_longFields的普通请求体
-	testCase2 := map[string]interface{}{
-		"user_id": 123456,
-		"message": "Normal message",
-		"active":  true,
-	}
-
-	fmt.Println("\n测试用例2 - 普通请求体:")
-	testMarshalWithLongSupport(testCase2)
-
-	// 测试用例3: 边界情况 - 无效数字字符串
-	testCase3 := map[string]interface{}{
-		"user_id":     "invalid_number",
-		"valid_id":    "7556830587647361305",
-		"_longFields": []string{"user_id", "valid_id"},
-	}
-
-	fmt.Println("\n测试用例3 - 包含无效数字字符串:")
-	testMarshalWithLongSupport(testCase3)
-
-	// 测试用户提供的数据
-	fmt.Println("\n=== 测试用户提供的数据 ===")
-	testUserData()
-
-	// 测试响应解析
-	fmt.Println("\n=== 测试响应解析功能 ===")
-	testResponseUnmarshaling()
-
-	fmt.Println("\n测试完成!")
-}
-
-func testMarshalWithLongSupport(testData map[string]interface{}) {
-	fmt.Printf("输入数据: %+v\n", testData)
+	fmt.Printf("原始数据: %+v\n", testData)
 
 	// 提取longFields
 	longFields, processedBody := extractLongFields(testData)
 	fmt.Printf("提取的longFields: %v\n", longFields)
 	fmt.Printf("处理后的body: %+v\n", processedBody)
 
-	// 序列化
-	result, err := marshalToJsonWithLongSupport(processedBody)
+	// 动态处理longFields中指定的字段
+	if len(longFields) > 0 {
+		fmt.Println("\n开始处理longFields中的字段:")
+		for _, field := range longFields {
+			fmt.Printf("处理字段: %s\n", field)
+			
+			if value, exists := processedBody.(map[string]interface{})[field]; exists {
+				fmt.Printf("  原始值: %v (类型: %T)\n", value, value)
+				
+				switch v := value.(type) {
+				case []interface{}:
+					fmt.Printf("  检测到数组，包含 %d 个元素\n", len(v))
+					convertedArray := make([]interface{}, len(v))
+					for i, item := range v {
+						if str, ok := item.(string); ok {
+							if num, err := strconv.ParseInt(str, 10, 64); err == nil {
+								convertedArray[i] = num
+								fmt.Printf("    [%d]: \"%s\" -> %d (string -> int64) ✅\n", i, str, num)
+							} else {
+								convertedArray[i] = item
+								fmt.Printf("    [%d]: %v (转换失败，保持原值) ❌\n", i, item)
+							}
+						} else {
+							convertedArray[i] = item
+							fmt.Printf("    [%d]: %v (非字符串，保持原值)\n", i, item)
+						}
+					}
+					processedBody.(map[string]interface{})[field] = convertedArray
+					fmt.Printf("  转换后的数组: %v\n", convertedArray)
+				case string:
+					if num, err := strconv.ParseInt(v, 10, 64); err == nil {
+						processedBody.(map[string]interface{})[field] = num
+						fmt.Printf("  \"%s\" -> %d (string -> int64) ✅\n", v, num)
+					} else {
+						fmt.Printf("  \"%s\" (转换失败，保持原值) ❌\n", v)
+					}
+				default:
+					fmt.Printf("  不支持的类型: %T，保持原值\n", v)
+				}
+			} else {
+				fmt.Printf("  字段 %s 不存在\n", field)
+			}
+		}
+	}
+
+	fmt.Printf("\n最终处理结果: %+v\n", processedBody)
+}
+
+// 测试convertStringFieldsToLongs方法
+func testConvertStringFieldsToLongs() {
+	fmt.Println("\n=== 测试convertStringFieldsToLongs方法 ===")
+	
+	// 测试用例1：基本字符串转换
+	fmt.Println("\n--- 测试用例1：基本字符串转换 ---")
+	testCase1 := map[string]interface{}{
+		"AppId": "7556830587647361305",
+		"Operator": "7556830587647361305",
+		"ParticipantUserId": "7556830587647361305",
+	}
+	longFields1 := []string{"AppId", "Operator", "ParticipantUserId"}
+	
+	fmt.Printf("输入数据: %+v\n", testCase1)
+	fmt.Printf("longFields: %v\n", longFields1)
+	
+	result1 := convertStringFieldsToLongs(testCase1, longFields1)
+	fmt.Printf("转换结果: %+v\n", result1)
+	
+	// 测试用例2：数组字符串转换
+	fmt.Println("\n--- 测试用例2：数组字符串转换 ---")
+	testCase2 := map[string]interface{}{
+		"ConversationShortId": []interface{}{"7556830587647361305", "9876543210123456789"},
+		"AppId": "7556830587647361305",
+	}
+	longFields2 := []string{"ConversationShortId", "AppId"}
+	
+	fmt.Printf("输入数据: %+v\n", testCase2)
+	fmt.Printf("longFields: %v\n", longFields2)
+	
+	result2 := convertStringFieldsToLongs(testCase2, longFields2)
+	fmt.Printf("转换结果: %+v\n", result2)
+	
+	// 测试用例3：嵌套对象转换
+	fmt.Println("\n--- 测试用例3：嵌套对象转换 ---")
+	testCase3 := map[string]interface{}{
+		"user": map[string]interface{}{
+			"id": "7556830587647361305",
+			"name": "test_user",
+		},
+		"metadata": map[string]interface{}{
+			"timestamp": "1640995200000",
+		},
+	}
+	longFields3 := []string{"user.id", "metadata.timestamp"}
+	
+	fmt.Printf("输入数据: %+v\n", testCase3)
+	fmt.Printf("longFields: %v\n", longFields3)
+	
+	result3 := convertStringFieldsToLongs(testCase3, longFields3)
+	fmt.Printf("转换结果: %+v\n", result3)
+}
+
+// convertStringFieldsToLongs 将指定字段从字符串转换为int64
+func convertStringFieldsToLongs(data interface{}, longFields []string) interface{} {
+	return convertLongFieldsRecursiveWithPath(data, longFields, []string{}, false)
+}
+
+// convertLongFieldsRecursiveWithPath 递归处理数据结构，支持路径上下文
+func convertLongFieldsRecursiveWithPath(data interface{}, longFields []string, currentPath []string, toLongString bool) interface{} {
+	switch v := data.(type) {
+	case map[string]interface{}:
+		result := make(map[string]interface{})
+		for key, value := range v {
+			newPath := append(currentPath, key)
+			
+			// 检查当前字段是否需要转换
+			if isLongIntegerFieldWithPath(key, currentPath, longFields) {
+				if toLongString {
+					result[key] = convertToLongString(value)
+				} else {
+					result[key] = convertToLongInt(value)
+				}
+			} else {
+				// 递归处理嵌套结构
+				result[key] = convertLongFieldsRecursiveWithPath(value, longFields, newPath, toLongString)
+			}
+		}
+		return result
+		
+	case []interface{}:
+		result := make([]interface{}, len(v))
+		for i, item := range v {
+			result[i] = convertLongFieldsRecursiveWithPath(item, longFields, currentPath, toLongString)
+		}
+		return result
+		
+	default:
+		return data
+	}
+}
+
+// isLongIntegerFieldWithPath 检查字段是否为长整数字段（支持路径）
+func isLongIntegerFieldWithPath(fieldName string, currentPath []string, longFields []string) bool {
+	// 构建当前完整路径
+	fullPath := buildCurrentPath(append(currentPath, fieldName))
+	
+	for _, longField := range longFields {
+		// 直接匹配字段名
+		if longField == fieldName {
+			return true
+		}
+		// 匹配完整路径
+		if longField == fullPath {
+			return true
+		}
+	}
+	return false
+}
+
+// buildCurrentPath 构建当前路径字符串
+func buildCurrentPath(pathSegments []string) string {
+	return strings.Join(pathSegments, ".")
+}
+
+// convertToLongInt 将值转换为int64
+func convertToLongInt(value interface{}) interface{} {
+	switch v := value.(type) {
+	case string:
+		if num, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return num
+		}
+		return value
+	case []interface{}:
+		result := make([]interface{}, len(v))
+		for i, item := range v {
+			result[i] = convertToLongInt(item)
+		}
+		return result
+	case int:
+		return int64(v)
+	case int32:
+		return int64(v)
+	case int64:
+		return v
+	case float64:
+		return int64(v)
+	default:
+		return value
+	}
+}
+
+// convertToLongString 将值转换为字符串
+func convertToLongString(value interface{}) interface{} {
+	switch v := value.(type) {
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case int:
+		return strconv.Itoa(v)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
+	case []interface{}:
+		result := make([]interface{}, len(v))
+		for i, item := range v {
+			result[i] = convertToLongString(item)
+		}
+		return result
+	default:
+		return value
+	}
+}
+
+// isLargeNumberString 检查字符串是否为大数字
+func isLargeNumberString(s string) bool {
+	matched, _ := regexp.MatchString(`^\d{15,}$`, s)
+	return matched
+}
+
+func main() {
+	// 测试数组转换
+	testArrayConversion()
+	
+	// 测试convertStringFieldsToLongs方法
+	testConvertStringFieldsToLongs()
+	
+	// 测试序列化
+	testData := map[string]interface{}{
+		"AppId":               "7556830587647361305",
+		"ConversationShortId": []interface{}{"7556830587647361305"},
+		"Operator":            "7556830587647361305",
+		"ParticipantUserId":   "7556830587647361305",
+		"_longFields":         []string{"AppId", "Operator", "ParticipantUserId", "ConversationShortId"},
+	}
+	
+	testMarshalWithLongSupport(testData)
+	
+	// 测试响应解析
+	testResponseUnmarshaling()
+	
+	// 测试用户数据
+	testUserData()
+}
+
+func testMarshalWithLongSupport(testData map[string]interface{}) {
+	fmt.Println("\n=== 测试序列化支持 ===")
+	fmt.Printf("测试数据: %+v\n", testData)
+	
+	jsonData, err := marshalToJsonWithLongSupport(testData)
 	if err != nil {
-		fmt.Printf("序列化错误: %v\n", err)
+		fmt.Printf("序列化失败: %v\n", err)
 		return
 	}
-
-	fmt.Printf("序列化结果: %s\n", string(result))
-
-	// 验证JSON是否有效
-	var jsonCheck interface{}
-	if err := json.Unmarshal(result, &jsonCheck); err != nil {
-		fmt.Printf("JSON验证失败: %v\n", err)
-	} else {
-		fmt.Println("JSON验证成功")
-	}
+	
+	fmt.Printf("序列化结果: %s\n", string(jsonData))
 }
 
 func testResponseUnmarshaling() {
-	fmt.Println("测试响应反序列化...")
-
-	// 模拟API响应数据
-	responseData := `{
-		"ResponseMetadata": {
-			"RequestId": "test-request-id",
-			"Action": "TestAction",
-			"Version": "2023-01-01",
-			"Service": "im",
-			"Region": "us-east-1",
-			"Error": null
-		},
-		"Result": {
-			"user_id": 1234567890123456789,
-			"conversation_id": 9876543210987654321,
-			"timestamp": 1640995200000,
-			"message": "Hello World"
-		}
-	}`
-
-	var result interface{}
-	err := json.Unmarshal([]byte(responseData), &result)
-	if err != nil {
-		fmt.Printf("响应解析错误: %v\n", err)
+	fmt.Println("\n=== 测试响应解析 ===")
+	
+	responseJSON := `{
+                "AppId": "7556830587647361305",
+                "Operator": "7556830587647361305", 
+                "ParticipantUserId": "7556830587647361305",
+                "ConversationShortId": ["7556830587647361305"],
+                "_longFields": ["AppId", "Operator", "ParticipantUserId", "ConversationShortId"]
+        }`
+	
+	fmt.Printf("响应JSON: %s\n", responseJSON)
+	
+	var responseData map[string]interface{}
+	if err := json.Unmarshal([]byte(responseJSON), &responseData); err != nil {
+		fmt.Printf("解析失败: %v\n", err)
 		return
 	}
-
-	// 使用 convertInt64ToStringRecursive 转换 int64 类型
-	convertedResult := convertInt64ToStringRecursive(result)
-	fmt.Printf("解析结果: %+v\n", convertedResult)
-
-	// 验证长整数是否被正确转换为字符串
-	if resultMap, ok := convertedResult.(map[string]interface{}); ok {
-		if resultData, ok := resultMap["Result"].(map[string]interface{}); ok {
-			fmt.Printf("user_id类型: %T, 值: %v\n", resultData["user_id"], resultData["user_id"])
-			fmt.Printf("conversation_id类型: %T, 值: %v\n", resultData["conversation_id"], resultData["conversation_id"])
-			fmt.Printf("timestamp类型: %T, 值: %v\n", resultData["timestamp"], resultData["timestamp"])
-		}
-	}
+	
+	fmt.Printf("解析后的数据: %+v\n", responseData)
+	
+	longFields, processedBody := extractLongFields(responseData)
+	fmt.Printf("提取的longFields: %v\n", longFields)
+	
+	convertedData := convertLongFieldsToInt64(processedBody.(map[string]interface{}), longFields)
+	fmt.Printf("转换后的数据: %+v\n", convertedData)
 }
 
-// 辅助函数 - 从trait.go复制的逻辑
+// extractLongFields 提取_longFields并返回处理后的数据
 func extractLongFields(body interface{}) ([]string, interface{}) {
-	if body == nil {
-		return nil, body
-	}
-
-	bodyMap, ok := body.(map[string]interface{})
-	if !ok {
-		return nil, body
-	}
-
-	longFieldsRaw, exists := bodyMap["_longFields"]
-	if !exists {
-		return nil, body
-	}
-
-	// 提取longFields数组
-	var longFields []string
-	switch lf := longFieldsRaw.(type) {
-	case []interface{}:
-		for _, field := range lf {
-			if fieldStr, ok := field.(string); ok {
-				longFields = append(longFields, fieldStr)
+	if bodyMap, ok := body.(map[string]interface{}); ok {
+		if longFieldsInterface, exists := bodyMap["_longFields"]; exists {
+			var longFields []string
+			if longFieldsArray, ok := longFieldsInterface.([]interface{}); ok {
+				for _, field := range longFieldsArray {
+					if fieldStr, ok := field.(string); ok {
+						longFields = append(longFields, fieldStr)
+					}
+				}
 			}
+			
+			// 创建新的map，排除_longFields
+			newBody := make(map[string]interface{})
+			for key, value := range bodyMap {
+				if key != "_longFields" {
+					newBody[key] = value
+				}
+			}
+			
+			return longFields, newBody
 		}
-	case []string:
-		longFields = lf
 	}
-
-	// 创建新的body，移除_longFields字段
-	newBody := make(map[string]interface{})
-	for key, value := range bodyMap {
-		if key != "_longFields" {
-			newBody[key] = value
-		}
-	}
-
-	return longFields, newBody
+	return nil, body
 }
 
 func marshalToJsonWithLongSupport(model interface{}) ([]byte, error) {
-	// 简化版本，直接使用标准JSON序列化
-	return json.Marshal(model)
+	convertedModel := convertLargeNumbersToString(model)
+	return json.Marshal(convertedModel)
 }
 
-
-
-// convertInt64ToStringRecursive 递归地将 int64 类型转换为字符串
-// convertLongFieldsToInt64 根据 longFields 列表将指定字段从字符串转换为 int64
+// convertLongFieldsToInt64 将指定字段转换为int64类型
 func convertLongFieldsToInt64(data map[string]interface{}, longFields []string) map[string]interface{} {
 	result := make(map[string]interface{})
 	
-	// 创建 longFields 的映射以便快速查找
-	longFieldsMap := make(map[string]bool)
-	for _, field := range longFields {
-		longFieldsMap[field] = true
-	}
-	
-	// 遍历数据并转换指定字段
 	for key, value := range data {
-		if longFieldsMap[key] {
-			// 如果是 _longFields 中指定的字段，尝试转换为 int64
-			if _, ok := value.(string); ok {
-				// 这里模拟将字符串转换为 int64
-				// 在实际应用中，这里应该是将字符串解析为数字
-				result[key] = int64(7556900191690277144) // 模拟转换结果
+		// 检查是否为长整数字段
+		isLongField := false
+		for _, field := range longFields {
+			if field == key {
+				isLongField = true
+				break
+			}
+		}
+		
+		if isLongField {
+			// 转换为int64
+			if strValue, ok := value.(string); ok {
+				if intValue, err := strconv.ParseInt(strValue, 10, 64); err == nil {
+					result[key] = intValue
+				} else {
+					result[key] = value // 转换失败，保持原值
+				}
 			} else {
-				result[key] = value
+				result[key] = value // 非字符串，保持原值
 			}
 		} else {
-			result[key] = value
+			result[key] = value // 非长整数字段，保持原值
 		}
 	}
 	
@@ -197,98 +375,53 @@ func convertLongFieldsToInt64(data map[string]interface{}, longFields []string) 
 }
 
 func testUserData() {
-	// 用户提供的测试数据
-	testData := `{
-		"AppId": 909941,
-		"Barrier": false,
-		"ConversationShortId": "7556900191690277144",
-		"Operator": 45678231,
-		"ParticipantInfos": [
-			{
-				"ParticipantUserId": 45678231
+	fmt.Println("\n=== 测试用户数据 ===")
+	userData := map[string]interface{}{
+		"user_id":      "7556830587647361305",
+		"username":     "test_user",
+		"created_time": "1640995200000",
+		"profile": map[string]interface{}{
+			"avatar_id": "9876543210123456789",
+			"bio":       "Hello World",
+		},
+		"friends": []interface{}{
+			map[string]interface{}{
+				"friend_id": "1234567890123456789",
+				"name":      "Friend 1",
 			},
-			{
-				"ParticipantUserId": 10987654
-			}
-		],
-		"_longFields": [
-			"ConversationShortId"
-		]
-	}`
+			map[string]interface{}{
+				"friend_id": "9876543210987654321",
+				"name":      "Friend 2",
+			},
+		},
+	}
 
-	fmt.Println("原始JSON数据:")
-	fmt.Println(testData)
+	fmt.Printf("用户数据: %+v\n", userData)
 
-	// 解析 JSON
-	var data map[string]interface{}
-	err := json.Unmarshal([]byte(testData), &data)
+	// 转换为JSON字符串
+	jsonData, err := marshalToJsonWithLongSupport(userData)
 	if err != nil {
-		fmt.Printf("JSON 解析失败: %v\n", err)
+		fmt.Printf("序列化失败: %v\n", err)
 		return
 	}
 
-	fmt.Println("\n解析后的数据类型:")
-	for key, value := range data {
-		fmt.Printf("  %s: %T = %v\n", key, value, value)
-	}
+	fmt.Printf("JSON数据: %s\n", string(jsonData))
 
-	// 提取 _longFields 并处理数据
-	longFields, processedData := extractLongFields(data)
-	fmt.Printf("\n提取的 longFields: %v\n", longFields)
-	
-	// 检查 ConversationShortId 的具体值和类型
-	fmt.Println("\nConversationShortId 详细分析:")
-	processedMap := processedData.(map[string]interface{})
-	conversationId := processedMap["ConversationShortId"]
-	fmt.Printf("  类型: %T\n", conversationId)
-	fmt.Printf("  值: %v\n", conversationId)
-	
-	// 根据 _longFields 转换指定字段为 int64
-	fmt.Println("\n应用 _longFields 转换:")
-	convertedData := convertLongFieldsToInt64(processedMap, longFields)
-	
-	fmt.Println("\n转换后的数据:")
-	convertedJSON, err := json.MarshalIndent(convertedData, "", "  ")
-	if err != nil {
-		fmt.Printf("JSON 序列化失败: %v\n", err)
+	// 解析回来
+	var parsedData map[string]interface{}
+	if err := json.Unmarshal(jsonData, &parsedData); err != nil {
+		fmt.Printf("解析失败: %v\n", err)
 		return
 	}
-	fmt.Println(string(convertedJSON))
 
-	fmt.Println("\n转换后的数据类型:")
-	for key, value := range convertedData {
-		fmt.Printf("  %s: %T = %v\n", key, value, value)
-	}
+	fmt.Printf("解析后的数据: %+v\n", parsedData)
 }
 
 func convertLargeNumbersToString(data interface{}) interface{} {
-	switch v := data.(type) {
-	case map[string]interface{}:
-		result := make(map[string]interface{})
-		for key, value := range v {
-			result[key] = convertLargeNumbersToString(value)
-		}
-		return result
-	case []interface{}:
-		result := make([]interface{}, len(v))
-		for i, value := range v {
-			result[i] = convertLargeNumbersToString(value)
-		}
-		return result
-	case int64:
-		return fmt.Sprintf("%d", v)
-	case float64:
-		// JSON 中的大整数可能被解析为 float64
-		if v == float64(int64(v)) {
-			return fmt.Sprintf("%.0f", v)
-		}
-		return v
-	default:
-		return v
-	}
+	return convertInt64ToStringRecursive(data)
 }
 
-// convertInt64ToStringRecursive 递归地将 int64 类型转换为字符串
+// convertInt64ToStringRecursive 递归地将int64转换为字符串
 func convertInt64ToStringRecursive(data interface{}) interface{} {
 	switch v := data.(type) {
 	case map[string]interface{}:
@@ -299,19 +432,23 @@ func convertInt64ToStringRecursive(data interface{}) interface{} {
 		return result
 	case []interface{}:
 		result := make([]interface{}, len(v))
-		for i, value := range v {
-			result[i] = convertInt64ToStringRecursive(value)
+		for i, item := range v {
+			result[i] = convertInt64ToStringRecursive(item)
 		}
 		return result
 	case int64:
-		return fmt.Sprintf("%d", v)
-	case float64:
-		// JSON 中的大整数可能被解析为 float64
-		if v == float64(int64(v)) {
-			return fmt.Sprintf("%.0f", v)
+		// 检查是否为大数字（超过JavaScript安全整数范围）
+		if v > 9007199254740991 || v < -9007199254740991 {
+			return strconv.FormatInt(v, 10)
+		}
+		return v
+	case int:
+		int64Val := int64(v)
+		if int64Val > 9007199254740991 || int64Val < -9007199254740991 {
+			return strconv.FormatInt(int64Val, 10)
 		}
 		return v
 	default:
-		return v
+		return data
 	}
 }
