@@ -278,17 +278,17 @@ release: clean
 	mkdir .tmp
 
 #	Building XGEN v0.9
-	mkdir -p .tmp/xgen/v0.9/dist
-	echo "XGEN v0.9" > .tmp/xgen/v0.9/dist/index.html
+#	mkdir -p .tmp/xgen/v0.9/dist
+#	echo "XGEN v0.9" > .tmp/xgen/v0.9/dist/index.html
 
 #	Building XGEN v1.0
 #   ** XGEN will be renamed to DUI in the feature. and move to the new repository. **
 #   ** new repository: https://github.com/YaoApp/dui.git **
 	export NODE_ENV=production
-	git clone https://github.com/feishu/xgen.git .tmp/xgen/v1.0
+#	git clone https://github.com/feishu/xgen.git .tmp/xgen/v1.0
 # 	cd .tmp/xgen/v1.0 && git checkout 5002c3fded585aaa69a4366135b415ea3234964e
-	echo "BASE=__yao_admin_root" > .tmp/xgen/v1.0/packages/xgen/.env
-	cd .tmp/xgen/v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
+#	echo "BASE=__yao_admin_root" > .tmp/xgen/v1.0/packages/xgen/.env
+#	cd .tmp/xgen/v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
 
 #	Checkout init
 	git clone https://github.com/YaoApp/yao-init.git .tmp/yao-init
@@ -306,11 +306,11 @@ release: clean
 
 #	Packing
 	mkdir -p .tmp/data/xgen
-	cp -r ./ui .tmp/data/ui
+#	cp -r ./ui .tmp/data/ui
 	cp -r ./yao .tmp/data/yao
-	cp -r ./sui/libsui .tmp/data/libsui
-	cp -r .tmp/xgen/v0.9/dist .tmp/data/xgen/v0.9
-	cp -r .tmp/xgen/v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
+#	cp -r ./sui/libsui .tmp/data/libsui
+#	cp -r .tmp/xgen/v0.9/dist .tmp/data/xgen/v0.9
+#	cp -r .tmp/xgen/v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
 	cp -r .tmp/yao-init .tmp/data/init
 	go-bindata -fs -pkg data -o data/bindata.go -prefix ".tmp/data/" .tmp/data/...
 	rm -rf .tmp/data
@@ -339,23 +339,23 @@ linux-release: clean
 	mkdir .tmp
 
 #	Building XGEN v0.9
-	git clone https://github.com/YaoApp/xgen-deprecated.git .tmp/xgen/v0.9
-	sed -ie "s/url('\/icon/url('\/xiang\/icon/g" .tmp/xgen/v0.9/public/icon/md_icon.css
-	cd .tmp/xgen/v0.9 && yarn install && yarn build
-	mkdir -p .tmp/xgen/v0.9
-	cp -r xgen/v0.9 .tmp/xgen/v0.9/dist
+#	git clone https://github.com/YaoApp/xgen-deprecated.git .tmp/xgen/v0.9
+#	sed -ie "s/url('\/icon/url('\/xiang\/icon/g" .tmp/xgen/v0.9/public/icon/md_icon.css
+#	cd .tmp/xgen/v0.9 && yarn install && yarn build
+#	mkdir -p .tmp/xgen/v0.9
+#	cp -r xgen/v0.9 .tmp/xgen/v0.9/dist
 
 #	Building XGEN v1.0
 #   ** XGEN will be renamed to DUI in the feature. and move to the new repository. **
 #   ** new repository: https://github.com/YaoApp/dui.git **
 	export NODE_ENV=production
-	git clone https://github.com/feishu/xgen.git .tmp/xgen/v1.0
-	rm -f .tmp/xgen/v1.0/pnpm-lock.yaml
-	echo "BASE=__yao_admin_root" > .tmp/xgen/v1.0/packages/xgen/.env
-	cd .tmp/xgen/v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
+#	git clone https://github.com/feishu/xgen.git .tmp/xgen/v1.0
+#	rm -f .tmp/xgen/v1.0/pnpm-lock.yaml
+#	echo "BASE=__yao_admin_root" > .tmp/xgen/v1.0/packages/xgen/.env
+#	cd .tmp/xgen/v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
 
 #   Setup UI
-	cd .tmp/xgen/v1.0/packages/setup  && pnpm install --no-frozen-lockfile && pnpm run build
+#	cd .tmp/xgen/v1.0/packages/setup  && pnpm install --no-frozen-lockfile && pnpm run build
 
 
 #	Checkout init
@@ -374,11 +374,11 @@ linux-release: clean
 
 #	Packing
 	mkdir -p .tmp/data/xgen
-	cp -r ./ui .tmp/data/ui
+#	cp -r ./ui .tmp/data/ui
 	cp -r ./yao .tmp/data/yao
-	cp -r .tmp/xgen/v0.9/dist .tmp/data/xgen/v0.9
-	cp -r .tmp/xgen/v1.0/packages/setup/build .tmp/data/xgen/setup
-	cp -r .tmp/xgen/v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
+#	cp -r .tmp/xgen/v0.9/dist .tmp/data/xgen/v0.9
+#	cp -r .tmp/xgen/v1.0/packages/setup/build .tmp/data/xgen/setup
+#	cp -r .tmp/xgen/v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
 	cp -r .tmp/yao-init .tmp/data/init
 	go-bindata -fs -pkg data -o data/bindata.go -prefix ".tmp/data/" .tmp/data/...
 	rm -rf .tmp/data
