@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"regexp"
+	"strconv"
+	"strings"
 
 	common "github.com/yaoapp/yao/volcengine/base"
 )
@@ -127,6 +130,286 @@ func unmarshalResultInto(data []byte, result interface{}) error {
 
 	if err := json.Unmarshal(data, result); err != nil {
 		return fmt.Errorf("fail to unmarshal result, %v", err)
+	}
+
+	return nil
+}
+
+// 大整数处理相关的辅助函数
+
+// isLongIntegerField 判断字段是否应该被视为长整数字段
+// 基于字段名称模式和显式longFields列表进行判断
+// parseDotPath 解析点号路径，返回路径片段
+func parseDotPath(path string) []string {
+	if path == "" {
+		return []string{}
+	}
+	return strings.Split(path, ".")
+}
+
+// buildCurrentPath 构建当前路径字符串
+func buildCurrentPath(pathSegments []string) string {
+	return strings.Join(pathSegments, ".")
+}
+
+// isLongIntegerFieldWithPath 检查字段是否为长整数字段，支持路径上下文
+func isLongIntegerFieldWithPath(fieldName string, currentPath []string, longFields []string) bool {
+	// 构建完整路径
+	fullPath := buildCurrentPath(append(currentPath, fieldName))
+
+	// 检查是否在显式longFields列表中（支持点号路径）
+	for _, field := range longFields {
+		if field == fieldName || field == fullPath {
+			return true
+		}
+	}
+
+	// 基于字段名称模式的自动识别
+	fieldLower := strings.ToLower(fieldName)
+
+	// 以_id或id结尾的字段
+	if strings.HasSuffix(fieldLower, "_id") || strings.HasSuffix(fieldLower, "id") {
+		return true
+	}
+
+	// 包含timestamp或time的字段
+	if strings.Contains(fieldLower, "timestamp") || strings.Contains(fieldLower, "time") {
+		return true
+	}
+
+	return false
+}
+
+// isLongIntegerField 保持向后兼容的字段检查函数
+func isLongIntegerField(fieldName string, longFields []string) bool {
+	return isLongIntegerFieldWithPath(fieldName, []string{}, longFields)
+}
+
+// isLargeNumberString 检查字符串是否表示一个大数字（超过JavaScript安全整数范围）
+func isLargeNumberString(s string) bool {
+	// 检查是否为纯数字字符串
+	matched, _ := regexp.MatchString(`^-?\d+$`, s)
+	if !matched {
+		return false
+	}
+
+	// 检查长度是否超过15位（JavaScript安全整数范围）
+	numStr := strings.TrimPrefix(s, "-")
+	return len(numStr) > 15
+}
+
+// convertLongFieldsToStrings 将指定字段的长整数值转换为字符串
+func convertLongFieldsToStrings(data interface{}, longFields []string) interface{} {
+	return convertLongFieldsRecursiveWithPath(data, longFields, []string{}, true)
+}
+
+// convertStringFieldsToLongs 将指定字段的字符串值转换为长整数
+func convertStringFieldsToLongs(data interface{}, longFields []string) interface{} {
+	return convertLongFieldsRecursiveWithPath(data, longFields, []string{}, false)
+}
+
+// convertLongFieldsRecursive 递归处理数据结构中的长整数字段转换（保持向后兼容）
+func convertLongFieldsRecursive(data interface{}, longFields []string, toLongString bool) interface{} {
+	return convertLongFieldsRecursiveWithPath(data, longFields, []string{}, toLongString)
+}
+
+// convertLongFieldsRecursiveWithPath 递归处理数据结构中的长整数字段转换，支持路径上下文
+func convertLongFieldsRecursiveWithPath(data interface{}, longFields []string, currentPath []string, toLongString bool) interface{} {
+	if data == nil {
+		return nil
+	}
+
+	switch v := data.(type) {
+	case map[string]interface{}:
+		result := make(map[string]interface{})
+		for key, value := range v {
+			if isLongIntegerFieldWithPath(key, currentPath, longFields) {
+				if toLongString {
+					result[key] = convertToLongString(value)
+				} else {
+					result[key] = convertToLongInt(value)
+				}
+			} else {
+				// 递归处理嵌套对象，传递更新的路径上下文
+				newPath := append(currentPath, key)
+				result[key] = convertLongFieldsRecursiveWithPath(value, longFields, newPath, toLongString)
+			}
+		}
+		return result
+	case []interface{}:
+		result := make([]interface{}, len(v))
+		for i, item := range v {
+			// 数组元素不改变路径上下文
+			result[i] = convertLongFieldsRecursiveWithPath(item, longFields, currentPath, toLongString)
+		}
+		return result
+	default:
+		return data
+	}
+}
+
+// convertToLongString 将值转换为长整数字符串表示
+func convertToLongString(value interface{}) interface{} {
+	if value == nil {
+		return nil
+	}
+
+	switch v := value.(type) {
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case int:
+		return strconv.FormatInt(int64(v), 10)
+	case float64:
+		// 检查是否为整数
+		if v == float64(int64(v)) {
+			return strconv.FormatInt(int64(v), 10)
+		}
+		return value
+	case string:
+		// 如果已经是字符串，检查是否为大数字
+		if isLargeNumberString(v) {
+			return v
+		}
+		return value
+	case json.Number:
+		return string(v)
+	default:
+		return value
+	}
+}
+
+// convertToLongInt 将值转换为长整数
+func convertToLongInt(value interface{}) interface{} {
+	if value == nil {
+		return nil
+	}
+
+	switch v := value.(type) {
+	case string:
+		if num, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return num
+		}
+		return value
+	case float64:
+		// 检查是否在int64范围内
+		if v > float64(1<<63-1) || v < float64(-1<<63) {
+			return value // 超出范围，保持原值
+		}
+		if v == float64(int64(v)) {
+			return int64(v)
+		}
+		return value
+	case json.Number:
+		if num, err := v.Int64(); err == nil {
+			return num
+		}
+		return value
+	default:
+		return value
+	}
+}
+
+// extractLongFields 从请求体中提取_longFields数组，并返回清理后的body
+func extractLongFields(body interface{}) ([]string, interface{}) {
+	if body == nil {
+		return nil, body
+	}
+
+	bodyMap, ok := body.(map[string]interface{})
+	if !ok {
+		return nil, body
+	}
+
+	longFieldsRaw, exists := bodyMap["_longFields"]
+	if !exists {
+		return nil, body
+	}
+
+	// 提取longFields数组
+	var longFields []string
+	switch lf := longFieldsRaw.(type) {
+	case []interface{}:
+		for _, field := range lf {
+			if fieldStr, ok := field.(string); ok {
+				longFields = append(longFields, fieldStr)
+			}
+		}
+	case []string:
+		longFields = lf
+	}
+
+	// 创建新的body，移除_longFields字段
+	newBody := make(map[string]interface{})
+	for key, value := range bodyMap {
+		if key != "_longFields" {
+			newBody[key] = value
+		}
+	}
+
+	return longFields, newBody
+}
+
+// marshalToJsonWithLongSupport 支持大整数处理的JSON序列化函数
+func marshalToJsonWithLongSupport(model interface{}) ([]byte, error) {
+	if model == nil {
+		return make([]byte, 0), nil
+	}
+
+	// 提取longFields并清理body
+	longFields, cleanModel := extractLongFields(model)
+
+	// 如果有longFields，转换相应字段为字符串
+	if len(longFields) > 0 {
+		cleanModel = convertLongFieldsToStrings(cleanModel, longFields)
+	}
+
+	result, err := json.Marshal(cleanModel)
+	if err != nil {
+		return []byte{}, fmt.Errorf("can not marshal model to json, %v", err)
+	}
+	return result, nil
+}
+
+// unmarshalResultIntoWithLongSupport 支持大整数处理的JSON反序列化函数
+func unmarshalResultIntoWithLongSupport(data []byte, result interface{}, longFields []string) error {
+	// 首先进行标准的错误检查
+	resp := new(common.CommonResponse)
+	if err := json.Unmarshal(data, resp); err != nil {
+		return fmt.Errorf("fail to unmarshal response, %v", err)
+	}
+	errObj := resp.ResponseMetadata.Error
+	if errObj != nil && errObj.CodeN != 0 {
+		return fmt.Errorf("request %s error %s", resp.ResponseMetadata.RequestId, errObj.Message)
+	}
+
+	// 如果没有longFields，使用标准反序列化
+	if len(longFields) == 0 {
+		if err := json.Unmarshal(data, result); err != nil {
+			return fmt.Errorf("fail to unmarshal result, %v", err)
+		}
+		return nil
+	}
+
+	// 使用json.Decoder来保持数字精度
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.UseNumber()
+
+	var genericResult interface{}
+	if err := decoder.Decode(&genericResult); err != nil {
+		return fmt.Errorf("fail to unmarshal to generic result, %v", err)
+	}
+
+	// 将大整数字段转换为字符串（而不是转换为长整数）
+	convertedResult := convertLongFieldsToStrings(genericResult, longFields)
+
+	// 重新序列化并反序列化到目标类型
+	convertedData, err := json.Marshal(convertedResult)
+	if err != nil {
+		return fmt.Errorf("fail to marshal converted result, %v", err)
+	}
+
+	if err := json.Unmarshal(convertedData, result); err != nil {
+		return fmt.Errorf("fail to unmarshal final result, %v", err)
 	}
 
 	return nil
@@ -1225,12 +1508,9 @@ func (c *Im) BatchGetUser(ctx context.Context, arg *BatchGetUserBody) (*BatchGet
 
 	result := new(BatchGetUserRes)
 	err = unmarshalResultInto(data, result)
-
 	if err != nil {
 		return nil, err
 	}
-
-	fmt.Printf("4 %+v\n", result)
 
 	return result, nil
 }
