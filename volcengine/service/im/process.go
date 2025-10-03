@@ -5,13 +5,98 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/yao/volcengine"
 )
+
+// convertInt64ToStringRecursive 递归地将数据结构中的 int64 类型转换为字符串
+// 这是为了解决 JavaScript 处理大整数时的精度问题
+func convertInt64ToStringRecursive(data interface{}) interface{} {
+	if data == nil {
+		return nil
+	}
+
+	switch v := data.(type) {
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case *int64:
+		if v == nil {
+			return nil
+		}
+		return strconv.FormatInt(*v, 10)
+	case map[string]interface{}:
+		result := make(map[string]interface{})
+		for key, value := range v {
+			result[key] = convertInt64ToStringRecursive(value)
+		}
+		return result
+	case []interface{}:
+		result := make([]interface{}, len(v))
+		for i, item := range v {
+			result[i] = convertInt64ToStringRecursive(item)
+		}
+		return result
+	default:
+		// 使用反射处理结构体类型
+		val := reflect.ValueOf(data)
+		if val.Kind() == reflect.Ptr {
+			if val.IsNil() {
+				return nil
+			}
+			val = val.Elem()
+		}
+
+		switch val.Kind() {
+		case reflect.Struct:
+			// 创建一个新的 map 来存储结构体字段
+			result := make(map[string]interface{})
+			typ := val.Type()
+			for i := 0; i < val.NumField(); i++ {
+				field := val.Field(i)
+				fieldType := typ.Field(i)
+				
+				// 跳过未导出的字段
+				if !field.CanInterface() {
+					continue
+				}
+				
+				// 获取字段名（优先使用 json tag）
+				fieldName := fieldType.Name
+				if jsonTag := fieldType.Tag.Get("json"); jsonTag != "" && jsonTag != "-" {
+					if commaIdx := strings.Index(jsonTag, ","); commaIdx != -1 {
+						fieldName = jsonTag[:commaIdx]
+					} else {
+						fieldName = jsonTag
+					}
+				}
+				
+				result[fieldName] = convertInt64ToStringRecursive(field.Interface())
+			}
+			return result
+		case reflect.Slice, reflect.Array:
+			result := make([]interface{}, val.Len())
+			for i := 0; i < val.Len(); i++ {
+				result[i] = convertInt64ToStringRecursive(val.Index(i).Interface())
+			}
+			return result
+		case reflect.Map:
+			result := make(map[string]interface{})
+			for _, key := range val.MapKeys() {
+				keyStr := fmt.Sprintf("%v", key.Interface())
+				result[keyStr] = convertInt64ToStringRecursive(val.MapIndex(key).Interface())
+			}
+			return result
+		}
+	}
+
+	return data
+}
 
 // parseInt64FromArgs 从参数中解析int64值，支持字符串和数值类型以保持兼容性
 func parseInt64FromArgs(args map[string]interface{}, key string) (int64, error) {
@@ -118,8 +203,11 @@ func ProcessClient(p *process.Process) interface{} {
 		exception.New("body is required", 400).Throw()
 	}
 
-	// 将body序列化为JSON
-	bodyBytes, err := marshalToJson(body)
+	// 提取longFields并获取处理后的body
+	longFields, processedBody := extractLongFields(body)
+
+	// 将body序列化为JSON，支持大整数处理
+	bodyBytes, err := marshalToJsonWithLongSupport(processedBody)
 	if err != nil {
 		exception.New("Failed to marshal body to JSON: %s", 500, err.Error()).Throw()
 	}
@@ -131,9 +219,9 @@ func ProcessClient(p *process.Process) interface{} {
 		exception.New("Client request failed: %s", 500, err.Error()).Throw()
 	}
 
-	// 解析响应
+	// 解析响应，支持大整数处理
 	var result interface{}
-	if err := unmarshalResultInto(data, &result); err != nil {
+	if err := unmarshalResultIntoWithLongSupport(data, &result, longFields); err != nil {
 		exception.New("Failed to unmarshal response: %s", 500, err.Error()).Throw()
 	}
 
@@ -258,7 +346,9 @@ func ProcessRegisterUsers(p *process.Process) interface{} {
 		exception.New("Register users failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedRes := convertInt64ToStringRecursive(res)
+	return convertedRes
 }
 
 // ProcessBatchGetUser 批量获取用户信息
@@ -293,7 +383,9 @@ func ProcessBatchGetUser(p *process.Process) interface{} {
 
 	fmt.Printf("res: %+v\n", res)
 
-	return res
+	// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedRes := convertInt64ToStringRecursive(res)
+	return convertedRes
 }
 
 // ProcessBatchUpdateUser 批量更新用户信息
@@ -375,7 +467,9 @@ func ProcessBatchUpdateUser(p *process.Process) interface{} {
 		exception.New("Batch update user failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedRes := convertInt64ToStringRecursive(res)
+	return convertedRes
 }
 
 // ProcessUnRegisterUsers 注销用户
@@ -408,7 +502,9 @@ func ProcessUnRegisterUsers(p *process.Process) interface{} {
 		exception.New("Batch get user failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedRes := convertInt64ToStringRecursive(res)
+	return convertedRes
 }
 
 // ProcessCreateConversation 创建会话（单聊或群聊）
@@ -490,7 +586,9 @@ func ProcessCreateConversation(p *process.Process) interface{} {
 		exception.New("Create conversation failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedRes := convertInt64ToStringRecursive(res)
+	return convertedRes
 }
 
 // ProcessModifyConversation 修改会话信息
@@ -553,7 +651,9 @@ func ProcessModifyConversation(p *process.Process) interface{} {
 		exception.New("Modify conversation failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedRes := convertInt64ToStringRecursive(res)
+	return convertedRes
 }
 
 // ProcessIsUserInConversation 检查用户是否在指定会话中
@@ -596,7 +696,9 @@ func ProcessIsUserInConversation(p *process.Process) interface{} {
 		exception.New("Check user in conversation failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedRes := convertInt64ToStringRecursive(res)
+	return convertedRes
 }
 
 // ProcessSendMessage 发送消息
@@ -702,7 +804,9 @@ func ProcessSendMessage(p *process.Process) interface{} {
 		exception.New("Send message failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedRes := convertInt64ToStringRecursive(res)
+	return convertedRes
 }
 
 // ProcessRecallMessage 撤回消息
@@ -747,7 +851,9 @@ func ProcessRecallMessage(p *process.Process) interface{} {
 		exception.New("Recall message failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedRes := convertInt64ToStringRecursive(res)
+	return convertedRes
 }
 
 // ProcessDeleteConversationMessage 删除会话消息
@@ -785,7 +891,9 @@ func ProcessDeleteConversationMessage(p *process.Process) interface{} {
 		exception.New("Delete message failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedRes := convertInt64ToStringRecursive(res)
+	return convertedRes
 }
 
 // ProcessGetConversationMessages 获取会话消息列表
@@ -845,7 +953,9 @@ func ProcessGetConversationMessages(p *process.Process) interface{} {
 			exception.New("Get conversation messages failed: %s", 500, err.Error()).Throw()
 		}
 
-		return res
+		// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+		convertedRes := convertInt64ToStringRecursive(res)
+		return convertedRes
 	}
 
 	// 使用 GetConversationMessages API 获取会话消息
@@ -855,7 +965,9 @@ func ProcessGetConversationMessages(p *process.Process) interface{} {
 		exception.New("Get conversation messages failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedRes := convertInt64ToStringRecursive(res)
+	return convertedRes
 }
 
 // ProcessDestroyConversation 销毁会话
@@ -886,5 +998,7 @@ func ProcessDestroyConversation(p *process.Process) interface{} {
 		exception.New("Destroy conversation failed: %s", 500, err.Error()).Throw()
 	}
 
-	return res
+	// 将返回数据中的 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedRes := convertInt64ToStringRecursive(res)
+	return convertedRes
 }
