@@ -6,7 +6,7 @@ git clone https://github.com/feishu/gou.git /app/gou && \
 git clone https://github.com/yaoapp/v8go.git /app/v8go && \
 # git clone https://github.com/feishu/xgen.git /app/xgen-v1.0 && \
 git clone https://github.com/yaoapp/yao-init.git /app/yao-init && \
-git clone https://github.com/feishu/yao.git /app/yao
+git clone --branch none-ui-long https://github.com/feishu/yao.git /app/yao
 
 # 解压
 cd /app/v8go/deps && \
