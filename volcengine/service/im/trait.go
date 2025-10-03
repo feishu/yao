@@ -370,50 +370,7 @@ func marshalToJsonWithLongSupport(model interface{}) ([]byte, error) {
 	return result, nil
 }
 
-// unmarshalResultIntoWithLongSupport 支持大整数处理的JSON反序列化函数
-func unmarshalResultIntoWithLongSupport(data []byte, result interface{}, longFields []string) error {
-	// 首先进行标准的错误检查
-	resp := new(common.CommonResponse)
-	if err := json.Unmarshal(data, resp); err != nil {
-		return fmt.Errorf("fail to unmarshal response, %v", err)
-	}
-	errObj := resp.ResponseMetadata.Error
-	if errObj != nil && errObj.CodeN != 0 {
-		return fmt.Errorf("request %s error %s", resp.ResponseMetadata.RequestId, errObj.Message)
-	}
 
-	// 如果没有longFields，使用标准反序列化
-	if len(longFields) == 0 {
-		if err := json.Unmarshal(data, result); err != nil {
-			return fmt.Errorf("fail to unmarshal result, %v", err)
-		}
-		return nil
-	}
-
-	// 使用json.Decoder来保持数字精度
-	decoder := json.NewDecoder(strings.NewReader(string(data)))
-	decoder.UseNumber()
-
-	var genericResult interface{}
-	if err := decoder.Decode(&genericResult); err != nil {
-		return fmt.Errorf("fail to unmarshal to generic result, %v", err)
-	}
-
-	// 将大整数字段转换为字符串（而不是转换为长整数）
-	convertedResult := convertLongFieldsToStrings(genericResult, longFields)
-
-	// 重新序列化并反序列化到目标类型
-	convertedData, err := json.Marshal(convertedResult)
-	if err != nil {
-		return fmt.Errorf("fail to marshal converted result, %v", err)
-	}
-
-	if err := json.Unmarshal(convertedData, result); err != nil {
-		return fmt.Errorf("fail to unmarshal final result, %v", err)
-	}
-
-	return nil
-}
 
 func (c *Im) GetConversationMarks(ctx context.Context, arg *GetConversationMarksBody) (*GetConversationMarksRes, error) {
 	body, err := marshalToJson(arg)

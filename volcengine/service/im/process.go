@@ -206,6 +206,12 @@ func ProcessClient(p *process.Process) interface{} {
 	// 提取longFields并获取处理后的body
 	longFields, processedBody := extractLongFields(body)
 
+	// 将processedBody中的longFields字段从字符串转换为int64
+	// 这是必要的，因为GetInstance().Client.CtxJson期望longFields中的字段为int64类型
+	if len(longFields) > 0 {
+		processedBody = convertStringFieldsToLongs(processedBody, longFields)
+	}
+
 	// 将body序列化为JSON，支持大整数处理
 	bodyBytes, err := marshalToJsonWithLongSupport(processedBody)
 	if err != nil {
@@ -219,13 +225,15 @@ func ProcessClient(p *process.Process) interface{} {
 		exception.New("Client request failed: %s", 500, err.Error()).Throw()
 	}
 
-	// 解析响应，支持大整数处理
+	// 解析响应
 	var result interface{}
-	if err := unmarshalResultIntoWithLongSupport(data, &result, longFields); err != nil {
+	if err := json.Unmarshal(data, &result); err != nil {
 		exception.New("Failed to unmarshal response: %s", 500, err.Error()).Throw()
 	}
 
-	return result
+	// 将 int64 类型转换为字符串，避免 JavaScript 精度问题
+	convertedResult := convertInt64ToStringRecursive(result)
+	return convertedResult
 }
 
 // ProcessGetAppToken 获取火山引擎IM的AppToken
