@@ -129,9 +129,9 @@ bindata:
 	cp -r .tmp/yao-init .tmp/data/init
 	cp -r ui .tmp/data/
 	cp -r ui .tmp/data/public
-	cp -r xgen .tmp/data/
+#	cp -r xgen .tmp/data/
 	cp -r yao .tmp/data/
-	cp -r sui/libsui .tmp/data/
+#	cp -r sui/libsui .tmp/data/
 	find .tmp/data -name ".DS_Store" -type f -delete
 	go-bindata -fs -pkg data -o data/bindata.go -prefix ".tmp/data/" .tmp/data/...
 	rm -rf .tmp/data
@@ -145,8 +145,8 @@ artifacts-linux: clean
 #	Building XGEN v1.0
 	export NODE_ENV=production
 # 	rm -f ../xgen-v1.0/pnpm-lock.yaml
-	echo "BASE=__yao_admin_root" > ../xgen-v1.0/packages/xgen/.env
-	cd ../xgen-v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
+#	echo "BASE=__yao_admin_root" > ../xgen-v1.0/packages/xgen/.env
+#	cd ../xgen-v1.0 && pnpm install --no-frozen-lockfile && pnpm run build
 
 #	Init Application
 	cd ../yao-init && rm -rf .git
@@ -165,11 +165,11 @@ artifacts-linux: clean
 #   ** XGEN will be renamed to DUI in the feature. and move to the new repository. **
 #   ** new repository: https://github.com/YaoApp/dui.git **
 	mkdir -p .tmp/data/xgen
-	cp -r ./ui .tmp/data/ui
-	cp -r ../xgen-v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
+#	cp -r ./ui .tmp/data/ui
+#	cp -r ../xgen-v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
 	cp -r ../yao-init .tmp/data/init
 	cp -r yao .tmp/data/
-	cp -r sui/libsui .tmp/data/
+#	cp -r sui/libsui .tmp/data/
 	go-bindata -fs -pkg data -o data/bindata.go -prefix ".tmp/data/" .tmp/data/...
 	rm -rf .tmp/data
 
