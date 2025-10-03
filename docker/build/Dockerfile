@@ -35,10 +35,10 @@ RUN wget https://golang.org/dl/go1.23.3.linux-amd64.tar.gz && \
     rm go1.23.3.linux-amd64.tar.gz
 
 # Install Node.js 18.x
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
-    apt-get install -y nodejs 
+# RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    # apt-get install -y nodejs 
 
-RUN npm install -g pnpm
+# RUN npm install -g pnpm
 
 # Install AWS CLI
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && \ 
