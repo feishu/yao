@@ -213,16 +213,15 @@ func convertLongFieldsRecursive(data interface{}, longFields []string, toLongStr
 	return convertLongFieldsRecursiveWithPath(data, longFields, []string{}, toLongString)
 }
 
-// convertLongFieldsRecursiveWithPath 递归处理数据结构中的长整数字段转换，支持路径上下文
+// convertLongFieldsRecursiveWithPath 递归处理数据结构，支持路径上下文
 func convertLongFieldsRecursiveWithPath(data interface{}, longFields []string, currentPath []string, toLongString bool) interface{} {
-	if data == nil {
-		return nil
-	}
-
 	switch v := data.(type) {
 	case map[string]interface{}:
 		result := make(map[string]interface{})
 		for key, value := range v {
+			newPath := append(currentPath, key)
+			
+			// 检查当前字段是否需要转换
 			if isLongIntegerFieldWithPath(key, currentPath, longFields) {
 				if toLongString {
 					result[key] = convertToLongString(value)
@@ -230,100 +229,68 @@ func convertLongFieldsRecursiveWithPath(data interface{}, longFields []string, c
 					result[key] = convertToLongInt(value)
 				}
 			} else {
-				// 递归处理嵌套对象，传递更新的路径上下文
-				newPath := append(currentPath, key)
+				// 递归处理嵌套结构
 				result[key] = convertLongFieldsRecursiveWithPath(value, longFields, newPath, toLongString)
 			}
 		}
 		return result
+		
 	case []interface{}:
 		result := make([]interface{}, len(v))
-		
-		// 检查当前路径是否在longFields中
-		currentPathStr := buildCurrentPath(currentPath)
-		isCurrentFieldLong := false
-		for _, field := range longFields {
-			if field == currentPathStr {
-				isCurrentFieldLong = true
-				break
-			}
-		}
-		
 		for i, item := range v {
-			if isCurrentFieldLong {
-				// 如果当前数组字段在longFields中，尝试转换数组元素
-				if toLongString {
-					result[i] = convertToLongString(item)
-				} else {
-					result[i] = convertToLongInt(item)
-				}
-			} else {
-				// 数组元素不改变路径上下文
-				result[i] = convertLongFieldsRecursiveWithPath(item, longFields, currentPath, toLongString)
-			}
+			result[i] = convertLongFieldsRecursiveWithPath(item, longFields, currentPath, toLongString)
 		}
 		return result
+		
 	default:
 		return data
 	}
 }
 
-// convertToLongString 将值转换为长整数字符串表示
-func convertToLongString(value interface{}) interface{} {
-	if value == nil {
-		return nil
-	}
-
-	switch v := value.(type) {
-	case int64:
-		return strconv.FormatInt(v, 10)
-	case int:
-		return strconv.FormatInt(int64(v), 10)
-	case float64:
-		// 检查是否为整数
-		if v == float64(int64(v)) {
-			return strconv.FormatInt(int64(v), 10)
-		}
-		return value
-	case string:
-		// 如果已经是字符串，检查是否为大数字
-		if isLargeNumberString(v) {
-			return v
-		}
-		return value
-	case json.Number:
-		return string(v)
-	default:
-		return value
-	}
-}
-
-// convertToLongInt 将值转换为长整数
+// convertToLongInt 将值转换为int64
 func convertToLongInt(value interface{}) interface{} {
-	if value == nil {
-		return nil
-	}
-
 	switch v := value.(type) {
 	case string:
 		if num, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return num
 		}
 		return value
+	case []interface{}:
+		result := make([]interface{}, len(v))
+		for i, item := range v {
+			result[i] = convertToLongInt(item)
+		}
+		return result
+	case int:
+		return int64(v)
+	case int32:
+		return int64(v)
+	case int64:
+		return v
 	case float64:
-		// 检查是否在int64范围内
-		if v > float64(1<<63-1) || v < float64(-1<<63) {
-			return value // 超出范围，保持原值
-		}
-		if v == float64(int64(v)) {
-			return int64(v)
-		}
+		return int64(v)
+	default:
 		return value
-	case json.Number:
-		if num, err := v.Int64(); err == nil {
-			return num
+	}
+}
+
+// convertToLongString 将值转换为字符串
+func convertToLongString(value interface{}) interface{} {
+	switch v := value.(type) {
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case int:
+		return strconv.Itoa(v)
+	case int32:
+		return strconv.FormatInt(int64(v), 10)
+	case float64:
+		return strconv.FormatInt(int64(v), 10)
+	case []interface{}:
+		result := make([]interface{}, len(v))
+		for i, item := range v {
+			result[i] = convertToLongString(item)
 		}
-		return value
+		return result
 	default:
 		return value
 	}
