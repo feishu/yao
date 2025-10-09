@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/main.go",
-            // "args": ["run","scripts.service.im.test"],
+            // "args": ["run","scripts.service.im.test2"],
             "args": ["start"],
             "cwd": "/Users/L/Desktop/Code/yao_projects/ih/service"
         }

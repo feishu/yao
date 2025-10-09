@@ -13,7 +13,7 @@ import (
 
 const (
 	// STORE_NAME Redis存储名称
-	STORE_NAME = "template"
+	STORE_NAME = "cache"
 	// TEMPLATE_PREFIX 模板键前缀
 	TEMPLATE_PREFIX = "tpl:"
 )
