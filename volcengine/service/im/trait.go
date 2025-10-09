@@ -220,7 +220,7 @@ func convertLongFieldsRecursiveWithPath(data interface{}, longFields []string, c
 		result := make(map[string]interface{})
 		for key, value := range v {
 			newPath := append(currentPath, key)
-			
+
 			// 检查当前字段是否需要转换
 			if isLongIntegerFieldWithPath(key, currentPath, longFields) {
 				if toLongString {
@@ -234,7 +234,7 @@ func convertLongFieldsRecursiveWithPath(data interface{}, longFields []string, c
 			}
 		}
 		return result
-		
+
 	case []interface{}:
 		// 检查当前数组是否是需要转换的字段
 		if len(currentPath) > 0 {
@@ -253,14 +253,14 @@ func convertLongFieldsRecursiveWithPath(data interface{}, longFields []string, c
 				return result
 			}
 		}
-		
+
 		// 否则递归处理数组中的每个元素
 		result := make([]interface{}, len(v))
 		for i, item := range v {
 			result[i] = convertLongFieldsRecursiveWithPath(item, longFields, currentPath, toLongString)
 		}
 		return result
-		
+
 	default:
 		return data
 	}
@@ -375,8 +375,6 @@ func marshalToJsonWithLongSupport(model interface{}) ([]byte, error) {
 	}
 	return result, nil
 }
-
-
 
 func (c *Im) GetConversationMarks(ctx context.Context, arg *GetConversationMarksBody) (*GetConversationMarksRes, error) {
 	body, err := marshalToJson(arg)

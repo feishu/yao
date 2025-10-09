@@ -118,5 +118,6 @@ func Init() {
 		"list":     template.ProcessList,
 		"remove":   template.ProcessRemove,
 		"clear":    template.ProcessClear,
+		"init":     template.ProcessInit,
 	})
 }

@@ -121,3 +121,12 @@ func ProcessClear(process *process.Process) interface{} {
 		"message": "Template cache cleared successfully",
 	}
 }
+
+// ProcessInit 初始化模板的process方法
+func ProcessInit(process *process.Process) interface{} {
+	Init()
+	return map[string]interface{}{
+		"success": true,
+		"message": "Templates initialized successfully",
+	}
+}
