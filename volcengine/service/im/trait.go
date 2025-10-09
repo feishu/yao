@@ -236,6 +236,25 @@ func convertLongFieldsRecursiveWithPath(data interface{}, longFields []string, c
 		return result
 		
 	case []interface{}:
+		// 检查当前数组是否是需要转换的字段
+		if len(currentPath) > 0 {
+			currentFieldName := currentPath[len(currentPath)-1]
+			parentPath := currentPath[:len(currentPath)-1]
+			if isLongIntegerFieldWithPath(currentFieldName, parentPath, longFields) {
+				// 如果数组本身是longField，转换数组中的每个元素
+				result := make([]interface{}, len(v))
+				for i, item := range v {
+					if toLongString {
+						result[i] = convertToLongString(item)
+					} else {
+						result[i] = convertToLongInt(item)
+					}
+				}
+				return result
+			}
+		}
+		
+		// 否则递归处理数组中的每个元素
 		result := make([]interface{}, len(v))
 		for i, item := range v {
 			result[i] = convertLongFieldsRecursiveWithPath(item, longFields, currentPath, toLongString)
