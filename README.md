@@ -49,3 +49,8 @@ Launch in seconds with built-in cloud functions and API gateways to easily creat
 ### 🔮 Edge Devices Support
 
 Yao apps also support running on edge devices equipped with arm64 or x64 chips, suitable for various scenarios in IoT applications.
+
+
+### build yao 
+
+go build -o yao .
