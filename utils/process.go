@@ -6,6 +6,7 @@ import (
 	"github.com/yaoapp/yao/utils/fmt"
 	"github.com/yaoapp/yao/utils/json"
 	"github.com/yaoapp/yao/utils/str"
+	"github.com/yaoapp/yao/utils/template"
 	"github.com/yaoapp/yao/utils/throw"
 	"github.com/yaoapp/yao/utils/tree"
 	"github.com/yaoapp/yao/utils/url"
@@ -108,4 +109,14 @@ func Init() {
 
 	// JSON
 	process.Register("utils.json.Validate", json.ProcessValidate)
+
+	// Template
+	process.RegisterGroup("utils.template", map[string]process.Handler{
+		"render":   template.ProcessRender,
+		"register": template.ProcessRegister,
+		"get":      template.ProcessGet,
+		"list":     template.ProcessList,
+		"remove":   template.ProcessRemove,
+		"clear":    template.ProcessClear,
+	})
 }
