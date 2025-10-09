@@ -15,6 +15,8 @@
 
 _reference
 
+# yao binary 不提交到版本控制
+yao/yao
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
