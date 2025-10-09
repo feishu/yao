@@ -212,6 +212,13 @@ func ProcessClient(p *process.Process) interface{} {
 		processedBody = convertStringFieldsToLongs(processedBody, longFields)
 	}
 
+	// 检查请求体中是否存在AppId字段，如果不存在则设置默认值
+	if processedBodyMap, ok := processedBody.(map[string]interface{}); ok {
+		if _, exists := processedBodyMap["AppId"]; !exists {
+			processedBodyMap["appID"] = int32(volcengine.VolcEngine.IM.AppID)
+		}
+	}
+
 	// 将body序列化为JSON，支持大整数处理
 	bodyBytes, err := marshalToJsonWithLongSupport(processedBody)
 	if err != nil {
