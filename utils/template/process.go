@@ -25,6 +25,26 @@ func ProcessRender(process *process.Process) interface{} {
 	return result
 }
 
+// ProcessRenderContent 渲染模板内容的process方法
+// 参数：
+//   - args[0]: 模板内容 (string)
+//   - args[1]: 模板数据 (map[string]interface{})
+//
+// 返回：渲染后的字符串内容
+func ProcessRenderContent(process *process.Process) interface{} {
+	process.ValidateArgNums(2)
+
+	content := process.ArgsString(0)
+	data := process.ArgsMap(1)
+
+	result, err := RenderTemplateContent(content, data)
+	if err != nil {
+		exception.New("Template render error: %s", 400, err.Error()).Throw()
+	}
+
+	return result
+}
+
 // ProcessRegister 注册模板的process方法
 // 参数：
 //   - args[0]: 模板代码 (string)

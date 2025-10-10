@@ -112,12 +112,13 @@ func Init() {
 
 	// Template
 	process.RegisterGroup("utils.template", map[string]process.Handler{
-		"render":   template.ProcessRender,
-		"register": template.ProcessRegister,
-		"get":      template.ProcessGet,
-		"list":     template.ProcessList,
-		"remove":   template.ProcessRemove,
-		"clear":    template.ProcessClear,
-		"init":     template.ProcessInit,
+		"render":        template.ProcessRender,
+		"renderContent": template.ProcessRenderContent,
+		"register":      template.ProcessRegister,
+		"get":           template.ProcessGet,
+		"list":          template.ProcessList,
+		"remove":        template.ProcessRemove,
+		"clear":         template.ProcessClear,
+		"init":          template.ProcessInit,
 	})
 }

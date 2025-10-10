@@ -448,6 +448,42 @@ func RenderTemplate(code string, data map[string]interface{}) (string, error) {
 	return result, nil
 }
 
+// RenderTemplateContent 直接渲染模板内容
+// content: 模板内容字符串
+// data: 模板变量数据
+func RenderTemplateContent(content string, data map[string]interface{}) (string, error) {
+	if content == "" {
+		err := fmt.Errorf("template content cannot be empty")
+		log.Error("RenderTemplateContent failed: %v", err)
+		return "", err
+	}
+
+	log.Debug("Rendering template content with data keys: %v", getMapKeys(data))
+
+	// 编译模板（不使用缓存，因为没有唯一的code标识）
+	tmpl, err := template.New("content").Parse(content)
+	if err != nil {
+		err = fmt.Errorf("failed to parse template content: %v", err)
+		log.Error("RenderTemplateContent failed: %v", err)
+		return "", err
+	}
+
+	log.Debug("Template content compiled successfully")
+
+	// 渲染模板
+	var buf bytes.Buffer
+	err = tmpl.Execute(&buf, data)
+	if err != nil {
+		err = fmt.Errorf("failed to execute template content: %v", err)
+		log.Error("RenderTemplateContent failed: %v", err)
+		return "", err
+	}
+
+	result := buf.String()
+	log.Debug("Template content rendered successfully, output length: %d", len(result))
+	return result, nil
+}
+
 // ListTemplates 列出所有已注册的模板
 func ListTemplates() map[string]string {
 	log.Debug("Listing all registered templates")
