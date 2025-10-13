@@ -19,6 +19,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gin-gonic/gin v1.10.1
+	github.com/go-pay/gopay v1.5.114
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-multierror v1.1.1
@@ -35,9 +36,9 @@ require (
 	github.com/yaoapp/gou v0.10.3
 	github.com/yaoapp/kun v0.9.0
 	github.com/yaoapp/xun v0.9.0
-	golang.org/x/crypto v0.38.0
+	golang.org/x/crypto v0.39.0
 	golang.org/x/net v0.40.0
-	golang.org/x/text v0.25.0
+	golang.org/x/text v0.26.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 	rogchap.com/v8go v0.9.0
@@ -67,6 +68,12 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.9 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
+	github.com/go-pay/crypto v0.0.1 // indirect
+	github.com/go-pay/errgroup v0.0.3 // indirect
+	github.com/go-pay/smap v0.0.2 // indirect
+	github.com/go-pay/util v0.0.4 // indirect
+	github.com/go-pay/xlog v0.0.3 // indirect
+	github.com/go-pay/xtime v0.0.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.26.0 // indirect
@@ -131,9 +138,9 @@ require (
 	go.mongodb.org/mongo-driver v1.17.3 // indirect
 	golang.org/x/arch v0.17.0 // indirect
 	golang.org/x/image v0.27.0 // indirect
-	golang.org/x/mod v0.24.0 // indirect
+	golang.org/x/mod v0.25.0 // indirect
 	golang.org/x/oauth2 v0.26.0 // indirect
-	golang.org/x/sync v0.14.0 // indirect
+	golang.org/x/sync v0.15.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/tools v0.33.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250519155744-55703ea1f237 // indirect
