@@ -17,6 +17,12 @@ func Load() error {
 		return fmt.Errorf("init payment manager failed: %v", err)
 	}
 
+	// 自动加载证书文件
+	if err := loadCertificates(); err != nil {
+		log.Warn("Failed to auto-load certificates: %v", err)
+		// 证书加载失败不阻塞模块加载，只警告
+	}
+
 	// 注册支付提供商
 	if err := registerProviders(); err != nil {
 		return fmt.Errorf("register payment providers failed: %v", err)
@@ -40,29 +46,64 @@ func initManager() error {
 	return nil
 }
 
-// registerProviders 注册支付提供商
+// loadCertificates 自动加载证书文件
+func loadCertificates() error {
+	// 从 certs 目录自动加载证书
+	certConfigs, err := LoadCertsFromDirectory()
+	if err != nil {
+		return fmt.Errorf("failed to load certificates from directory: %v", err)
+	}
+
+	// 存储到Manager
+	Manager.mutex.Lock()
+	Manager.certConfigs = certConfigs
+	Manager.mutex.Unlock()
+
+	if len(certConfigs) > 0 {
+		log.Info("Certificates auto-loaded: %d configurations", len(certConfigs))
+		
+		// 打印加载的配置
+		for key, certConfig := range certConfigs {
+			log.Debug("  - %s: merchant=%s, channel=%s", key, certConfig.MerchantID, certConfig.Channel)
+		}
+	} else {
+		log.Debug("No certificates found in certs/ directory")
+	}
+
+	return nil
+}
+
+// registerProviders 注册支付提供商工厂函数
 func registerProviders() error {
-	// 注册支付宝提供商
-	alipayProvider, err := providers.NewAlipayProvider(nil)
-	if err != nil {
-		return fmt.Errorf("failed to create alipay provider: %v", err)
+	// 注册支付宝工厂函数
+	alipayFactory := func(config map[string]interface{}) (PaymentProvider, error) {
+		log.Debug("Creating Alipay provider with config")
+		provider, err := providers.NewAlipayProvider(config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create alipay provider: %v", err)
+		}
+		// 返回适配器包装的 provider
+		return &ProviderAdapter{provider: provider.(providers.PaymentProvider)}, nil
 	}
-	adapter := &ProviderAdapter{provider: alipayProvider}
-	if err := Manager.RegisterProvider(string(ChannelAlipay), adapter); err != nil {
-		return fmt.Errorf("failed to register alipay provider: %v", err)
-	}
-
-	// 注册微信支付提供商
-	wechatProvider, err := providers.NewWechatProvider(nil)
-	if err != nil {
-		return fmt.Errorf("failed to create wechat provider: %v", err)
-	}
-	wechatAdapter := &ProviderAdapter{provider: wechatProvider}
-	if err := Manager.RegisterProvider(string(ChannelWechat), wechatAdapter); err != nil {
-		return fmt.Errorf("failed to register wechat provider: %v", err)
+	if err := Manager.RegisterProviderFactory(string(ChannelAlipay), alipayFactory); err != nil {
+		return fmt.Errorf("failed to register alipay factory: %v", err)
 	}
 
-	log.Debug("Payment providers registered successfully")
+	// 注册微信支付工厂函数
+	wechatFactory := func(config map[string]interface{}) (PaymentProvider, error) {
+		log.Debug("Creating Wechat provider with config")
+		provider, err := providers.NewWechatProvider(config)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create wechat provider: %v", err)
+		}
+		// 返回适配器包装的 provider
+		return &ProviderAdapter{provider: provider.(providers.PaymentProvider)}, nil
+	}
+	if err := Manager.RegisterProviderFactory(string(ChannelWechat), wechatFactory); err != nil {
+		return fmt.Errorf("failed to register wechat factory: %v", err)
+	}
+
+	log.Debug("✅ Payment provider factories registered successfully")
 	return nil
 }
 
@@ -71,6 +112,12 @@ func registerProcesses() error {
 	// 配置管理相关Process
 	process.Register("payment.SetConfig", ProcessSetConfig)
 	process.Register("payment.GetConfig", ProcessGetConfig)
+
+	// 证书管理相关Process
+	process.Register("payment.LoadCert", ProcessLoadCert)
+	process.Register("payment.LoadCertBase64", ProcessLoadCertBase64)
+	process.Register("payment.GetCertificate", ProcessGetCertificate)
+	process.Register("payment.ListCertificates", ProcessListCertificates)
 
 	// 订单相关Process
 	process.Register("payment.CreateOrder", ProcessCreateOrder)
@@ -127,6 +174,10 @@ func GetProcesses() []string {
 	return []string{
 		"payment.SetConfig",
 		"payment.GetConfig",
+		"payment.LoadCert",
+		"payment.LoadCertBase64",
+		"payment.GetCertificate",
+		"payment.ListCertificates",
 		"payment.CreateOrder",
 		"payment.QueryOrder",
 		"payment.CreateRefund",

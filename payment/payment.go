@@ -10,9 +10,12 @@ import (
 
 // PaymentManager 支付管理器
 type PaymentManager struct {
-	providers map[string]PaymentProvider
-	configs   map[string]interface{}
-	mutex     sync.RWMutex
+	providerFactories map[string]ProviderFactory   // Provider 工厂函数
+	providerInstances map[string]PaymentProvider   // 缓存的 Provider 实例
+	providers         map[string]PaymentProvider   // 旧的 providers（保留兼容）
+	configs           map[string]interface{}       // 商户配置
+	certConfigs       map[string]*CertConfig       // 证书配置缓存
+	mutex             sync.RWMutex
 }
 
 // 全局支付管理器实例
@@ -22,11 +25,17 @@ var once sync.Once
 // Manager 全局支付管理器实例（供外部使用）
 var Manager *PaymentManager
 
+// ProviderFactory Provider 工厂函数类型
+type ProviderFactory func(config map[string]interface{}) (PaymentProvider, error)
+
 // NewPaymentManager 创建新的支付管理器
 func NewPaymentManager() *PaymentManager {
 	return &PaymentManager{
-		providers: make(map[string]PaymentProvider),
-		configs:   make(map[string]interface{}),
+		providerFactories: make(map[string]ProviderFactory),
+		providerInstances: make(map[string]PaymentProvider),
+		providers:         make(map[string]PaymentProvider),
+		configs:           make(map[string]interface{}),
+		certConfigs:       make(map[string]*CertConfig),
 	}
 }
 
@@ -38,7 +47,7 @@ func GetManager() *PaymentManager {
 	return manager
 }
 
-// RegisterProvider 注册支付提供商
+// RegisterProvider 注册支付提供商（兼容旧接口）
 func (pm *PaymentManager) RegisterProvider(channel string, provider PaymentProvider) error {
 	pm.mutex.Lock()
 	defer pm.mutex.Unlock()
@@ -50,6 +59,75 @@ func (pm *PaymentManager) RegisterProvider(channel string, provider PaymentProvi
 	pm.providers[channel] = provider
 	log.Info("Payment provider registered: %s", channel)
 	return nil
+}
+
+// RegisterProviderFactory 注册 Provider 工厂函数
+func (pm *PaymentManager) RegisterProviderFactory(channel string, factory ProviderFactory) error {
+	pm.mutex.Lock()
+	defer pm.mutex.Unlock()
+
+	if factory == nil {
+		return fmt.Errorf("factory cannot be nil")
+	}
+
+	pm.providerFactories[channel] = factory
+	log.Info("Provider factory registered: %s", channel)
+	return nil
+}
+
+// GetOrCreateProvider 获取或创建 Provider
+func (pm *PaymentManager) GetOrCreateProvider(merchantID string, channel PaymentChannel) (PaymentProvider, error) {
+	pm.mutex.Lock()
+	defer pm.mutex.Unlock()
+
+	// 生成缓存 key
+	cacheKey := fmt.Sprintf("%s_%s", merchantID, string(channel))
+
+	// 检查缓存
+	if provider, exists := pm.providerInstances[cacheKey]; exists {
+		log.Debug("Provider found in cache: %s", cacheKey)
+		return provider, nil
+	}
+
+	// 获取工厂函数
+	factory, exists := pm.providerFactories[string(channel)]
+	if !exists {
+		return nil, fmt.Errorf("provider factory not found for channel: %s", channel)
+	}
+
+	// 获取商户配置
+	configKey := fmt.Sprintf("%s_%s", merchantID, string(channel))
+	config, exists := pm.configs[configKey]
+	if !exists {
+		return nil, fmt.Errorf("merchant config not found: %s (please call payment.SetConfig first)", configKey)
+	}
+
+	configMap, ok := config.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid config format for merchant: %s", configKey)
+	}
+
+	// 使用工厂函数创建 Provider
+	provider, err := factory(configMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create provider: %v", err)
+	}
+
+	// 缓存 Provider 实例
+	pm.providerInstances[cacheKey] = provider
+	log.Info("✅ Provider created and cached: %s", cacheKey)
+
+	return provider, nil
+}
+
+// InvalidateProviderCache 使 Provider 缓存失效（配置更新时调用）
+func (pm *PaymentManager) InvalidateProviderCache(merchantID string, channel PaymentChannel) {
+	pm.mutex.Lock()
+	defer pm.mutex.Unlock()
+
+	cacheKey := fmt.Sprintf("%s_%s", merchantID, string(channel))
+	delete(pm.providerInstances, cacheKey)
+	log.Info("Provider cache invalidated: %s", cacheKey)
 }
 
 // GetProvider 获取支付提供商
@@ -112,8 +190,8 @@ func (pm *PaymentManager) CreateOrder(params *CreateOrderParams) (*CreateOrderRe
 		return &CreateOrderResponse{Success: false}, err
 	}
 
-	// 获取支付提供商
-	provider, err := pm.GetProvider(params.Channel)
+	// 获取或创建支付提供商（根据商户ID和渠道）
+	provider, err := pm.GetOrCreateProvider(params.MerchantNo, PaymentChannel(params.Channel))
 	if err != nil {
 		return &CreateOrderResponse{Success: false}, err
 	}
@@ -140,8 +218,8 @@ func (pm *PaymentManager) QueryOrder(params *QueryOrderParams) (*QueryOrderRespo
 		return &QueryOrderResponse{Success: false}, err
 	}
 
-	// 获取支付提供商
-	provider, err := pm.GetProvider(params.Channel)
+	// 获取或创建支付提供商
+	provider, err := pm.GetOrCreateProvider(params.MerchantNo, PaymentChannel(params.Channel))
 	if err != nil {
 		return &QueryOrderResponse{Success: false}, err
 	}
@@ -167,8 +245,8 @@ func (pm *PaymentManager) CreateRefund(params *CreateRefundParams) (*CreateRefun
 		return &CreateRefundResponse{Success: false, Error: err.Error()}, err
 	}
 
-	// 获取支付提供商
-	provider, err := pm.GetProvider(params.Channel)
+	// 获取或创建支付提供商
+	provider, err := pm.GetOrCreateProvider(params.MerchantNo, PaymentChannel(params.Channel))
 	if err != nil {
 		return &CreateRefundResponse{Success: false, Error: err.Error()}, err
 	}
@@ -195,8 +273,8 @@ func (pm *PaymentManager) QueryRefund(params *QueryRefundParams) (*QueryRefundRe
 		return &QueryRefundResponse{Success: false}, err
 	}
 
-	// 获取支付提供商
-	provider, err := pm.GetProvider(params.Channel)
+	// 获取或创建支付提供商
+	provider, err := pm.GetOrCreateProvider(params.MerchantNo, PaymentChannel(params.Channel))
 	if err != nil {
 		return &QueryRefundResponse{Success: false}, err
 	}
@@ -221,8 +299,8 @@ func (pm *PaymentManager) HandleNotify(merchantID string, channel PaymentChannel
 		return &HandleNotifyResponse{Success: false}, fmt.Errorf("request body is required")
 	}
 
-	// 获取支付提供商
-	provider, err := pm.GetProvider(string(channel))
+	// 获取或创建支付提供商
+	provider, err := pm.GetOrCreateProvider(merchantID, channel)
 	if err != nil {
 		return &HandleNotifyResponse{Success: false}, err
 	}
@@ -257,8 +335,8 @@ func (pm *PaymentManager) DownloadBill(params *DownloadBillParams) (*DownloadBil
 		return &DownloadBillResponse{Success: false, Error: err.Error()}, err
 	}
 
-	// 获取支付提供商
-	provider, err := pm.GetProvider(params.Channel)
+	// 获取或创建支付提供商
+	provider, err := pm.GetOrCreateProvider(params.MerchantNo, PaymentChannel(params.Channel))
 	if err != nil {
 		return &DownloadBillResponse{Success: false, Error: err.Error()}, err
 	}
@@ -290,6 +368,12 @@ func (pm *PaymentManager) SetMerchantConfig(merchantID string, channel PaymentCh
 	key := fmt.Sprintf("%s_%s", merchantID, string(channel))
 	pm.configs[key] = config
 	log.Info("Merchant config set: %s", key)
+
+	// 使对应的 Provider 缓存失效
+	cacheKey := fmt.Sprintf("%s_%s", merchantID, string(channel))
+	delete(pm.providerInstances, cacheKey)
+	log.Debug("Provider cache invalidated due to config update: %s", cacheKey)
+
 	return nil
 }
 
@@ -323,8 +407,8 @@ func (pm *PaymentManager) Reconcile(params *ReconcileParams) (*ReconcileResponse
 		return &ReconcileResponse{Success: false, Error: err.Error()}, err
 	}
 
-	// 获取支付提供商
-	provider, err := pm.GetProvider(params.Channel)
+	// 获取或创建支付提供商
+	provider, err := pm.GetOrCreateProvider(params.MerchantNo, PaymentChannel(params.Channel))
 	if err != nil {
 		return &ReconcileResponse{Success: false, Error: err.Error()}, err
 	}

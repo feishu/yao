@@ -1,5 +1,7 @@
 package providers
 
+import "net/http"
+
 // PaymentChannel 支付渠道
 type PaymentChannel string
 
@@ -171,7 +173,8 @@ type QueryRefundResponse struct {
 // HandleNotifyParams 处理通知参数
 type HandleNotifyParams struct {
 	Channel     PaymentChannel         `json:"channel"`      // 支付渠道
-	RequestBody []byte                 `json:"request_body"` // 请求体数据
+	Request     *http.Request          `json:"-"`            // HTTP请求对象
+	RequestBody []byte                 `json:"request_body"` // 请求体数据（已废弃，使用Request字段）
 	NotifyData  map[string]interface{} `json:"notify_data"`  // 通知数据（兼容性别名）
 	MerchantID  string                 `json:"merchant_id"`  // 商户ID
 }

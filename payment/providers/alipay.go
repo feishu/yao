@@ -369,33 +369,146 @@ func (ap *AlipayProvider) CreateRefund(params *CreateRefundParams) (*CreateRefun
 
 // QueryRefund 查询退款状态
 func (ap *AlipayProvider) QueryRefund(params *QueryRefundParams) (*QueryRefundResponse, error) {
-	// 支付宝退款查询相对简单，这里返回成功状态
+	ctx := context.Background()
+
+	// 构建请求参数
+	bm := make(gopay.BodyMap)
+
+	// 支付宝退款查询需要订单号和退款单号
+	if params.OutTradeNo != "" {
+		bm.Set("out_trade_no", params.OutTradeNo)
+	}
+	if params.OutRefundNo != "" {
+		bm.Set("out_request_no", params.OutRefundNo)
+	}
+
+	// 调用支付宝退款查询接口
+	aliRsp, err := ap.client.TradeFastPayRefundQuery(ctx, bm)
+	if err != nil {
+		return &QueryRefundResponse{
+			Success: false,
+			Error:   fmt.Sprintf("调用支付宝退款查询接口失败: %v", err),
+		}, err
+	}
+
+	if aliRsp.Response.Code != "10000" {
+		return &QueryRefundResponse{
+			Success: false,
+			Error:   fmt.Sprintf("支付宝退款查询失败: %s - %s", aliRsp.Response.Code, aliRsp.Response.Msg),
+		}, fmt.Errorf("alipay query refund failed: %s", aliRsp.Response.Msg)
+	}
+
+	// 转换退款金额（元转分）
+	refundAmount, _ := strconv.ParseFloat(aliRsp.Response.RefundAmount, 64)
+
 	return &QueryRefundResponse{
-		Success:     true,
-		OutRefundNo: params.OutRefundNo,
-		Status:      RefundStatusSuccess,
-		Message:     "查询成功",
+		Success:      true,
+		OutRefundNo:  params.OutRefundNo,
+		RefundID:     params.OutRefundNo,
+		RefundAmount: int64(refundAmount * 100),
+		Status:       RefundStatusSuccess, // 支付宝退款查询成功即表示退款已完成
+		RefundTime:   aliRsp.Response.GmtRefundPay,
+		Message:      "查询成功",
 	}, nil
 }
 
 // HandleNotify 处理异步通知
 func (ap *AlipayProvider) HandleNotify(params *HandleNotifyParams) (*HandleNotifyResponse, error) {
-	// 解析通知数据
-	_ = string(params.RequestBody)
+	// 检查是否传入了HTTP请求对象
+	if params.Request == nil {
+		return &HandleNotifyResponse{
+			Success: false,
+			Error:   "HTTP请求对象不能为空",
+		}, fmt.Errorf("HTTP request is required")
+	}
 
-	// 这里应该解析实际的通知数据，暂时返回基本响应
+	// 解析支付宝通知参数
+	notifyReq, err := alipay.ParseNotifyToBodyMap(params.Request)
+	if err != nil {
+		return &HandleNotifyResponse{
+			Success: false,
+			Error:   fmt.Sprintf("解析通知数据失败: %v", err),
+		}, err
+	}
+
+	// 验证签名（使用支付宝公钥）
+	ok, err := alipay.VerifySign(ap.config.PublicKey, notifyReq)
+	if err != nil {
+		return &HandleNotifyResponse{
+			Success: false,
+			Error:   fmt.Sprintf("签名验证失败: %v", err),
+		}, err
+	}
+	if !ok {
+		return &HandleNotifyResponse{
+			Success: false,
+			Error:   "签名验证不通过",
+		}, fmt.Errorf("sign verification failed")
+	}
+
+	// 提取通知数据
+	outTradeNo := notifyReq.GetString("out_trade_no")
+	tradeNo := notifyReq.GetString("trade_no")
+	tradeStatus := notifyReq.GetString("trade_status")
+	totalAmount := notifyReq.GetString("total_amount")
+	gmtPayment := notifyReq.GetString("gmt_payment")
+
+	// 转换金额（元转分）
+	amount, _ := strconv.ParseFloat(totalAmount, 64)
+
+	// 转换为map用于返回
+	notifyData := make(map[string]interface{})
+	for k, v := range notifyReq {
+		notifyData[k] = v
+	}
+
 	return &HandleNotifyResponse{
-		Success: true,
-		Message: "通知处理成功",
+		Success:    true,
+		OutTradeNo: outTradeNo,
+		TradeNo:    tradeNo,
+		Status:     convertAlipayOrderStatus(tradeStatus),
+		Amount:     int64(amount * 100),
+		PayTime:    gmtPayment,
+		NotifyData: notifyData,
+		Message:    "通知处理成功",
 	}, nil
 }
 
 // DownloadBill 下载对账单
 func (ap *AlipayProvider) DownloadBill(params *DownloadBillParams) (*DownloadBillResponse, error) {
-	// 暂时返回基本响应，实际实现需要调用支付宝对账单接口
+	ctx := context.Background()
+
+	// 构建请求参数
+	bm := make(gopay.BodyMap)
+	bm.Set("bill_type", params.BillType) // trade（商户基于支付宝交易收单的商户经营账单）
+	bm.Set("bill_date", params.BillDate) // 格式：YYYY-MM-DD
+
+	// 设置默认账单类型
+	if params.BillType == "" {
+		bm.Set("bill_type", "trade")
+	}
+
+	// 调用支付宝对账单下载接口
+	aliRsp, err := ap.client.DataBillDownloadUrlQuery(ctx, bm)
+	if err != nil {
+		return &DownloadBillResponse{
+			Success: false,
+			Error:   fmt.Sprintf("调用支付宝对账单接口失败: %v", err),
+		}, err
+	}
+
+	if aliRsp.Response.Code != "10000" {
+		return &DownloadBillResponse{
+			Success: false,
+			Error:   fmt.Sprintf("支付宝获取对账单失败: %s - %s", aliRsp.Response.Code, aliRsp.Response.Msg),
+		}, fmt.Errorf("alipay download bill failed: %s", aliRsp.Response.Msg)
+	}
+
+	// 返回对账单下载链接
 	return &DownloadBillResponse{
-		Success: true,
-		Message: "对账单下载功能暂未实现",
+		Success:  true,
+		BillData: aliRsp.Response.BillDownloadUrl, // 返回下载链接
+		Message:  "对账单获取成功",
 	}, nil
 }
 

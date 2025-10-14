@@ -1,12 +1,17 @@
 package payment
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/kun/log"
+	"github.com/yaoapp/yao/config"
 )
 
 // ProcessSetConfig 设置商户配置
@@ -590,4 +595,225 @@ func IsValidTradeType(tradeType TradeType) bool {
 	default:
 		return false
 	}
+}
+
+// ProcessLoadCert 加载证书文件
+// 参数：
+//
+//	args[0] (string): 证书文件路径（相对于app根目录）
+//
+// 返回：
+//
+//	map[string]interface{}: 包含证书内容的map
+//	  - success (bool): 是否成功
+//	  - content (string): 证书内容
+//	  - path (string): 证书路径
+func ProcessLoadCert(process *process.Process) interface{} {
+	process.ValidateArgNums(1)
+
+	certPath := process.ArgsString(0)
+
+	log.Debug("ProcessLoadCert: certPath=%s", certPath)
+
+	// 验证路径安全性
+	if !isValidCertPath(certPath) {
+		exception.New(fmt.Sprintf("无效的证书路径: %s", certPath), 400).Throw()
+	}
+
+	// 获取app根目录
+	if config.Conf.Root == "" {
+		exception.New("应用配置未初始化，根目录为空", 500).Throw()
+	}
+
+	appRoot := config.Conf.Root
+	fullPath := filepath.Join(appRoot, certPath)
+
+	// 读取证书文件
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		log.Error("Failed to load cert: %v", err)
+		exception.New(fmt.Sprintf("读取证书文件失败: %v", err), 500).Throw()
+	}
+
+	log.Debug("Cert loaded successfully: %s (%d bytes)", certPath, len(content))
+
+	return map[string]interface{}{
+		"success": true,
+		"content": string(content),
+		"path":    certPath,
+	}
+}
+
+// ProcessLoadCertBase64 加载证书文件并转换为Base64编码
+// 参数：
+//
+//	args[0] (string): 证书文件路径（相对于app根目录）
+//
+// 返回：
+//
+//	map[string]interface{}: 包含Base64编码证书内容的map
+//	  - success (bool): 是否成功
+//	  - content (string): Base64编码的证书内容
+//	  - path (string): 证书路径
+//	  - format (string): 编码格式（"base64"）
+func ProcessLoadCertBase64(process *process.Process) interface{} {
+	process.ValidateArgNums(1)
+
+	certPath := process.ArgsString(0)
+
+	log.Debug("ProcessLoadCertBase64: certPath=%s", certPath)
+
+	// 验证路径安全性
+	if !isValidCertPath(certPath) {
+		exception.New(fmt.Sprintf("无效的证书路径: %s", certPath), 400).Throw()
+	}
+
+	// 获取app根目录
+	if config.Conf.Root == "" {
+		exception.New("应用配置未初始化，根目录为空", 500).Throw()
+	}
+
+	appRoot := config.Conf.Root
+	fullPath := filepath.Join(appRoot, certPath)
+
+	// 读取证书文件
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		log.Error("Failed to load cert: %v", err)
+		exception.New(fmt.Sprintf("读取证书文件失败: %v", err), 500).Throw()
+	}
+
+	// 转换为Base64
+	encoded := base64.StdEncoding.EncodeToString(content)
+
+	log.Debug("Cert loaded and encoded to base64: %s (%d bytes -> %d chars)", certPath, len(content), len(encoded))
+
+	return map[string]interface{}{
+		"success": true,
+		"content": encoded,
+		"path":    certPath,
+		"format":  "base64",
+	}
+}
+
+// ProcessGetCertificate 获取已加载的证书配置
+// 参数：
+//
+//	args[0] (string): 商户ID
+//	args[1] (string): 支付渠道 (alipay/wechat)
+//
+// 返回：
+//
+//	map[string]interface{}: 证书配置
+//	  - success (bool): 是否成功
+//	  - merchant_id (string): 商户ID
+//	  - channel (string): 支付渠道
+//	  - private_key (string): 私钥内容
+//	  - public_key (string): 公钥内容
+//	  - extra_files (map): 额外证书文件
+func ProcessGetCertificate(process *process.Process) interface{} {
+	process.ValidateArgNums(2)
+
+	merchantID := process.ArgsString(0)
+	channel := process.ArgsString(1)
+
+	log.Debug("ProcessGetCertificate: merchantID=%s, channel=%s", merchantID, channel)
+
+	// 验证参数
+	if merchantID == "" {
+		exception.New("商户ID不能为空", 400).Throw()
+	}
+
+	if channel == "" {
+		exception.New("支付渠道不能为空", 400).Throw()
+	}
+
+	// 验证支付渠道
+	if !IsValidChannel(PaymentChannel(channel)) {
+		exception.New(fmt.Sprintf("不支持的支付渠道: %s", channel), 400).Throw()
+	}
+
+	// 获取证书配置
+	certConfig, err := Manager.GetCertConfig(merchantID, PaymentChannel(channel))
+	if err != nil {
+		log.Error("ProcessGetCertificate failed: %v", err)
+		exception.New(fmt.Sprintf("获取证书配置失败: %v", err), 404).Throw()
+	}
+
+	return map[string]interface{}{
+		"success":     true,
+		"merchant_id": certConfig.MerchantID,
+		"channel":     string(certConfig.Channel),
+		"private_key": certConfig.PrivateKey,
+		"public_key":  certConfig.PublicKey,
+		"extra_files": certConfig.ExtraFiles,
+	}
+}
+
+// ProcessListCertificates 列出所有已加载的证书配置
+// 参数：
+//
+//	无
+//
+// 返回：
+//
+//	map[string]interface{}: 证书配置列表
+func ProcessListCertificates(process *process.Process) interface{} {
+	process.ValidateArgNums(0)
+
+	log.Debug("ProcessListCertificates")
+
+	Manager.mutex.RLock()
+	defer Manager.mutex.RUnlock()
+
+	certs := make([]map[string]interface{}, 0, len(Manager.certConfigs))
+
+	for key, certConfig := range Manager.certConfigs {
+		certs = append(certs, map[string]interface{}{
+			"key":          key,
+			"merchant_id":  certConfig.MerchantID,
+			"channel":      string(certConfig.Channel),
+			"has_app_cert": certConfig.AppCert != "",
+			"has_root_cert": certConfig.RootCert != "",
+			"extra_files":  len(certConfig.ExtraFiles),
+		})
+	}
+
+	return map[string]interface{}{
+		"success": true,
+		"count":   len(certs),
+		"certs":   certs,
+	}
+}
+
+// isValidCertPath 验证证书路径安全性
+func isValidCertPath(path string) bool {
+	// 防止路径穿越攻击
+	if strings.Contains(path, "..") {
+		log.Warn("Invalid cert path: contains '..': %s", path)
+		return false
+	}
+
+	// 防止绝对路径
+	if filepath.IsAbs(path) {
+		log.Warn("Invalid cert path: absolute path not allowed: %s", path)
+		return false
+	}
+
+	// 只允许特定扩展名
+	ext := filepath.Ext(path)
+	if ext == "" {
+		log.Warn("Invalid cert path: no file extension: %s", path)
+		return false
+	}
+
+	validExts := []string{".pem", ".crt", ".key", ".p12", ".pfx", ".cer"}
+	for _, validExt := range validExts {
+		if strings.EqualFold(ext, validExt) {
+			return true
+		}
+	}
+
+	log.Warn("Invalid cert path: unsupported extension %s: %s", ext, path)
+	return false
 }
