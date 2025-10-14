@@ -1,493 +1,566 @@
+// Package payment 提供统一的支付接口，支持多种支付渠道
 package payment
 
 import (
-	"context"
 	"fmt"
-	"strconv"
-	"time"
+	"sync"
 
-	"github.com/go-pay/gopay"
-	"github.com/go-pay/gopay/paypal"
+	"github.com/yaoapp/kun/log"
 )
-
-// PaymentProvider 支付提供商
-type PaymentProvider string
-
-const (
-	ProviderWechat PaymentProvider = "wechat"
-	ProviderAlipay PaymentProvider = "alipay"
-	ProviderPayPal PaymentProvider = "paypal"
-)
-
-// PaymentStatus 支付状态
-type PaymentStatus string
-
-const (
-	PaymentStatusPending   PaymentStatus = "PENDING"
-	PaymentStatusSuccess   PaymentStatus = "SUCCESS"
-	PaymentStatusFailed    PaymentStatus = "FAILED"
-	PaymentStatusCancelled PaymentStatus = "CANCELLED"
-	PaymentStatusRefunded  PaymentStatus = "REFUNDED"
-)
-
-// PaymentConfig 支付配置
-type PaymentConfig struct {
-	Provider    PaymentProvider `json:"provider"`
-	AppID       string          `json:"app_id"`
-	AppSecret   string          `json:"app_secret"`
-	MchID       string          `json:"mch_id"`
-	APIKey      string          `json:"api_key"`
-	PrivateKey  string          `json:"private_key"`  // 支付宝V3私钥
-	IsProd      bool            `json:"is_prod"`
-	NotifyURL   string          `json:"notify_url"`
-	ReturnURL   string          `json:"return_url"`
-}
-
-// PaymentRequest 支付请求
-type PaymentRequest struct {
-	Provider    PaymentProvider `json:"provider"`
-	AppID       string          `json:"app_id"`
-	OutTradeNo  string          `json:"out_trade_no"`
-	Amount      float64         `json:"amount"`      // 元为单位
-	Subject     string          `json:"subject"`
-	Body        string          `json:"body"`
-	UserID      string          `json:"user_id"`     // 用户ID或OpenID
-	NotifyURL   string          `json:"notify_url"`
-	ReturnURL   string          `json:"return_url"`
-}
-
-// PaymentResponse 支付响应
-type PaymentResponse struct {
-	Success     bool          `json:"success"`
-	TradeNo     string        `json:"trade_no"`
-	OutTradeNo  string        `json:"out_trade_no"`
-	Amount      string        `json:"amount"`
-	Status      PaymentStatus `json:"status"`
-	PayURL      string        `json:"pay_url"`
-	CreatedTime string        `json:"created_time"`
-}
-
-// RefundRequest 退款请求
-type RefundRequest struct {
-	Provider     PaymentProvider `json:"provider"`
-	OutTradeNo   string          `json:"out_trade_no"`
-	RefundAmount float64         `json:"refund_amount"` // 元为单位
-	Reason       string          `json:"reason"`
-}
-
-// RefundResponse 退款响应
-type RefundResponse struct {
-	Success      bool    `json:"success"`
-	RefundNo     string  `json:"refund_no"`
-	OutTradeNo   string  `json:"out_trade_no"`
-	RefundAmount float64 `json:"refund_amount"`
-	RefundStatus string  `json:"refund_status"`
-}
 
 // PaymentManager 支付管理器
 type PaymentManager struct {
-	configs map[PaymentProvider]*PaymentConfig
-	clients map[PaymentProvider]interface{}
+	providers map[string]PaymentProvider
+	configs   map[string]interface{}
+	mutex     sync.RWMutex
 }
 
+// 全局支付管理器实例
 var manager *PaymentManager
+var once sync.Once
 
-// GetManager 获取支付管理器单例
-func GetManager() *PaymentManager {
-	if manager == nil {
-		manager = &PaymentManager{
-			configs: make(map[PaymentProvider]*PaymentConfig),
-			clients: make(map[PaymentProvider]interface{}),
-		}
+// Manager 全局支付管理器实例（供外部使用）
+var Manager *PaymentManager
+
+// NewPaymentManager 创建新的支付管理器
+func NewPaymentManager() *PaymentManager {
+	return &PaymentManager{
+		providers: make(map[string]PaymentProvider),
+		configs:   make(map[string]interface{}),
 	}
+}
+
+// GetManager 获取全局支付管理器实例
+func GetManager() *PaymentManager {
+	once.Do(func() {
+		manager = NewPaymentManager()
+	})
 	return manager
 }
 
-// AddConfig 添加支付配置
-func (pm *PaymentManager) AddConfig(config *PaymentConfig) error {
-	pm.configs[config.Provider] = config
-	return pm.initClient(config.Provider)
-}
+// RegisterProvider 注册支付提供商
+func (pm *PaymentManager) RegisterProvider(channel string, provider PaymentProvider) error {
+	pm.mutex.Lock()
+	defer pm.mutex.Unlock()
 
-// initClient 初始化客户端
-func (pm *PaymentManager) initClient(provider PaymentProvider) error {
-	config := pm.configs[provider]
-	if config == nil {
-		return fmt.Errorf("config not found for provider: %s", provider)
+	if provider == nil {
+		return fmt.Errorf("provider cannot be nil")
 	}
 
-	switch provider {
-	case ProviderWechat:
-		// 初始化微信支付V3客户端
-		wechatConfig := &WeChatV3Config{
-			MchID:       config.MchID,
-			APIv3Key:    config.APIKey,
-			PrivateKey:  config.PrivateKey,
-			IsProd:      config.IsProd,
-			NotifyURL:   config.NotifyURL,
-		}
-		client, err := NewWeChatV3Client(wechatConfig)
-		if err != nil {
-			return fmt.Errorf("failed to create wechat client: %v", err)
-		}
-		pm.clients[provider] = client
+	pm.providers[channel] = provider
+	log.Info("Payment provider registered: %s", channel)
+	return nil
+}
 
-	case ProviderAlipay:
-		// 初始化支付宝V3客户端
-		alipayConfig := &AliPayConfig{
-			AppID:      config.AppID,
-			PrivateKey: config.PrivateKey,
-			IsProd:     config.IsProd,
-			NotifyURL:  config.NotifyURL,
-			ReturnURL:  config.ReturnURL,
-		}
-		client, err := NewAliPayV3Client(alipayConfig)
-		if err != nil {
-			return fmt.Errorf("failed to create alipay client: %v", err)
-		}
-		pm.clients[provider] = client
+// GetProvider 获取支付提供商
+func (pm *PaymentManager) GetProvider(channel string) (PaymentProvider, error) {
+	pm.mutex.RLock()
+	defer pm.mutex.RUnlock()
 
-	case ProviderPayPal:
-		// 初始化PayPal客户端
-		client, err := paypal.NewClient(config.AppID, config.AppSecret, config.IsProd)
-		if err != nil {
-			return fmt.Errorf("failed to create paypal client: %v", err)
-		}
-		pm.clients[provider] = client
+	provider, exists := pm.providers[channel]
+	if !exists {
+		return nil, fmt.Errorf("payment provider not found for channel: %s", channel)
+	}
 
-	default:
-		return fmt.Errorf("unsupported provider: %s", provider)
+	return provider, nil
+}
+
+// HasProvider 检查是否存在指定的支付提供商
+func (pm *PaymentManager) HasProvider(channel PaymentChannel) bool {
+	pm.mutex.RLock()
+	defer pm.mutex.RUnlock()
+
+	_, exists := pm.providers[string(channel)]
+	return exists
+}
+
+// SetConfig 设置支付配置
+func (pm *PaymentManager) SetConfig(merchantID string, config interface{}) error {
+	pm.mutex.Lock()
+	defer pm.mutex.Unlock()
+
+	if merchantID == "" {
+		return fmt.Errorf("merchant ID cannot be empty")
+	}
+
+	pm.configs[merchantID] = config
+	log.Info("Payment config set for merchant: %s", merchantID)
+	return nil
+}
+
+// GetConfig 获取支付配置
+func (pm *PaymentManager) GetConfig(merchantID string) (interface{}, error) {
+	pm.mutex.RLock()
+	defer pm.mutex.RUnlock()
+
+	config, exists := pm.configs[merchantID]
+	if !exists {
+		return nil, fmt.Errorf("payment config not found for merchant: %s", merchantID)
+	}
+
+	return config, nil
+}
+
+// CreateOrder 创建支付订单
+func (pm *PaymentManager) CreateOrder(params *CreateOrderParams) (*CreateOrderResponse, error) {
+	if params == nil {
+		return &CreateOrderResponse{Success: false}, fmt.Errorf("params cannot be nil")
+	}
+
+	// 验证参数
+	if err := pm.ValidateCreateOrderParams(params); err != nil {
+		return &CreateOrderResponse{Success: false}, err
+	}
+
+	// 获取支付提供商
+	provider, err := pm.GetProvider(params.Channel)
+	if err != nil {
+		return &CreateOrderResponse{Success: false}, err
+	}
+
+	// 创建订单
+	response, err := provider.CreateOrder(params)
+	if err != nil {
+		log.Error("Failed to create order: %v", err)
+		return &CreateOrderResponse{Success: false}, err
+	}
+
+	log.Info("Order created successfully: %s", params.OutTradeNo)
+	return response, nil
+}
+
+// QueryOrder 查询支付订单
+func (pm *PaymentManager) QueryOrder(params *QueryOrderParams) (*QueryOrderResponse, error) {
+	if params == nil {
+		return &QueryOrderResponse{Success: false}, fmt.Errorf("params cannot be nil")
+	}
+
+	// 验证参数
+	if err := pm.ValidateQueryOrderParams(params); err != nil {
+		return &QueryOrderResponse{Success: false}, err
+	}
+
+	// 获取支付提供商
+	provider, err := pm.GetProvider(params.Channel)
+	if err != nil {
+		return &QueryOrderResponse{Success: false}, err
+	}
+
+	// 查询订单
+	response, err := provider.QueryOrder(params)
+	if err != nil {
+		log.Error("Failed to query order: %v", err)
+		return &QueryOrderResponse{Success: false}, err
+	}
+
+	return response, nil
+}
+
+// CreateRefund 创建退款
+func (pm *PaymentManager) CreateRefund(params *CreateRefundParams) (*CreateRefundResponse, error) {
+	if params == nil {
+		return &CreateRefundResponse{Success: false}, fmt.Errorf("params cannot be nil")
+	}
+
+	// 验证参数
+	if err := pm.ValidateCreateRefundParams(params); err != nil {
+		return &CreateRefundResponse{Success: false, Error: err.Error()}, err
+	}
+
+	// 获取支付提供商
+	provider, err := pm.GetProvider(params.Channel)
+	if err != nil {
+		return &CreateRefundResponse{Success: false, Error: err.Error()}, err
+	}
+
+	// 创建退款
+	response, err := provider.CreateRefund(params)
+	if err != nil {
+		log.Error("Failed to create refund: %v", err)
+		return &CreateRefundResponse{Success: false, Error: err.Error()}, err
+	}
+
+	log.Info("Refund created successfully: %s", params.OutRefundNo)
+	return response, nil
+}
+
+// QueryRefund 查询退款状态
+func (pm *PaymentManager) QueryRefund(params *QueryRefundParams) (*QueryRefundResponse, error) {
+	if params == nil {
+		return &QueryRefundResponse{Success: false}, fmt.Errorf("params cannot be nil")
+	}
+
+	// 验证参数
+	if err := pm.ValidateQueryRefundParams(params); err != nil {
+		return &QueryRefundResponse{Success: false}, err
+	}
+
+	// 获取支付提供商
+	provider, err := pm.GetProvider(params.Channel)
+	if err != nil {
+		return &QueryRefundResponse{Success: false}, err
+	}
+
+	// 查询退款
+	response, err := provider.QueryRefund(params)
+	if err != nil {
+		log.Error("Failed to query refund: %v", err)
+		return &QueryRefundResponse{Success: false}, err
+	}
+
+	return response, nil
+}
+
+// HandleNotify 处理异步通知
+func (pm *PaymentManager) HandleNotify(merchantID string, channel PaymentChannel, notifyData []byte) (*HandleNotifyResponse, error) {
+	if merchantID == "" {
+		return &HandleNotifyResponse{Success: false}, fmt.Errorf("merchant ID cannot be empty")
+	}
+
+	if len(notifyData) == 0 {
+		return &HandleNotifyResponse{Success: false}, fmt.Errorf("request body is required")
+	}
+
+	// 获取支付提供商
+	provider, err := pm.GetProvider(string(channel))
+	if err != nil {
+		return &HandleNotifyResponse{Success: false}, err
+	}
+
+	// 构建通知参数
+	params := &HandleNotifyParams{
+		MerchantID:  merchantID,
+		Channel:     string(channel),
+		RequestBody: notifyData,
+		NotifyData:  make(map[string]interface{}),
+	}
+
+	// 处理通知
+	response, err := provider.HandleNotify(params)
+	if err != nil {
+		log.Error("Failed to handle notify: %v", err)
+		return &HandleNotifyResponse{Success: false}, err
+	}
+
+	log.Info("Notify handled successfully for merchant: %s", merchantID)
+	return response, nil
+}
+
+// DownloadBill 下载对账单
+func (pm *PaymentManager) DownloadBill(params *DownloadBillParams) (*DownloadBillResponse, error) {
+	if params == nil {
+		return &DownloadBillResponse{Success: false}, fmt.Errorf("params cannot be nil")
+	}
+
+	// 验证参数
+	if err := pm.ValidateDownloadBillParams(params); err != nil {
+		return &DownloadBillResponse{Success: false, Error: err.Error()}, err
+	}
+
+	// 获取支付提供商
+	provider, err := pm.GetProvider(params.Channel)
+	if err != nil {
+		return &DownloadBillResponse{Success: false, Error: err.Error()}, err
+	}
+
+	// 下载对账单
+	response, err := provider.DownloadBill(params)
+	if err != nil {
+		log.Error("Failed to download bill: %v", err)
+		return &DownloadBillResponse{Success: false, Error: err.Error()}, err
+	}
+
+	log.Info("Bill downloaded successfully: %s", params.BillDate)
+	return response, nil
+}
+
+// SetMerchantConfig 设置商户配置
+func (pm *PaymentManager) SetMerchantConfig(merchantID string, channel PaymentChannel, config map[string]interface{}) error {
+	pm.mutex.Lock()
+	defer pm.mutex.Unlock()
+
+	if merchantID == "" {
+		return fmt.Errorf("merchant ID cannot be empty")
+	}
+
+	if len(config) == 0 {
+		return fmt.Errorf("config cannot be empty")
+	}
+
+	key := fmt.Sprintf("%s_%s", merchantID, string(channel))
+	pm.configs[key] = config
+	log.Info("Merchant config set: %s", key)
+	return nil
+}
+
+// GetMerchantConfig 获取商户配置
+func (pm *PaymentManager) GetMerchantConfig(merchantID string, channel PaymentChannel) (map[string]interface{}, error) {
+	pm.mutex.RLock()
+	defer pm.mutex.RUnlock()
+
+	key := fmt.Sprintf("%s_%s", merchantID, string(channel))
+	config, exists := pm.configs[key]
+	if !exists {
+		return nil, fmt.Errorf("merchant config not found: %s", key)
+	}
+
+	configMap, ok := config.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid config format for merchant: %s", key)
+	}
+
+	return configMap, nil
+}
+
+// Reconcile 对账
+func (pm *PaymentManager) Reconcile(params *ReconcileParams) (*ReconcileResponse, error) {
+	if params == nil {
+		return &ReconcileResponse{Success: false}, fmt.Errorf("params cannot be nil")
+	}
+
+	// 验证参数
+	if err := pm.ValidateReconcileParams(params); err != nil {
+		return &ReconcileResponse{Success: false, Error: err.Error()}, err
+	}
+
+	// 获取支付提供商
+	provider, err := pm.GetProvider(params.Channel)
+	if err != nil {
+		return &ReconcileResponse{Success: false, Error: err.Error()}, err
+	}
+
+	// 下载对账单
+	billParams := &DownloadBillParams{
+		MerchantNo: params.MerchantNo,
+		Channel:    params.Channel,
+		BillDate:   params.BillDate,
+		BillType:   "ALL",
+	}
+
+	billResponse, err := provider.DownloadBill(billParams)
+	if err != nil {
+		log.Error("Failed to download bill for reconcile: %v", err)
+		return &ReconcileResponse{Success: false, Error: err.Error()}, err
+	}
+
+	if !billResponse.Success {
+		return &ReconcileResponse{
+			Success: false,
+			Error:   billResponse.Error,
+		}, fmt.Errorf("download bill failed: %s", billResponse.Error)
+	}
+
+	// 这里可以添加具体的对账逻辑
+	// 比如解析对账单数据，与本地订单数据进行比对等
+
+	log.Info("Reconcile completed successfully: %s", params.BillDate)
+	return &ReconcileResponse{
+		Success: true,
+		Message: "对账完成",
+	}, nil
+}
+
+// ValidateCreateOrderParams 验证创建订单参数
+func (pm *PaymentManager) ValidateCreateOrderParams(params *CreateOrderParams) error {
+	if params.MerchantNo == "" {
+		return fmt.Errorf("merchant_no is required")
+	}
+
+	if params.OutTradeNo == "" {
+		return fmt.Errorf("out_trade_no is required")
+	}
+
+	if params.Channel == "" {
+		return fmt.Errorf("channel is required")
+	}
+
+	if params.TradeType == "" {
+		return fmt.Errorf("trade_type is required")
+	}
+
+	if params.Amount <= 0 {
+		return fmt.Errorf("amount must be greater than 0")
+	}
+
+	if params.Subject == "" {
+		return fmt.Errorf("subject is required")
+	}
+
+	if params.NotifyURL == "" {
+		return fmt.Errorf("notify_url is required")
+	}
+
+	// 验证支付渠道
+	if !isValidPaymentChannel(params.Channel) {
+		return fmt.Errorf("invalid payment channel: %s", params.Channel)
+	}
+
+	// 验证交易类型
+	if !isValidTradeType(params.TradeType) {
+		return fmt.Errorf("invalid trade type: %s", params.TradeType)
 	}
 
 	return nil
 }
 
-// GetClient 获取客户端
-func (pm *PaymentManager) GetClient(provider PaymentProvider) (interface{}, error) {
-	client, exists := pm.clients[provider]
-	if !exists {
-		return nil, fmt.Errorf("client not found for provider: %s", provider)
+// ValidateQueryOrderParams 验证查询订单参数
+func (pm *PaymentManager) ValidateQueryOrderParams(params *QueryOrderParams) error {
+	if params.MerchantNo == "" {
+		return fmt.Errorf("merchant_no is required")
 	}
-	return client, nil
+
+	if params.Channel == "" {
+		return fmt.Errorf("channel is required")
+	}
+
+	if params.OutTradeNo == "" && params.TransactionID == "" {
+		return fmt.Errorf("either out_trade_no or transaction_id is required")
+	}
+
+	// 验证支付渠道
+	if !isValidPaymentChannel(params.Channel) {
+		return fmt.Errorf("invalid payment channel: %s", params.Channel)
+	}
+
+	return nil
 }
 
-// CreatePayment 创建支付订单
-func (pm *PaymentManager) CreatePayment(req *PaymentRequest) (*PaymentResponse, error) {
-	client, err := pm.GetClient(req.Provider)
-	if err != nil {
-		return nil, err
+// ValidateQueryRefundParams 验证查询退款参数
+func (pm *PaymentManager) ValidateQueryRefundParams(params *QueryRefundParams) error {
+	if params.Channel == "" {
+		return fmt.Errorf("channel is required")
 	}
 
-	ctx := context.Background()
-	switch req.Provider {
-	case ProviderWechat:
-		return pm.createWechatPayment(ctx, client.(*WeChatV3Client), req)
-	case ProviderAlipay:
-		return pm.createAlipayPayment(ctx, client.(*AliPayV3Client), req)
-	case ProviderPayPal:
-		return pm.createPayPalPayment(ctx, client.(*paypal.Client), req)
-	default:
-		return nil, fmt.Errorf("unsupported provider: %s", req.Provider)
+	if params.OutRefundNo == "" && params.RefundID == "" {
+		return fmt.Errorf("either out_refund_no or refund_id is required")
 	}
+
+	// 验证支付渠道
+	if !isValidPaymentChannel(params.Channel) {
+		return fmt.Errorf("invalid payment channel: %s", params.Channel)
+	}
+
+	return nil
 }
 
-// createWechatPayment 创建微信支付订单
-func (pm *PaymentManager) createWechatPayment(ctx context.Context, client *WeChatV3Client, req *PaymentRequest) (*PaymentResponse, error) {
-	wxReq := &WeChatV3PayRequest{
-		AppID:       req.AppID,
-		OutTradeNo:  req.OutTradeNo,
-		Description: req.Subject,
-		TotalAmount: int64(req.Amount * 100), // 转换为分
-		OpenID:      req.UserID,
-		NotifyURL:   req.NotifyURL,
+// ValidateDownloadBillParams 验证下载对账单参数
+func (pm *PaymentManager) ValidateDownloadBillParams(params *DownloadBillParams) error {
+	if params.Channel == "" {
+		return fmt.Errorf("channel is required")
 	}
 
-	resp, err := client.JSAPIPayment(ctx, wxReq)
-	if err != nil {
-		return nil, err
+	if params.BillDate == "" {
+		return fmt.Errorf("bill_date is required")
 	}
 
-	return &PaymentResponse{
-		Success:     resp.PrepayID != "",
-		TradeNo:     resp.PrepayID,
-		OutTradeNo:  req.OutTradeNo,
-		PayURL:      resp.CodeURL,
-		Amount:      fmt.Sprintf("%.2f", req.Amount),
-		Status:      PaymentStatusPending,
-		CreatedTime: time.Now().Format("2006-01-02 15:04:05"),
-	}, nil
+	// 验证支付渠道
+	if !isValidPaymentChannel(params.Channel) {
+		return fmt.Errorf("invalid payment channel: %s", params.Channel)
+	}
+
+	// 验证对账单类型（可选）
+	if params.BillType != "" && !isValidBillType(params.BillType) {
+		return fmt.Errorf("invalid bill type: %s", params.BillType)
+	}
+
+	return nil
 }
 
-// createAlipayPayment 创建支付宝支付订单
-func (pm *PaymentManager) createAlipayPayment(ctx context.Context, client *AliPayV3Client, req *PaymentRequest) (*PaymentResponse, error) {
-	params := &TradePrecreateParams{
-		OutTradeNo:  req.OutTradeNo,
-		TotalAmount: fmt.Sprintf("%.2f", req.Amount),
-		Subject:     req.Subject,
-		Body:        req.Body,
+// ValidateCreateRefundParams 验证创建退款参数
+func (pm *PaymentManager) ValidateCreateRefundParams(params *CreateRefundParams) error {
+	if params.Channel == "" {
+		return fmt.Errorf("channel is required")
 	}
 
-	resp, err := client.TradePrecreate(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("alipay trade precreate failed: %v", err)
+	if params.OutRefundNo == "" {
+		return fmt.Errorf("out_refund_no is required")
 	}
 
-	return &PaymentResponse{
-		Success:     resp.Code == "10000",
-		TradeNo:     resp.QrCode,
-		OutTradeNo:  req.OutTradeNo,
-		PayURL:      resp.QrCode,
-		Amount:      fmt.Sprintf("%.2f", req.Amount),
-		Status:      PaymentStatusPending,
-		CreatedTime: time.Now().Format("2006-01-02 15:04:05"),
-	}, nil
+	if params.RefundAmount <= 0 {
+		return fmt.Errorf("refund_amount must be greater than 0")
+	}
+
+	if params.TotalAmount <= 0 {
+		return fmt.Errorf("total_amount must be greater than 0")
+	}
+
+	if params.OutTradeNo == "" && params.TransactionID == "" {
+		return fmt.Errorf("either out_trade_no or transaction_id is required")
+	}
+
+	// 验证支付渠道
+	if !isValidPaymentChannel(params.Channel) {
+		return fmt.Errorf("invalid payment channel: %s", params.Channel)
+	}
+
+	return nil
 }
 
-// createPayPalPayment 创建PayPal支付订单
-func (pm *PaymentManager) createPayPalPayment(ctx context.Context, client *paypal.Client, req *PaymentRequest) (*PaymentResponse, error) {
-	bm := make(gopay.BodyMap)
-	bm.Set("intent", "CAPTURE")
-	bm.SetBodyMap("purchase_units", func(bm gopay.BodyMap) {
-		bm.SetBodyMap("amount", func(bm gopay.BodyMap) {
-			bm.Set("currency_code", "USD")
-			bm.Set("value", fmt.Sprintf("%.2f", req.Amount))
-		})
-	})
-
-	ppRsp, err := client.CreateOrder(ctx, bm)
-	if err != nil {
-		return nil, fmt.Errorf("create paypal order failed: %v", err)
+// ValidateReconcileParams 验证对账参数
+func (pm *PaymentManager) ValidateReconcileParams(params *ReconcileParams) error {
+	if params.Channel == "" {
+		return fmt.Errorf("channel is required")
 	}
 
-	return &PaymentResponse{
-		Success:     ppRsp.Code == paypal.Success,
-		TradeNo:     ppRsp.Response.Id,
-		OutTradeNo:  req.OutTradeNo,
-		Amount:      fmt.Sprintf("%.2f", req.Amount),
-		Status:      PaymentStatusPending,
-		CreatedTime: time.Now().Format("2006-01-02 15:04:05"),
-	}, nil
+	if params.BillDate == "" {
+		return fmt.Errorf("bill_date is required")
+	}
+
+	// 验证支付渠道
+	if !isValidPaymentChannel(params.Channel) {
+		return fmt.Errorf("invalid payment channel: %s", params.Channel)
+	}
+
+	return nil
 }
 
-// QueryPayment 查询支付订单
-func (pm *PaymentManager) QueryPayment(provider PaymentProvider, outTradeNo string) (*PaymentResponse, error) {
-	client, err := pm.GetClient(provider)
-	if err != nil {
-		return nil, err
+// isValidPaymentChannel 验证支付渠道是否有效
+func isValidPaymentChannel(channel string) bool {
+	validChannels := []string{
+		string(ChannelAlipay),
+		string(ChannelWechat),
 	}
 
-	ctx := context.Background()
-	switch provider {
-	case ProviderWechat:
-		return pm.queryWechatPayment(ctx, client.(*WeChatV3Client), outTradeNo)
-	case ProviderAlipay:
-		return pm.queryAlipayPayment(ctx, client.(*AliPayV3Client), outTradeNo)
-	case ProviderPayPal:
-		return pm.queryPayPalPayment(ctx, client.(*paypal.Client), outTradeNo)
-	default:
-		return nil, fmt.Errorf("unsupported provider: %s", provider)
+	for _, validChannel := range validChannels {
+		if channel == validChannel {
+			return true
+		}
 	}
+
+	return false
 }
 
-// queryWechatPayment 查询微信支付订单
-func (pm *PaymentManager) queryWechatPayment(ctx context.Context, client *WeChatV3Client, outTradeNo string) (*PaymentResponse, error) {
-	resp, err := client.QueryOrder(ctx, outTradeNo)
-	if err != nil {
-		return nil, err
+// isValidBillType 验证账单类型是否有效
+func isValidBillType(billType string) bool {
+	validTypes := []string{"ALL", "SUCCESS", "REFUND"}
+	for _, validType := range validTypes {
+		if billType == validType {
+			return true
+		}
 	}
-
-	var status PaymentStatus
-	switch resp.Response.TradeState {
-	case "SUCCESS":
-		status = PaymentStatusSuccess
-	case "CLOSED":
-		status = PaymentStatusCancelled
-	default:
-		status = PaymentStatusPending
-	}
-
-	totalAmount, _ := strconv.ParseFloat(fmt.Sprintf("%.2f", float64(resp.Response.Amount.Total)/100), 64)
-
-	return &PaymentResponse{
-		Success:    resp.Response.TradeState == "SUCCESS",
-		TradeNo:    resp.Response.TransactionId,
-		OutTradeNo: outTradeNo,
-		Amount:     fmt.Sprintf("%.2f", totalAmount),
-		Status:     status,
-	}, nil
+	return false
 }
 
-// queryAlipayPayment 查询支付宝支付订单
-func (pm *PaymentManager) queryAlipayPayment(ctx context.Context, client *AliPayV3Client, outTradeNo string) (*PaymentResponse, error) {
-	params := &TradeQueryParams{
-		OutTradeNo: outTradeNo,
-	}
-
-	resp, err := client.TradeQuery(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("alipay trade query failed: %v", err)
-	}
-
-	var status PaymentStatus
-	switch resp.TradeStatus {
-	case "TRADE_SUCCESS":
-		status = PaymentStatusSuccess
-	case "TRADE_CLOSED":
-		status = PaymentStatusCancelled
-	default:
-		status = PaymentStatusPending
-	}
-
-	totalAmount, _ := strconv.ParseFloat(resp.TotalAmount, 64)
-
-	return &PaymentResponse{
-		Success:    resp.TradeStatus == "TRADE_SUCCESS",
-		TradeNo:    resp.TradeNo,
-		OutTradeNo: outTradeNo,
-		Amount:     fmt.Sprintf("%.2f", totalAmount),
-		Status:     status,
-	}, nil
-}
-
-// queryPayPalPayment 查询PayPal支付订单
-func (pm *PaymentManager) queryPayPalPayment(ctx context.Context, client *paypal.Client, orderID string) (*PaymentResponse, error) {
-	ppRsp, err := client.OrderDetail(ctx, orderID, nil)
-	if err != nil {
-		return nil, fmt.Errorf("query paypal order failed: %v", err)
-	}
-
-	var status PaymentStatus
-	switch ppRsp.Response.Status {
-	case "COMPLETED":
-		status = PaymentStatusSuccess
-	case "CANCELLED":
-		status = PaymentStatusCancelled
-	default:
-		status = PaymentStatusPending
-	}
-
-	return &PaymentResponse{
-		Success:    ppRsp.Response.Status == "COMPLETED",
-		TradeNo:    ppRsp.Response.Id,
-		OutTradeNo: orderID,
-		Status:     status,
-	}, nil
-}
-
-// RefundPayment 申请退款
-func (pm *PaymentManager) RefundPayment(req *RefundRequest) (*RefundResponse, error) {
-	client, err := pm.GetClient(req.Provider)
-	if err != nil {
-		return nil, err
-	}
-
-	ctx := context.Background()
-	switch req.Provider {
-	case ProviderWechat:
-		return pm.refundWechatPayment(ctx, client.(*WeChatV3Client), req)
-	case ProviderAlipay:
-		return pm.refundAlipayPayment(ctx, client.(*AliPayV3Client), req)
-	case ProviderPayPal:
-		return pm.refundPayPalPayment(ctx, client.(*paypal.Client), req)
-	default:
-		return nil, fmt.Errorf("unsupported provider: %s", req.Provider)
+// GetSupportedProviders 获取所有支持的支付渠道
+func GetSupportedProviders() []PaymentChannel {
+	return []PaymentChannel{
+		PaymentChannel(ChannelAlipay),
+		PaymentChannel(ChannelWechat),
 	}
 }
 
-// refundWechatPayment 微信支付退款
-func (pm *PaymentManager) refundWechatPayment(ctx context.Context, client *WeChatV3Client, req *RefundRequest) (*RefundResponse, error) {
-	refundNo := fmt.Sprintf("refund_%s_%d", req.OutTradeNo, time.Now().Unix())
-	
-	resp, err := client.Refund(ctx, req.OutTradeNo, refundNo, int64(req.RefundAmount*100), int64(req.RefundAmount*100), req.Reason)
-	if err != nil {
-		return nil, err
+// isValidTradeType 验证交易类型是否有效
+func isValidTradeType(tradeType string) bool {
+	validTypes := []string{
+		string(TradeTypeNative),
+		string(TradeTypeJSAPI),
+		string(TradeTypeApp),
+		string(TradeTypeH5),
 	}
-
-	return &RefundResponse{
-		Success:      resp.Response.Status == "SUCCESS",
-		RefundNo:     resp.Response.OutRefundNo,
-		OutTradeNo:   req.OutTradeNo,
-		RefundAmount: req.RefundAmount,
-		RefundStatus: resp.Response.Status,
-	}, nil
-}
-
-// refundAlipayPayment 支付宝退款
-func (pm *PaymentManager) refundAlipayPayment(ctx context.Context, client *AliPayV3Client, req *RefundRequest) (*RefundResponse, error) {
-	params := &TradeRefundParams{
-		OutTradeNo:   req.OutTradeNo,
-		RefundAmount: fmt.Sprintf("%.2f", req.RefundAmount),
-		RefundReason: req.Reason,
-		OutRequestNo: fmt.Sprintf("refund_%s_%d", req.OutTradeNo, time.Now().Unix()),
+	for _, validType := range validTypes {
+		if tradeType == validType {
+			return true
+		}
 	}
-
-	resp, err := client.TradeRefund(ctx, params)
-	if err != nil {
-		return nil, fmt.Errorf("alipay trade refund failed: %v", err)
-	}
-
-	return &RefundResponse{
-		Success:      resp.Code == "10000",
-		RefundNo:     resp.TradeNo,
-		OutTradeNo:   req.OutTradeNo,
-		RefundAmount: req.RefundAmount,
-		RefundStatus: "SUCCESS",
-	}, nil
-}
-
-// refundPayPalPayment PayPal退款
-func (pm *PaymentManager) refundPayPalPayment(ctx context.Context, client *paypal.Client, req *RefundRequest) (*RefundResponse, error) {
-	// 首先获取订单详情
-	orderRsp, err := client.OrderDetail(ctx, req.OutTradeNo, nil)
-	if err != nil {
-		return nil, fmt.Errorf("get paypal order detail failed: %v", err)
-	}
-
-	// 获取capture ID进行退款
-	if len(orderRsp.Response.PurchaseUnits) == 0 || len(orderRsp.Response.PurchaseUnits[0].Payments.Captures) == 0 {
-		return nil, fmt.Errorf("no capture found for order: %s", req.OutTradeNo)
-	}
-
-	captureID := orderRsp.Response.PurchaseUnits[0].Payments.Captures[0].Id
-
-	bm := make(gopay.BodyMap)
-	bm.SetBodyMap("amount", func(bm gopay.BodyMap) {
-		bm.Set("currency_code", "USD")
-		bm.Set("value", fmt.Sprintf("%.2f", req.RefundAmount))
-	})
-
-	refundRsp, err := client.PaymentCaptureRefund(ctx, captureID, bm)
-	if err != nil {
-		return nil, fmt.Errorf("paypal refund failed: %v", err)
-	}
-
-	return &RefundResponse{
-		Success:      refundRsp.Code == paypal.Success,
-		RefundNo:     refundRsp.Response.Id,
-		OutTradeNo:   req.OutTradeNo,
-		RefundAmount: req.RefundAmount,
-		RefundStatus: refundRsp.Response.Status,
-	}, nil
-}
-
-// GetSupportedProviders 获取支持的支付提供商
-func GetSupportedProviders() []PaymentProvider {
-	return []PaymentProvider{ProviderWechat, ProviderAlipay, ProviderPayPal}
-}
-
-// ValidateNotify 验证支付通知
-func (pm *PaymentManager) ValidateNotify(provider PaymentProvider, data map[string]interface{}) (bool, error) {
-	switch provider {
-	case ProviderWechat:
-		// 微信支付通知验证逻辑
-		return true, nil
-	case ProviderAlipay:
-		// 支付宝通知验证逻辑
-		return true, nil
-	case ProviderPayPal:
-		// PayPal通知验证逻辑
-		return true, nil
-	default:
-		return false, fmt.Errorf("unsupported provider: %s", provider)
-	}
+	return false
 }

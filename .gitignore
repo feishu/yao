@@ -7,12 +7,13 @@
 
 # Test binary, built with `go test -c`
 *.test
-
+.trae
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
 *.log
 
+WARP.md
 _reference
 
 # yao binary 不提交到版本控制

@@ -1,250 +1,332 @@
-// Package payment 类型定义
+// Package payment 提供支付功能，支持支付宝和微信支付
+// 通过 gopay SDK 实现统一的支付接口，支持多商户、多渠道、多交易类型
 package payment
 
 import (
 	"time"
 )
 
-// PaymentError 支付错误类型
-type PaymentError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-	Details string `json:"details,omitempty"`
+// PaymentProvider 支付提供商接口
+type PaymentProvider interface {
+	// CreateOrder 创建支付订单
+	CreateOrder(params *CreateOrderParams) (*CreateOrderResponse, error)
+
+	// QueryOrder 查询支付订单
+	QueryOrder(params *QueryOrderParams) (*QueryOrderResponse, error)
+
+	// CreateRefund 创建退款
+	CreateRefund(params *CreateRefundParams) (*CreateRefundResponse, error)
+
+	// QueryRefund 查询退款状态
+	QueryRefund(params *QueryRefundParams) (*QueryRefundResponse, error)
+
+	// HandleNotify 处理异步通知
+	HandleNotify(params *HandleNotifyParams) (*HandleNotifyResponse, error)
+
+	// DownloadBill 下载对账单
+	DownloadBill(params *DownloadBillParams) (*DownloadBillResponse, error)
 }
 
-// Error 实现 error 接口
-func (e *PaymentError) Error() string {
-	if e.Details != "" {
-		return e.Message + ": " + e.Details
-	}
-	return e.Message
-}
-
-// NewPaymentError 创建支付错误
-func NewPaymentError(code, message, details string) *PaymentError {
-	return &PaymentError{
-		Code:    code,
-		Message: message,
-		Details: details,
-	}
-}
-
-// 预定义错误代码
-const (
-	// ErrCodeInvalidRequest 无效请求
-	ErrCodeInvalidRequest = "INVALID_REQUEST"
-	// ErrCodeInvalidConfig 无效配置
-	ErrCodeInvalidConfig = "INVALID_CONFIG"
-	// ErrCodeProviderNotFound 支付提供商未找到
-	ErrCodeProviderNotFound = "PROVIDER_NOT_FOUND"
-	// ErrCodePaymentFailed 支付失败
-	ErrCodePaymentFailed = "PAYMENT_FAILED"
-	// ErrCodeRefundFailed 退款失败
-	ErrCodeRefundFailed = "REFUND_FAILED"
-	// ErrCodeQueryFailed 查询失败
-	ErrCodeQueryFailed = "QUERY_FAILED"
-	// ErrCodeSignatureInvalid 签名无效
-	ErrCodeSignatureInvalid = "SIGNATURE_INVALID"
-	// ErrCodeAmountInvalid 金额无效
-	ErrCodeAmountInvalid = "AMOUNT_INVALID"
-	// ErrCodeOrderNotFound 订单未找到
-	ErrCodeOrderNotFound = "ORDER_NOT_FOUND"
-	// ErrCodeNetworkError 网络错误
-	ErrCodeNetworkError = "NETWORK_ERROR"
-)
-
-// PaymentMethod 支付方式
-type PaymentMethod string
+// PaymentChannel 支付渠道
+type PaymentChannel string
 
 const (
-	// MethodWechatNative 微信扫码支付
-	MethodWechatNative PaymentMethod = "wechat_native"
-	// MethodWechatJSAPI 微信公众号支付
-	MethodWechatJSAPI PaymentMethod = "wechat_jsapi"
-	// MethodWechatApp 微信APP支付
-	MethodWechatApp PaymentMethod = "wechat_app"
-	// MethodWechatH5 微信H5支付
-	MethodWechatH5 PaymentMethod = "wechat_h5"
-	// MethodWechatMiniProgram 微信小程序支付
-	MethodWechatMiniProgram PaymentMethod = "wechat_miniprogram"
-
-	// MethodAlipayPage 支付宝网页支付
-	MethodAlipayPage PaymentMethod = "alipay_page"
-	// MethodAlipayWap 支付宝手机网站支付
-	MethodAlipayWap PaymentMethod = "alipay_wap"
-	// MethodAlipayApp 支付宝APP支付
-	MethodAlipayApp PaymentMethod = "alipay_app"
-	// MethodAlipayQR 支付宝扫码支付
-	MethodAlipayQR PaymentMethod = "alipay_qr"
-
-	// MethodPayPalOrder PayPal订单支付
-	MethodPayPalOrder PaymentMethod = "paypal_order"
-	// MethodPayPalSubscription PayPal订阅支付
-	MethodPayPalSubscription PaymentMethod = "paypal_subscription"
+	ChannelAlipay PaymentChannel = "alipay" // 支付宝
+	ChannelWechat PaymentChannel = "wechat" // 微信支付
 )
 
-// Currency 货币类型
-type Currency string
+// TradeType 交易类型
+type TradeType string
 
 const (
-	// CurrencyCNY 人民币
-	CurrencyCNY Currency = "CNY"
-	// CurrencyUSD 美元
-	CurrencyUSD Currency = "USD"
-	// CurrencyEUR 欧元
-	CurrencyEUR Currency = "EUR"
-	// CurrencyGBP 英镑
-	CurrencyGBP Currency = "GBP"
-	// CurrencyJPY 日元
-	CurrencyJPY Currency = "JPY"
-	// CurrencyHKD 港币
-	CurrencyHKD Currency = "HKD"
+	TradeTypeJSAPI  TradeType = "jsapi"  // 公众号支付/小程序支付
+	TradeTypeNative TradeType = "native" // 扫码支付
+	TradeTypeApp    TradeType = "app"    // APP支付
+	TradeTypeH5     TradeType = "h5"     // H5支付
+	TradeTypeWAP    TradeType = "wap"    // WAP支付（支付宝）
 )
 
-// NotifyEvent 支付通知事件
-type NotifyEvent struct {
-	Provider    PaymentProvider        `json:"provider"`
-	EventType   string                 `json:"event_type"`
-	OrderID     string                 `json:"order_id"`
-	PaymentID   string                 `json:"payment_id"`
-	Status      PaymentStatus          `json:"status"`
-	Amount      int64                  `json:"amount"`
-	Currency    string                 `json:"currency"`
-	Timestamp   time.Time              `json:"timestamp"`
-	RawData     map[string]interface{} `json:"raw_data"`
-	Signature   string                 `json:"signature"`
-	IsValid     bool                   `json:"is_valid"`
+// OrderStatus 订单状态
+type OrderStatus string
+
+const (
+	OrderStatusPending OrderStatus = "pending" // 待支付
+	OrderStatusPaid    OrderStatus = "paid"    // 已支付
+	OrderStatusClosed  OrderStatus = "closed"  // 已关闭
+	OrderStatusRefund  OrderStatus = "refund"  // 已退款
+)
+
+// RefundStatus 退款状态
+type RefundStatus string
+
+const (
+	RefundStatusPending    RefundStatus = "pending"    // 退款处理中
+	RefundStatusProcessing RefundStatus = "processing" // 退款处理中
+	RefundStatusSuccess    RefundStatus = "success"    // 退款成功
+	RefundStatusFailed     RefundStatus = "failed"     // 退款失败
+)
+
+// CreateOrderParams 创建订单参数
+type CreateOrderParams struct {
+	// 基础参数
+	MerchantNo string `json:"merchant_no" validate:"required"`  // 商户编号
+	Channel    string `json:"channel" validate:"required"`      // 支付渠道（alipay/wechat）
+	TradeType  string `json:"trade_type" validate:"required"`   // 交易类型（jsapi/native/app/h5/wap）
+	Amount     int64  `json:"amount" validate:"required,min=1"` // 支付金额（分）
+	Subject    string `json:"subject" validate:"required"`      // 订单标题
+	OutTradeNo string `json:"out_trade_no" validate:"required"` // 商户订单号
+	NotifyURL  string `json:"notify_url" validate:"required"`   // 异步通知地址
+	ReturnURL  string `json:"return_url"`                       // 支付成功跳转地址
+	Body       string `json:"body"`                             // 订单描述
+	Currency   string `json:"currency"`                         // 货币类型，默认CNY
+	ExpireTime string `json:"expire_time"`                      // 订单过期时间
+
+	// 微信支付特有参数
+	WechatParams *WechatPayParams `json:"wechat_params,omitempty"`
+
+	// 支付宝特有参数
+	AlipayParams *AlipayPayParams `json:"alipay_params,omitempty"`
+
+	// 扩展参数
+	ExtendParams map[string]interface{} `json:"extend_params,omitempty"`
 }
 
-// PaymentStats 支付统计
-type PaymentStats struct {
-	TotalOrders    int64   `json:"total_orders"`
-	SuccessOrders  int64   `json:"success_orders"`
-	FailedOrders   int64   `json:"failed_orders"`
-	PendingOrders  int64   `json:"pending_orders"`
-	TotalAmount    int64   `json:"total_amount"`
-	SuccessAmount  int64   `json:"success_amount"`
-	SuccessRate    float64 `json:"success_rate"`
-	AverageAmount  float64 `json:"average_amount"`
+// WechatPayParams 微信支付特有参数
+type WechatPayParams struct {
+	AppID     string `json:"appid" validate:"required"` // 微信应用ID
+	SceneInfo string `json:"scene_info"`                // 场景信息（H5支付必需）
+	Attach    string `json:"attach"`                    // 附加数据
+	GoodsTag  string `json:"goods_tag"`                 // 商品标记
+	LimitPay  string `json:"limit_pay"`                 // 指定支付方式
+	Detail    string `json:"detail"`                    // 商品详情
+	StoreInfo string `json:"store_info"`                // 门店信息
 }
 
-// ProviderStats 支付提供商统计
-type ProviderStats struct {
-	Provider PaymentProvider `json:"provider"`
-	Stats    PaymentStats    `json:"stats"`
+// AlipayPayParams 支付宝特有参数
+type AlipayPayParams struct {
+	BuyerID            string `json:"buyer_id"`             // 买家支付宝用户ID
+	BuyerLogonID       string `json:"buyer_logon_id"`       // 买家支付宝账号
+	ProductCode        string `json:"product_code"`         // 产品码
+	QuitURL            string `json:"quit_url"`             // 用户付款中途退出返回商户网站的地址
+	TimeoutExpress     string `json:"timeout_express"`      // 订单超时时间
+	EnablePayChannels  string `json:"enable_pay_channels"`  // 可用渠道
+	DisablePayChannels string `json:"disable_pay_channels"` // 禁用渠道
+	AuthToken          string `json:"auth_token"`           // 针对用户授权接口调用凭证
+	QRPayMode          string `json:"qr_pay_mode"`          // 扫码支付的方式
+	QRCodeWidth        string `json:"qrcode_width"`         // 商户自定义二维码宽度
+	StoreID            string `json:"store_id"`             // 商户门店编号
+	ExtendParams       string `json:"extend_params"`        // 业务扩展参数
 }
 
-// PaymentWebhook 支付回调配置
-type PaymentWebhook struct {
-	URL    string            `json:"url"`
-	Secret string            `json:"secret"`
-	Events []string          `json:"events"`
-	Headers map[string]string `json:"headers,omitempty"`
+// CreateOrderResponse 创建订单响应
+type CreateOrderResponse struct {
+	Success    bool                   `json:"success"`
+	OrderID    string                 `json:"order_id"`     // 系统订单ID
+	OutTradeNo string                 `json:"out_trade_no"` // 商户订单号
+	PayInfo    map[string]interface{} `json:"pay_info"`     // 支付信息（如预支付交易会话标识等）
+	QRCode     string                 `json:"qr_code"`      // 二维码内容（Native支付）
+	PayURL     string                 `json:"pay_url"`      // 支付链接（H5/WAP支付）
+	Message    string                 `json:"message"`      // 响应消息
+	Error      string                 `json:"error"`        // 错误信息
 }
 
-// PaymentLimits 支付限制
-type PaymentLimits struct {
-	MinAmount     int64 `json:"min_amount"`      // 最小支付金额（分）
-	MaxAmount     int64 `json:"max_amount"`      // 最大支付金额（分）
-	DailyLimit    int64 `json:"daily_limit"`     // 日限额（分）
-	MonthlyLimit  int64 `json:"monthly_limit"`   // 月限额（分）
-	MaxRetries    int   `json:"max_retries"`     // 最大重试次数
-	RetryInterval int   `json:"retry_interval"`  // 重试间隔（秒）
+// QueryOrderParams 查询订单参数
+type QueryOrderParams struct {
+	MerchantNo    string `json:"merchant_no" validate:"required"` // 商户编号
+	OutTradeNo    string `json:"out_trade_no"`                    // 商户订单号
+	TransactionID string `json:"transaction_id"`                  // 支付平台交易号
+	Channel       string `json:"channel"`                         // 支付渠道（alipay/wechat）
 }
 
-// PaymentMetadata 支付元数据
-type PaymentMetadata struct {
-	UserID       string                 `json:"user_id,omitempty"`
-	ProductID    string                 `json:"product_id,omitempty"`
-	ProductName  string                 `json:"product_name,omitempty"`
-	Quantity     int                    `json:"quantity,omitempty"`
-	Discount     int64                  `json:"discount,omitempty"`
-	Tax          int64                  `json:"tax,omitempty"`
-	ShippingFee  int64                  `json:"shipping_fee,omitempty"`
-	Custom       map[string]interface{} `json:"custom,omitempty"`
+// QueryOrderResponse 查询订单响应
+type QueryOrderResponse struct {
+	Success       bool    `json:"success"`
+	OrderID       string  `json:"order_id"`       // 系统订单ID
+	OutTradeNo    string  `json:"out_trade_no"`   // 商户订单号
+	TransactionID string  `json:"transaction_id"` // 支付平台交易号
+	Channel       string  `json:"channel"`        // 支付渠道
+	TradeType     string  `json:"trade_type"`     // 交易类型
+	Amount        int64   `json:"amount"`         // 支付金额（分）
+	Status        string  `json:"status"`         // 订单状态
+	PaidAt        *string `json:"paid_at"`        // 支付时间
+	CreatedAt     string  `json:"created_at"`     // 创建时间
+	Message       string  `json:"message"`        // 响应消息
+	Error         string  `json:"error"`          // 错误信息
 }
 
-// PaymentHistory 支付历史记录
-type PaymentHistory struct {
-	ID          string          `json:"id"`
-	OrderID     string          `json:"order_id"`
-	PaymentID   string          `json:"payment_id"`
-	Provider    PaymentProvider `json:"provider"`
-	Method      PaymentMethod   `json:"method"`
-	Status      PaymentStatus   `json:"status"`
-	Amount      int64           `json:"amount"`
-	Currency    Currency        `json:"currency"`
-	Subject     string          `json:"subject"`
-	Description string          `json:"description"`
-	Metadata    PaymentMetadata `json:"metadata"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
-	CompletedAt *time.Time      `json:"completed_at,omitempty"`
+// CreateRefundParams 创建退款参数
+type CreateRefundParams struct {
+	MerchantNo    string `json:"merchant_no" validate:"required"`   // 商户编号
+	OutTradeNo    string `json:"out_trade_no"`                      // 商户订单号
+	TransactionID string `json:"transaction_id"`                    // 支付平台交易号
+	OutRefundNo   string `json:"out_refund_no" validate:"required"` // 商户退款单号
+	RefundAmount  int64  `json:"refund_amount" validate:"required"` // 退款金额（分）
+	TotalAmount   int64  `json:"total_amount" validate:"required"`  // 订单总金额（分）
+	Reason        string `json:"reason"`                            // 退款原因
+	RefundReason  string `json:"refund_reason"`                     // 退款原因（兼容性别名）
+	NotifyURL     string `json:"notify_url"`                        // 退款异步通知地址
+	Channel       string `json:"channel"`                           // 支付渠道
 }
 
-// RefundHistory 退款历史记录
-type RefundHistory struct {
-	ID          string          `json:"id"`
-	RefundID    string          `json:"refund_id"`
-	OrderID     string          `json:"order_id"`
-	PaymentID   string          `json:"payment_id"`
-	Provider    PaymentProvider `json:"provider"`
-	Status      PaymentStatus   `json:"status"`
-	Amount      int64           `json:"amount"`
-	Reason      string          `json:"reason"`
-	CreatedAt   time.Time       `json:"created_at"`
-	CompletedAt *time.Time      `json:"completed_at,omitempty"`
+// CreateRefundResponse 创建退款响应
+type CreateRefundResponse struct {
+	Success      bool   `json:"success"`
+	RefundID     string `json:"refund_id"`     // 系统退款ID
+	OutRefundNo  string `json:"out_refund_no"` // 商户退款单号
+	RefundNo     string `json:"refund_no"`     // 支付平台退款单号
+	RefundAmount int64  `json:"refund_amount"` // 退款金额（分）
+	Status       string `json:"status"`        // 退款状态
+	Message      string `json:"message"`       // 响应消息
+	Error        string `json:"error"`         // 错误信息
 }
 
-// PaymentFilter 支付查询过滤器
-type PaymentFilter struct {
-	Provider    PaymentProvider `json:"provider,omitempty"`
-	Status      PaymentStatus   `json:"status,omitempty"`
-	Method      PaymentMethod   `json:"method,omitempty"`
-	Currency    Currency        `json:"currency,omitempty"`
-	MinAmount   int64           `json:"min_amount,omitempty"`
-	MaxAmount   int64           `json:"max_amount,omitempty"`
-	StartTime   *time.Time      `json:"start_time,omitempty"`
-	EndTime     *time.Time      `json:"end_time,omitempty"`
-	UserID      string          `json:"user_id,omitempty"`
-	ProductID   string          `json:"product_id,omitempty"`
-	Limit       int             `json:"limit,omitempty"`
-	Offset      int             `json:"offset,omitempty"`
-	OrderBy     string          `json:"order_by,omitempty"`
-	OrderDir    string          `json:"order_dir,omitempty"`
+// QueryRefundParams 查询退款参数
+type QueryRefundParams struct {
+	MerchantNo  string `json:"merchant_no" validate:"required"` // 商户编号
+	OutRefundNo string `json:"out_refund_no"`                   // 商户退款单号
+	RefundID    string `json:"refund_id"`                       // 支付平台退款ID
+	Channel     string `json:"channel"`                         // 支付渠道
 }
 
-// PaymentListResponse 支付列表响应
-type PaymentListResponse struct {
-	Payments []PaymentHistory `json:"payments"`
-	Total    int64            `json:"total"`
-	Page     int              `json:"page"`
-	PageSize int              `json:"page_size"`
-	HasMore  bool             `json:"has_more"`
+// QueryRefundResponse 查询退款响应
+type QueryRefundResponse struct {
+	Success      bool    `json:"success"`
+	RefundID     string  `json:"refund_id"`     // 系统退款ID
+	OutRefundNo  string  `json:"out_refund_no"` // 商户退款单号
+	RefundNo     string  `json:"refund_no"`     // 支付平台退款单号
+	RefundAmount int64   `json:"refund_amount"` // 退款金额（分）
+	Status       string  `json:"status"`        // 退款状态
+	RefundAt     *string `json:"refund_at"`     // 退款时间
+	CreatedAt    string  `json:"created_at"`    // 创建时间
+	Message      string  `json:"message"`       // 响应消息
+	Error        string  `json:"error"`         // 错误信息
 }
 
-// RefundListResponse 退款列表响应
-type RefundListResponse struct {
-	Refunds  []RefundHistory `json:"refunds"`
-	Total    int64           `json:"total"`
-	Page     int             `json:"page"`
-	PageSize int             `json:"page_size"`
-	HasMore  bool            `json:"has_more"`
+// HandleNotifyParams 异步通知参数
+type HandleNotifyParams struct {
+	MerchantID  string                 `json:"merchant_id"`  // 商户ID
+	Channel     string                 `json:"channel"`      // 支付渠道
+	RequestBody []byte                 `json:"request_body"` // 请求体数据
+	NotifyData  map[string]interface{} `json:"notify_data"`  // 通知数据
 }
 
-// HealthCheck 健康检查响应
-type HealthCheck struct {
-	Status    string                        `json:"status"`
-	Timestamp time.Time                     `json:"timestamp"`
-	Providers map[PaymentProvider]bool      `json:"providers"`
-	Errors    []string                      `json:"errors,omitempty"`
-	Metrics   map[string]interface{}        `json:"metrics,omitempty"`
+// HandleNotifyResponse 异步通知响应
+type HandleNotifyResponse struct {
+	Success       bool                   `json:"success"`
+	OutTradeNo    string                 `json:"out_trade_no"`   // 商户订单号
+	TransactionID string                 `json:"transaction_id"` // 支付平台交易号
+	Amount        int64                  `json:"amount"`         // 支付金额（分）
+	Status        string                 `json:"status"`         // 订单状态
+	PaidAt        *time.Time             `json:"paid_at"`        // 支付时间
+	NotifyData    map[string]interface{} `json:"notify_data"`    // 原始通知数据
+	Message       string                 `json:"message"`        // 响应消息
+	Error         string                 `json:"error"`          // 错误信息
 }
 
-// ConfigValidation 配置验证结果
-type ConfigValidation struct {
-	Provider PaymentProvider `json:"provider"`
-	Valid    bool            `json:"valid"`
-	Errors   []string        `json:"errors,omitempty"`
-	Warnings []string        `json:"warnings,omitempty"`
+// NotifyResponse 异步通知响应（兼容性别名）
+type NotifyResponse = HandleNotifyResponse
+
+// DownloadBillParams 下载对账单参数
+type DownloadBillParams struct {
+	MerchantNo string `json:"merchant_no" validate:"required"` // 商户编号
+	Channel    string `json:"channel" validate:"required"`     // 支付渠道
+	BillDate   string `json:"bill_date" validate:"required"`   // 对账单日期（YYYY-MM-DD）
+	BillType   string `json:"bill_type"`                       // 对账单类型
+}
+
+// DownloadBillResponse 下载对账单响应
+type DownloadBillResponse struct {
+	Success  bool   `json:"success"`
+	BillData string `json:"bill_data"` // 对账单数据
+	Message  string `json:"message"`   // 响应消息
+	Error    string `json:"error"`     // 错误信息
+}
+
+// ReconcileParams 对账参数
+type ReconcileParams struct {
+	MerchantID string `json:"merchant_id" validate:"required"` // 商户ID
+	MerchantNo string `json:"merchant_no" validate:"required"` // 商户编号
+	Channel    string `json:"channel" validate:"required"`     // 支付渠道
+	BillDate   string `json:"bill_date" validate:"required"`   // 对账日期（YYYY-MM-DD）
+}
+
+// ReconcileResponse 对账响应
+type ReconcileResponse struct {
+	Success       bool                     `json:"success"`
+	TotalCount    int                      `json:"total_count"`    // 总交易笔数
+	SuccessCount  int                      `json:"success_count"`  // 成功交易笔数
+	FailedCount   int                      `json:"failed_count"`   // 失败交易笔数
+	TotalAmount   int64                    `json:"total_amount"`   // 总交易金额（分）
+	SuccessAmount int64                    `json:"success_amount"` // 成功交易金额（分）
+	DiffRecords   []map[string]interface{} `json:"diff_records"`   // 差异记录
+	Message       string                   `json:"message"`        // 响应消息
+	Error         string                   `json:"error"`          // 错误信息
+}
+
+// MerchantConfig 商户配置
+type MerchantConfig struct {
+	MerchantNo string                 `json:"merchant_no"` // 商户编号
+	Channel    PaymentChannel         `json:"channel"`     // 支付渠道
+	Config     map[string]interface{} `json:"config"`      // 配置数据
+	IsActive   bool                   `json:"is_active"`   // 是否启用
+	CreatedAt  time.Time              `json:"created_at"`  // 创建时间
+	UpdatedAt  time.Time              `json:"updated_at"`  // 更新时间
+}
+
+// PaymentOrder 支付订单
+type PaymentOrder struct {
+	ID            string                 `json:"id"`             // 系统订单ID
+	MerchantNo    string                 `json:"merchant_no"`    // 商户编号
+	OutTradeNo    string                 `json:"out_trade_no"`   // 商户订单号
+	TransactionID string                 `json:"transaction_id"` // 支付平台交易号
+	Channel       PaymentChannel         `json:"channel"`        // 支付渠道
+	TradeType     TradeType              `json:"trade_type"`     // 交易类型
+	Amount        int64                  `json:"amount"`         // 支付金额（分）
+	Currency      string                 `json:"currency"`       // 货币类型
+	Subject       string                 `json:"subject"`        // 订单标题
+	Body          string                 `json:"body"`           // 订单描述
+	Status        OrderStatus            `json:"status"`         // 订单状态
+	NotifyURL     string                 `json:"notify_url"`     // 异步通知地址
+	ReturnURL     string                 `json:"return_url"`     // 支付成功跳转地址
+	WechatParams  map[string]interface{} `json:"wechat_params"`  // 微信支付参数
+	AlipayParams  map[string]interface{} `json:"alipay_params"`  // 支付宝支付参数
+	ExtendParams  map[string]interface{} `json:"extend_params"`  // 扩展参数
+	ExpireTime    *time.Time             `json:"expire_time"`    // 订单过期时间
+	PaidAt        *time.Time             `json:"paid_at"`        // 支付时间
+	CreatedAt     time.Time              `json:"created_at"`     // 创建时间
+	UpdatedAt     time.Time              `json:"updated_at"`     // 更新时间
+}
+
+// PaymentRefund 支付退款
+type PaymentRefund struct {
+	ID           string                 `json:"id"`            // 系统退款ID
+	OrderID      string                 `json:"order_id"`      // 关联订单ID
+	MerchantNo   string                 `json:"merchant_no"`   // 商户编号
+	OutRefundNo  string                 `json:"out_refund_no"` // 商户退款单号
+	RefundNo     string                 `json:"refund_no"`     // 支付平台退款单号
+	Channel      PaymentChannel         `json:"channel"`       // 支付渠道
+	RefundAmount int64                  `json:"refund_amount"` // 退款金额（分）
+	TotalAmount  int64                  `json:"total_amount"`  // 订单总金额（分）
+	RefundReason string                 `json:"refund_reason"` // 退款原因
+	Status       RefundStatus           `json:"status"`        // 退款状态
+	NotifyURL    string                 `json:"notify_url"`    // 退款异步通知地址
+	ExtendParams map[string]interface{} `json:"extend_params"` // 扩展参数
+	RefundAt     *time.Time             `json:"refund_at"`     // 退款时间
+	CreatedAt    time.Time              `json:"created_at"`    // 创建时间
+	UpdatedAt    time.Time              `json:"updated_at"`    // 更新时间
+}
+
+// NotifyLog 异步通知日志
+type NotifyLog struct {
+	ID            string                 `json:"id"`             // 日志ID
+	MerchantNo    string                 `json:"merchant_no"`    // 商户编号
+	OutTradeNo    string                 `json:"out_trade_no"`   // 商户订单号
+	TransactionID string                 `json:"transaction_id"` // 支付平台交易号
+	Channel       PaymentChannel         `json:"channel"`        // 支付渠道
+	NotifyType    string                 `json:"notify_type"`    // 通知类型（payment/refund）
+	NotifyData    map[string]interface{} `json:"notify_data"`    // 通知数据
+	ProcessResult string                 `json:"process_result"` // 处理结果
+	RetryCount    int                    `json:"retry_count"`    // 重试次数
+	CreatedAt     time.Time              `json:"created_at"`     // 创建时间
+	UpdatedAt     time.Time              `json:"updated_at"`     // 更新时间
 }

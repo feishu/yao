@@ -4,199 +4,134 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
-func TestPaymentManager_AddConfig(t *testing.T) {
-	manager := GetManager()
-
-	tests := []struct {
-		name   string
-		config *PaymentConfig
-		want   bool
-	}{
-		{
-			name: "Valid Wechat Config",
-			config: &PaymentConfig{
-				Provider:   ProviderWechat,
-				AppID:      "wx1234567890",
-				AppSecret:  "secret123",
-				MchID:      "1234567890",
-				APIKey:     "apikey123",
-				PrivateKey: "privatekey123",
-				IsProd:     false,
-				NotifyURL:  "https://example.com/notify",
-				ReturnURL:  "https://example.com/return",
-			},
-			want: true,
-		},
-		{
-			name: "Valid Alipay Config",
-			config: &PaymentConfig{
-				Provider:   ProviderAlipay,
-				AppID:      "2021001234567890",
-				AppSecret:  "secret123",
-				MchID:      "merchant123",
-				APIKey:     "apikey123",
-				PrivateKey: "privatekey123",
-				IsProd:     false,
-				NotifyURL:  "https://example.com/notify",
-				ReturnURL:  "https://example.com/return",
-			},
-			want: true,
-		},
-		{
-			name: "Valid PayPal Config",
-			config: &PaymentConfig{
-				Provider:   ProviderPayPal,
-				AppID:      "paypal_client_id",
-				AppSecret:  "paypal_secret",
-				MchID:      "merchant123",
-				APIKey:     "apikey123",
-				PrivateKey: "privatekey123",
-				IsProd:     false,
-				NotifyURL:  "https://example.com/notify",
-				ReturnURL:  "https://example.com/return",
-			},
-			want: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := manager.AddConfig(tt.config)
-			if tt.want {
-				assert.NoError(t, err)
-			} else {
-				assert.Error(t, err)
-			}
-		})
-	}
+// MockPaymentProvider 模拟支付提供商
+type MockPaymentProvider struct {
+	mock.Mock
 }
 
-func TestPaymentRequest_Validation(t *testing.T) {
-	tests := []struct {
-		name    string
-		req     *PaymentRequest
-		wantErr bool
-	}{
-		{
-			name: "Valid Request",
-			req: &PaymentRequest{
-				OutTradeNo: "ORDER_123456",
-				Amount:     100.00,
-				Subject:    "Test Payment",
-				Body:       "Test Description",
-				Provider:   ProviderWechat,
-			},
-			wantErr: false,
-		},
-		{
-			name: "Empty OutTradeNo",
-			req: &PaymentRequest{
-				Amount:   100.00,
-				Subject:  "Test Payment",
-				Provider: ProviderWechat,
-			},
-			wantErr: true,
-		},
-		{
-			name: "Zero Amount",
-			req: &PaymentRequest{
-				OutTradeNo: "ORDER_123456",
-				Amount:     0,
-				Subject:    "Test Payment",
-				Provider:   ProviderWechat,
-			},
-			wantErr: true,
-		},
-		{
-			name: "Negative Amount",
-			req: &PaymentRequest{
-				OutTradeNo: "ORDER_123456",
-				Amount:     -10.00,
-				Subject:    "Test Payment",
-				Provider:   ProviderWechat,
-			},
-			wantErr: true,
-		},
-		{
-			name: "Empty Subject",
-			req: &PaymentRequest{
-				OutTradeNo: "ORDER_123456",
-				Amount:     100.00,
-				Provider:   ProviderWechat,
-			},
-			wantErr: true,
-		},
-		{
-			name: "Empty Provider",
-			req: &PaymentRequest{
-				OutTradeNo: "ORDER_123456",
-				Amount:     100.00,
-				Subject:    "Test Payment",
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// 这里应该调用实际的验证方法
-			// 由于validatePaymentRequest方法不存在，我们跳过这个测试
-			t.Skip("validatePaymentRequest method not implemented")
-		})
-	}
+func (m *MockPaymentProvider) CreateOrder(params *CreateOrderParams) (*CreateOrderResponse, error) {
+	args := m.Called(params)
+	return args.Get(0).(*CreateOrderResponse), args.Error(1)
 }
 
-func TestPaymentResponse(t *testing.T) {
-	response := &PaymentResponse{
-		Success:     true,
-		TradeNo:     "TRADE_123456",
-		OutTradeNo:  "ORDER_123456",
-		Amount:      "100.00",
-		Status:      PaymentStatusPending,
-		PayURL:      "https://example.com/pay",
-		CreatedTime: "2023-01-01T00:00:00Z",
-	}
-
-	assert.True(t, response.Success)
-	assert.Equal(t, "TRADE_123456", response.TradeNo)
-	assert.Equal(t, "ORDER_123456", response.OutTradeNo)
-	assert.Equal(t, PaymentStatusPending, response.Status)
-	assert.Equal(t, "100.00", response.Amount)
-	assert.Equal(t, "https://example.com/pay", response.PayURL)
-	assert.Equal(t, "2023-01-01T00:00:00Z", response.CreatedTime)
+func (m *MockPaymentProvider) QueryOrder(params *QueryOrderParams) (*QueryOrderResponse, error) {
+	args := m.Called(params)
+	return args.Get(0).(*QueryOrderResponse), args.Error(1)
 }
 
-func TestRefundRequest(t *testing.T) {
-	request := &RefundRequest{
-		Provider:     ProviderWechat,
-		OutTradeNo:   "ORDER_123456",
-		RefundAmount: 50.00,
-		Reason:       "Customer request",
-	}
-
-	assert.Equal(t, ProviderWechat, request.Provider)
-	assert.Equal(t, "ORDER_123456", request.OutTradeNo)
-	assert.Equal(t, 50.00, request.RefundAmount)
-	assert.Equal(t, "Customer request", request.Reason)
+func (m *MockPaymentProvider) CreateRefund(params *CreateRefundParams) (*CreateRefundResponse, error) {
+	args := m.Called(params)
+	return args.Get(0).(*CreateRefundResponse), args.Error(1)
 }
 
-func TestPaymentStatus(t *testing.T) {
-	assert.Equal(t, PaymentStatus("PENDING"), PaymentStatusPending)
-	assert.Equal(t, PaymentStatus("SUCCESS"), PaymentStatusSuccess)
-	assert.Equal(t, PaymentStatus("FAILED"), PaymentStatusFailed)
-	assert.Equal(t, PaymentStatus("CANCELLED"), PaymentStatusCancelled)
-	assert.Equal(t, PaymentStatus("REFUNDED"), PaymentStatusRefunded)
+func (m *MockPaymentProvider) QueryRefund(params *QueryRefundParams) (*QueryRefundResponse, error) {
+	args := m.Called(params)
+	return args.Get(0).(*QueryRefundResponse), args.Error(1)
 }
 
-func TestPaymentProvider(t *testing.T) {
-	assert.Equal(t, PaymentProvider("wechat"), ProviderWechat)
-	assert.Equal(t, PaymentProvider("alipay"), ProviderAlipay)
-	assert.Equal(t, PaymentProvider("paypal"), ProviderPayPal)
+func (m *MockPaymentProvider) HandleNotify(params *HandleNotifyParams) (*HandleNotifyResponse, error) {
+	args := m.Called(params)
+	return args.Get(0).(*HandleNotifyResponse), args.Error(1)
 }
 
-func TestGetManager(t *testing.T) {
-	manager := GetManager()
+func (m *MockPaymentProvider) DownloadBill(params *DownloadBillParams) (*DownloadBillResponse, error) {
+	args := m.Called(params)
+	return args.Get(0).(*DownloadBillResponse), args.Error(1)
+}
+
+func TestNewPaymentManager(t *testing.T) {
+	manager := NewPaymentManager()
+
 	assert.NotNil(t, manager)
+	assert.NotNil(t, manager.providers)
+	assert.NotNil(t, manager.configs)
+}
+
+func TestPaymentManager_RegisterProvider(t *testing.T) {
+	manager := NewPaymentManager()
+
+	// 注册提供商
+	mockProvider := &MockPaymentProvider{}
+	err := manager.RegisterProvider(string(ChannelAlipay), mockProvider)
+	assert.NoError(t, err)
+
+	// 验证提供商已注册
+	assert.True(t, manager.HasProvider(ChannelAlipay))
+	assert.False(t, manager.HasProvider(ChannelWechat))
+}
+
+func TestPaymentManager_ValidateCreateOrderParams(t *testing.T) {
+	manager := NewPaymentManager()
+
+	// 测试有效参数
+	validParams := &CreateOrderParams{
+		MerchantNo: "test_merchant",
+		Channel:    string(ChannelAlipay),
+		TradeType:  string(TradeTypeNative),
+		Amount:     100,
+		Subject:    "Test Order",
+		OutTradeNo: "test_order_123",
+		NotifyURL:  "https://example.com/notify",
+	}
+
+	err := manager.ValidateCreateOrderParams(validParams)
+	assert.NoError(t, err)
+
+	// 测试无效参数 - 缺少商户号
+	invalidParams := &CreateOrderParams{
+		Channel:    string(ChannelAlipay),
+		TradeType:  string(TradeTypeNative),
+		Amount:     100,
+		Subject:    "Test Order",
+		OutTradeNo: "test_order_123",
+		NotifyURL:  "https://example.com/notify",
+	}
+
+	err = manager.ValidateCreateOrderParams(invalidParams)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "merchant_no")
+}
+
+func TestPaymentManager_ValidateQueryOrderParams(t *testing.T) {
+	manager := NewPaymentManager()
+
+	// 测试有效参数
+	validParams := &QueryOrderParams{
+		MerchantNo: "test_merchant",
+		OutTradeNo: "test_order_123",
+		Channel:    string(ChannelAlipay),
+	}
+
+	err := manager.ValidateQueryOrderParams(validParams)
+	assert.NoError(t, err)
+
+	// 测试无效参数 - 缺少商户号
+	invalidParams := &QueryOrderParams{
+		OutTradeNo: "test_order_123",
+		Channel:    string(ChannelAlipay),
+	}
+
+	err = manager.ValidateQueryOrderParams(invalidParams)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "merchant_no")
+}
+
+func TestPaymentManager_GetProvider(t *testing.T) {
+	manager := NewPaymentManager()
+
+	// 测试获取不存在的提供商
+	_, err := manager.GetProvider(string(ChannelAlipay))
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+
+	// 注册提供商后再测试
+	mockProvider := &MockPaymentProvider{}
+	manager.RegisterProvider(string(ChannelAlipay), mockProvider)
+
+	provider, err := manager.GetProvider(string(ChannelAlipay))
+	assert.NoError(t, err)
+	assert.NotNil(t, provider)
 }
