@@ -24,6 +24,7 @@ import (
 	"github.com/yaoapp/yao/model"
 	"github.com/yaoapp/yao/neo"
 	"github.com/yaoapp/yao/pack"
+	"github.com/yaoapp/yao/payment"
 	"github.com/yaoapp/yao/pipe"
 	"github.com/yaoapp/yao/plugin"
 	"github.com/yaoapp/yao/query"
@@ -198,22 +199,28 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 		printErr(cfg.Mode, "Schedule", err)
 	}
 
-	// Load AIGC
-	err = aigc.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "AIGC", err)
-	}
+	// // Load AIGC
+	// err = aigc.Load(cfg)
+	// if err != nil {
+	// 	printErr(cfg.Mode, "AIGC", err)
+	// }
 
-	// Load Neo
-	err = neo.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "Neo", err)
-	}
+	// // Load Neo
+	// err = neo.Load(cfg)
+	// if err != nil {
+	// 	printErr(cfg.Mode, "Neo", err)
+	// }
 
 	// Load Volcengine
 	err = volcengine.Load(cfg)
 	if err != nil {
 		printErr(cfg.Mode, "Volcengine", err)
+	}
+
+	// Load Payment
+	err = payment.Load()
+	if err != nil {
+		printErr(cfg.Mode, "Payment", err)
 	}
 
 	// Load Custom Widget

@@ -47,7 +47,7 @@ func TestNewPaymentManager(t *testing.T) {
 
 	assert.NotNil(t, manager)
 	assert.NotNil(t, manager.providers)
-	assert.NotNil(t, manager.configs)
+	assert.NotNil(t, manager.certConfigs)
 }
 
 func TestPaymentManager_RegisterProvider(t *testing.T) {

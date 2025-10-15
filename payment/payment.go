@@ -13,8 +13,7 @@ type PaymentManager struct {
 	providerFactories map[string]ProviderFactory   // Provider 工厂函数
 	providerInstances map[string]PaymentProvider   // 缓存的 Provider 实例
 	providers         map[string]PaymentProvider   // 旧的 providers（保留兼容）
-	configs           map[string]interface{}       // 商户配置
-	certConfigs       map[string]*CertConfig       // 证书配置缓存
+	certConfigs       map[string]*CertConfig       // 证书配置缓存（统一配置入口）
 	mutex             sync.RWMutex
 }
 
@@ -34,7 +33,6 @@ func NewPaymentManager() *PaymentManager {
 		providerFactories: make(map[string]ProviderFactory),
 		providerInstances: make(map[string]PaymentProvider),
 		providers:         make(map[string]PaymentProvider),
-		configs:           make(map[string]interface{}),
 		certConfigs:       make(map[string]*CertConfig),
 	}
 }
@@ -95,20 +93,21 @@ func (pm *PaymentManager) GetOrCreateProvider(merchantID string, channel Payment
 		return nil, fmt.Errorf("provider factory not found for channel: %s", channel)
 	}
 
-	// 获取商户配置
+	// 从 certConfigs 获取配置
 	configKey := fmt.Sprintf("%s_%s", merchantID, string(channel))
-	config, exists := pm.configs[configKey]
+	certConfig, exists := pm.certConfigs[configKey]
+	
 	if !exists {
-		return nil, fmt.Errorf("merchant config not found: %s (please call payment.SetConfig first)", configKey)
+		return nil, fmt.Errorf("config not found for merchant: %s (please call payment.SetMerchantConfig or ensure certificates are loaded)", configKey)
 	}
 
-	configMap, ok := config.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid config format for merchant: %s", configKey)
-	}
+	// 将 CertConfig 转换为 Provider 配置
+	finalConfig := certConfig.ToProviderConfig()
+	
+	log.Debug("Using config for %s: %d keys", configKey, len(finalConfig))
 
 	// 使用工厂函数创建 Provider
-	provider, err := factory(configMap)
+	provider, err := factory(finalConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create provider: %v", err)
 	}
@@ -152,31 +151,14 @@ func (pm *PaymentManager) HasProvider(channel PaymentChannel) bool {
 	return exists
 }
 
-// SetConfig 设置支付配置
+// SetConfig 设置支付配置（弃用，请使用 SetMerchantConfig）
 func (pm *PaymentManager) SetConfig(merchantID string, config interface{}) error {
-	pm.mutex.Lock()
-	defer pm.mutex.Unlock()
-
-	if merchantID == "" {
-		return fmt.Errorf("merchant ID cannot be empty")
-	}
-
-	pm.configs[merchantID] = config
-	log.Info("Payment config set for merchant: %s", merchantID)
-	return nil
+	return fmt.Errorf("SetConfig is deprecated, please use SetMerchantConfig(merchantID, channel, config)")
 }
 
-// GetConfig 获取支付配置
+// GetConfig 获取支付配置（弃用，请使用 GetMerchantConfig）
 func (pm *PaymentManager) GetConfig(merchantID string) (interface{}, error) {
-	pm.mutex.RLock()
-	defer pm.mutex.RUnlock()
-
-	config, exists := pm.configs[merchantID]
-	if !exists {
-		return nil, fmt.Errorf("payment config not found for merchant: %s", merchantID)
-	}
-
-	return config, nil
+	return nil, fmt.Errorf("GetConfig is deprecated, please use GetMerchantConfig(merchantID, channel)")
 }
 
 // CreateOrder 创建支付订单
@@ -366,13 +348,103 @@ func (pm *PaymentManager) SetMerchantConfig(merchantID string, channel PaymentCh
 	}
 
 	key := fmt.Sprintf("%s_%s", merchantID, string(channel))
-	pm.configs[key] = config
+	
+	// 检查是否已经有证书配置（从文件加载）
+	existingCert, hasExisting := pm.certConfigs[key]
+	
+	var certConfig *CertConfig
+	if hasExisting {
+	// 如果已有证书配置，复制并更新
+		certConfig = &CertConfig{
+			MerchantID: existingCert.MerchantID,
+			Channel:    existingCert.Channel,
+			PrivateKey: existingCert.PrivateKey,
+			PublicKey:  existingCert.PublicKey,
+			AppCert:    existingCert.AppCert,
+			RootCert:   existingCert.RootCert,
+			AppID:      existingCert.AppID,
+			SignType:   existingCert.SignType,
+			IsSandbox:  existingCert.IsSandbox,
+			MchID:      existingCert.MchID,
+			APIv3Key:   existingCert.APIv3Key,
+			SerialNo:   existingCert.SerialNo,
+			ExtraFiles:  make(map[string]string),
+			ExtraFields: make(map[string]interface{}),
+		}
+		// 复制 ExtraFiles
+		for k, v := range existingCert.ExtraFiles {
+			certConfig.ExtraFiles[k] = v
+		}
+		// 复制 ExtraFields
+		for k, v := range existingCert.ExtraFields {
+			certConfig.ExtraFields[k] = v
+		}
+	} else {
+		// 创建新的配置
+		certConfig = &CertConfig{
+			MerchantID:  merchantID,
+			Channel:     channel,
+			ExtraFiles:  make(map[string]string),
+			ExtraFields: make(map[string]interface{}),
+		}
+	}
+	
+	// 从 config 中更新字段
+	// 证书文件
+	if privateKey, ok := config["private_key"].(string); ok {
+		certConfig.PrivateKey = privateKey
+	}
+	if publicKey, ok := config["public_key"].(string); ok {
+		certConfig.PublicKey = publicKey
+	}
+	if appCert, ok := config["app_cert"].(string); ok {
+		certConfig.AppCert = appCert
+	}
+	if rootCert, ok := config["root_cert"].(string); ok {
+		certConfig.RootCert = rootCert
+	}
+	
+	// 支付宝配置
+	if appID, ok := config["app_id"].(string); ok {
+		certConfig.AppID = appID
+	}
+	if signType, ok := config["sign_type"].(string); ok {
+		certConfig.SignType = signType
+	}
+	if isSandbox, ok := config["is_sandbox"].(bool); ok {
+		certConfig.IsSandbox = isSandbox
+	}
+	
+	// 微信配置
+	if mchID, ok := config["mch_id"].(string); ok {
+		certConfig.MchID = mchID
+	}
+	if apiv3Key, ok := config["apiv3_key"].(string); ok {
+		certConfig.APIv3Key = apiv3Key
+	}
+	if serialNo, ok := config["serial_no"].(string); ok {
+		certConfig.SerialNo = serialNo
+	}
+	
+	// 其他字段存入 ExtraFields
+	knownFields := map[string]bool{
+		"private_key": true, "public_key": true, "app_cert": true, "root_cert": true,
+		"app_id": true, "sign_type": true, "is_sandbox": true,
+		"mch_id": true, "apiv3_key": true, "serial_no": true,
+	}
+	for k, v := range config {
+		if !knownFields[k] {
+			certConfig.ExtraFields[k] = v
+		}
+	}
+	
+	// 保存到 certConfigs
+	pm.certConfigs[key] = certConfig
 	log.Info("Merchant config set: %s", key)
 
 	// 使对应的 Provider 缓存失效
-	cacheKey := fmt.Sprintf("%s_%s", merchantID, string(channel))
-	delete(pm.providerInstances, cacheKey)
-	log.Debug("Provider cache invalidated due to config update: %s", cacheKey)
+	delete(pm.providerInstances, key)
+	log.Debug("Provider cache invalidated due to config update: %s", key)
 
 	return nil
 }
@@ -383,17 +455,13 @@ func (pm *PaymentManager) GetMerchantConfig(merchantID string, channel PaymentCh
 	defer pm.mutex.RUnlock()
 
 	key := fmt.Sprintf("%s_%s", merchantID, string(channel))
-	config, exists := pm.configs[key]
+	certConfig, exists := pm.certConfigs[key]
 	if !exists {
 		return nil, fmt.Errorf("merchant config not found: %s", key)
 	}
 
-	configMap, ok := config.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid config format for merchant: %s", key)
-	}
-
-	return configMap, nil
+	// 转换为 map 返回
+	return certConfig.ToProviderConfig(), nil
 }
 
 // Reconcile 对账

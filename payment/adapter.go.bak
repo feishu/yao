@@ -23,7 +23,7 @@ func (pa *ProviderAdapter) CreateOrder(params *CreateOrderParams) (*CreateOrderR
 		NotifyURL:  params.NotifyURL,
 		ReturnURL:  params.ReturnURL,
 		ExpireTime: params.ExpireTime,
-		MerchantNo: params.MerchantNo,  // ✅ 字段名已统一
+		MerchantID: params.MerchantNo,
 		Channel:    providers.PaymentChannel(params.Channel),
 		Extra:      params.ExtendParams,
 	}
@@ -99,7 +99,7 @@ func (pa *ProviderAdapter) QueryOrder(params *QueryOrderParams) (*QueryOrderResp
 		OutTradeNo:    params.OutTradeNo,
 		TradeNo:       "",
 		TransactionID: params.TransactionID,
-		MerchantNo:    params.MerchantNo,  // ✅ 字段名已统一
+		MerchantID:    params.MerchantNo,
 		Channel:       providers.PaymentChannel(params.Channel),
 	}
 
@@ -137,7 +137,8 @@ func (pa *ProviderAdapter) CreateRefund(params *CreateRefundParams) (*CreateRefu
 		TotalAmount:   params.TotalAmount,
 		Reason:        params.Reason,
 		NotifyURL:     params.NotifyURL,
-		MerchantNo:    params.MerchantNo,  // ✅ 字段名已统一
+		MerchantID:    params.MerchantNo,
+		MerchantNo:    params.MerchantNo,
 		Channel:       providers.PaymentChannel(params.Channel),
 	}
 
@@ -167,7 +168,7 @@ func (pa *ProviderAdapter) QueryRefund(params *QueryRefundParams) (*QueryRefundR
 		OutTradeNo:  "",
 		OutRefundNo: params.OutRefundNo,
 		RefundID:    params.RefundID,
-		MerchantNo:  params.MerchantNo,  // ✅ 字段名已统一
+		MerchantID:  params.MerchantNo,
 		Channel:     providers.PaymentChannel(params.Channel),
 	}
 
@@ -199,7 +200,7 @@ func (pa *ProviderAdapter) HandleNotify(params *HandleNotifyParams) (*HandleNoti
 		Channel:     providers.PaymentChannel(params.Channel),
 		RequestBody: params.RequestBody,
 		NotifyData:  make(map[string]interface{}),
-		MerchantNo:  params.MerchantID,  // ✅ 映射到 MerchantNo
+		MerchantID:  params.MerchantID,
 	}
 
 	// 调用提供商方法

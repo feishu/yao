@@ -64,6 +64,8 @@ const (
 	RefundStatusProcessing RefundStatus = "processing" // 退款处理中
 	RefundStatusSuccess    RefundStatus = "success"    // 退款成功
 	RefundStatusFailed     RefundStatus = "failed"     // 退款失败
+	RefundStatusClosed     RefundStatus = "closed"     // 退款已关闭
+	RefundStatusAbnormal   RefundStatus = "abnormal"   // 退款异常
 )
 
 // CreateOrderParams 创建订单参数

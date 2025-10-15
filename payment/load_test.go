@@ -367,7 +367,7 @@ func TestGetModuleInfo(t *testing.T) {
 func TestHealthCheck(t *testing.T) {
 	// 重置全局状态
 	Manager = nil
-	
+
 	// 未加载时的健康检查
 	result := HealthCheck()
 	assert.Equal(t, "unhealthy", result["status"])

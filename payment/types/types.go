@@ -1,4 +1,6 @@
-package providers
+// Package types 提供 payment 模块的共享类型定义
+// 这个包被 payment 和 providers 包共同使用，避免循环依赖
+package types
 
 import "net/http"
 
@@ -14,11 +16,11 @@ const (
 type TradeType string
 
 const (
-	TradeTypeJSAPI  TradeType = "jsapi"  // 公众号支付
+	TradeTypeJSAPI  TradeType = "jsapi"  // 公众号支付/小程序支付
 	TradeTypeNative TradeType = "native" // 扫码支付
 	TradeTypeApp    TradeType = "app"    // APP支付
 	TradeTypeH5     TradeType = "h5"     // H5支付
-	TradeTypeWAP    TradeType = "wap"    // WAP支付
+	TradeTypeWAP    TradeType = "wap"    // WAP支付（支付宝）
 )
 
 // OrderStatus 订单状态
@@ -35,11 +37,11 @@ const (
 type RefundStatus string
 
 const (
-	RefundStatusPending    RefundStatus = "pending"    // 退款中
-	RefundStatusProcessing RefundStatus = "processing" // 处理中
+	RefundStatusPending    RefundStatus = "pending"    // 退款处理中
+	RefundStatusProcessing RefundStatus = "processing" // 退款处理中
 	RefundStatusSuccess    RefundStatus = "success"    // 退款成功
 	RefundStatusFailed     RefundStatus = "failed"     // 退款失败
-	RefundStatusClosed     RefundStatus = "closed"     // 退款关闭
+	RefundStatusClosed     RefundStatus = "closed"     // 退款已关闭
 	RefundStatusAbnormal   RefundStatus = "abnormal"   // 退款异常
 )
 
@@ -173,8 +175,8 @@ type QueryRefundResponse struct {
 type HandleNotifyParams struct {
 	Channel     PaymentChannel         `json:"channel"`      // 支付渠道
 	Request     *http.Request          `json:"-"`            // HTTP请求对象
-	RequestBody []byte                 `json:"request_body"` // 请求体数据（已废弃，使用Request字段）
-	NotifyData  map[string]interface{} `json:"notify_data"`  // 通知数据（兼容性别名）
+	RequestBody []byte                 `json:"request_body"` // 请求体数据
+	NotifyData  map[string]interface{} `json:"notify_data"`  // 通知数据
 	MerchantNo  string                 `json:"merchant_no"`  // 商户编号
 }
 
@@ -207,25 +209,6 @@ type DownloadBillResponse struct {
 	BillData string `json:"bill_data"` // 对账单数据
 	Message  string `json:"message"`   // 消息
 	Error    string `json:"error"`     // 错误信息
-}
-
-// ReconcileParams 对账参数
-type ReconcileParams struct {
-	Channel    PaymentChannel `json:"channel"`     // 支付渠道
-	BillDate   string         `json:"bill_date"`   // 对账单日期
-	BillType   string         `json:"bill_type"`   // 对账单类型
-	MerchantID string         `json:"merchant_id"` // 商户ID
-}
-
-// ReconcileResponse 对账响应
-type ReconcileResponse struct {
-	Success     bool                     `json:"success"`      // 是否成功
-	TotalCount  int                      `json:"total_count"`  // 总记录数
-	MatchCount  int                      `json:"match_count"`  // 匹配记录数
-	DiffCount   int                      `json:"diff_count"`   // 差异记录数
-	DiffRecords []map[string]interface{} `json:"diff_records"` // 差异记录
-	Message     string                   `json:"message"`      // 消息
-	Error       string                   `json:"error"`        // 错误信息
 }
 
 // PaymentProvider 支付提供商接口
