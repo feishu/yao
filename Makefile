@@ -224,7 +224,7 @@ artifacts-macos: clean
 #	cp -r ./ui .tmp/data/ui
 #	cp -r ../xgen-v1.0/packages/xgen/dist .tmp/data/xgen/v1.0
 	cp -r ../yao-init .tmp/data/init
-	cp -r yao .tmp/data/
+#	cp -r yao .tmp/data/
 #	cp -r sui/libsui .tmp/data/
 	go-bindata -fs -pkg data -o data/bindata.go -prefix ".tmp/data/" .tmp/data/...
 	rm -rf .tmp/data
