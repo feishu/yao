@@ -20,7 +20,8 @@ import (
 	"github.com/yaoapp/yao/fs"
 	"github.com/yaoapp/yao/i18n"
 	"github.com/yaoapp/yao/importer"
-	"github.com/yaoapp/yao/moapi"
+
+	// "github.com/yaoapp/yao/moapi"
 	"github.com/yaoapp/yao/model"
 	"github.com/yaoapp/yao/neo"
 	"github.com/yaoapp/yao/pack"
@@ -34,7 +35,8 @@ import (
 	"github.com/yaoapp/yao/share"
 	"github.com/yaoapp/yao/socket"
 	"github.com/yaoapp/yao/store"
-	sui "github.com/yaoapp/yao/sui/api"
+
+	// sui "github.com/yaoapp/yao/sui/api"
 	"github.com/yaoapp/yao/task"
 	"github.com/yaoapp/yao/volcengine"
 	"github.com/yaoapp/yao/websocket"
@@ -235,17 +237,17 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 		printErr(cfg.Mode, "Widget", err)
 	}
 
-	// Load SUI
-	err = sui.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "SUI", err)
-	}
+	// // Load SUI
+	// err = sui.Load(cfg)
+	// if err != nil {
+	// 	printErr(cfg.Mode, "SUI", err)
+	// }
 
-	// Load Moapi
-	err = moapi.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "Moapi", err)
-	}
+	// // Load Moapi
+	// err = moapi.Load(cfg)
+	// if err != nil {
+	// 	printErr(cfg.Mode, "Moapi", err)
+	// }
 
 	// Load Pipe
 	err = pipe.Load(cfg)
@@ -394,10 +396,10 @@ func Reload(cfg config.Config, options LoadOption) (err error) {
 	// Load WASM Application (experimental)
 
 	// Load build-in widgets (table / form / chart / ...)
-	err = widgets.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "Widgets", err)
-	}
+	// err = widgets.Load(cfg)
+	// if err != nil {
+	// 	printErr(cfg.Mode, "Widgets", err)
+	// }
 
 	// Load Apis
 	err = api.Load(cfg) // 加载业务接口 API
