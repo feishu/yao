@@ -1,6 +1,7 @@
 package payment
 
 import (
+	"github.com/yaoapp/yao/payment/types"
 	"fmt"
 
 	"github.com/yaoapp/gou/process"
@@ -70,7 +71,7 @@ func ProcessSetMerchantConfig(proc *process.Process) interface{} {
 	}
 
 	// 解析渠道
-	channel := PaymentChannel(channelStr)
+	channel := types.PaymentChannel(channelStr)
 	if !isValidPaymentChannel(channelStr) {
 		exception.New(fmt.Sprintf("invalid channel: %s (支持: alipay, wechat)", channelStr), 400).Throw()
 	}
@@ -111,7 +112,7 @@ func ProcessGetMerchantConfig(proc *process.Process) interface{} {
 	}
 
 	// 解析渠道
-	channel := PaymentChannel(channelStr)
+	channel := types.PaymentChannel(channelStr)
 	if !isValidPaymentChannel(channelStr) {
 		exception.New(fmt.Sprintf("invalid channel: %s (支持: alipay, wechat)", channelStr), 400).Throw()
 	}

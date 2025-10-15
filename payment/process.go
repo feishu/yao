@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/yaoapp/yao/payment/types"
+
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/kun/log"
@@ -47,12 +49,12 @@ func ProcessSetConfig(process *process.Process) interface{} {
 	}
 
 	// 验证支付渠道
-	if !IsValidChannel(PaymentChannel(channel)) {
+	if !IsValidChannel(types.PaymentChannel(channel)) {
 		exception.New(fmt.Sprintf("不支持的支付渠道: %s", channel), 400).Throw()
 	}
 
 	// 设置配置
-	err := Manager.SetMerchantConfig(merchantID, PaymentChannel(channel), config)
+	err := Manager.SetMerchantConfig(merchantID, types.PaymentChannel(channel), config)
 	if err != nil {
 		log.Error("ProcessSetConfig failed: %v", err)
 		exception.New(fmt.Sprintf("设置商户配置失败: %v", err), 500).Throw()
@@ -91,12 +93,12 @@ func ProcessGetConfig(process *process.Process) interface{} {
 	}
 
 	// 验证支付渠道
-	if !IsValidChannel(PaymentChannel(channel)) {
+	if !IsValidChannel(types.PaymentChannel(channel)) {
 		exception.New(fmt.Sprintf("不支持的支付渠道: %s", channel), 400).Throw()
 	}
 
 	// 获取配置
-	config, err := Manager.GetMerchantConfig(merchantID, PaymentChannel(channel))
+	config, err := Manager.GetMerchantConfig(merchantID, types.PaymentChannel(channel))
 	if err != nil {
 		log.Error("ProcessGetConfig failed: %v", err)
 		exception.New(fmt.Sprintf("获取商户配置失败: %v", err), 500).Throw()
@@ -271,12 +273,12 @@ func ProcessHandleNotify(process *process.Process) interface{} {
 	}
 
 	// 验证支付渠道
-	if !IsValidChannel(PaymentChannel(channel)) {
+	if !IsValidChannel(types.PaymentChannel(channel)) {
 		exception.New(fmt.Sprintf("不支持的支付渠道: %s", channel), 400).Throw()
 	}
 
 	// 处理通知
-	result, err := Manager.HandleNotify(merchantID, PaymentChannel(channel), notifyData)
+	result, err := Manager.HandleNotify(merchantID, types.PaymentChannel(channel), notifyData)
 	if err != nil {
 		log.Error("ProcessHandleNotify failed: %v", err)
 		exception.New(fmt.Sprintf("处理通知失败: %v", err), 500).Throw()
@@ -350,14 +352,14 @@ func ProcessReconcile(process *process.Process) interface{} {
 }
 
 // parseCreateOrderParams 解析创建订单参数
-func parseCreateOrderParams(paramsMap map[string]interface{}) (*CreateOrderParams, error) {
+func parseCreateOrderParams(paramsMap map[string]interface{}) (*types.CreateOrderParams, error) {
 	// 转换为JSON再解析，确保类型正确
 	data, err := json.Marshal(paramsMap)
 	if err != nil {
 		return nil, fmt.Errorf("marshal params failed: %v", err)
 	}
 
-	var params CreateOrderParams
+	var params types.CreateOrderParams
 	if err := json.Unmarshal(data, &params); err != nil {
 		return nil, fmt.Errorf("unmarshal params failed: %v", err)
 	}
@@ -388,12 +390,12 @@ func parseCreateOrderParams(paramsMap map[string]interface{}) (*CreateOrderParam
 	}
 
 	// 验证支付渠道
-	if !IsValidChannel(PaymentChannel(params.Channel)) {
+	if !IsValidChannel(types.PaymentChannel(params.Channel)) {
 		return nil, fmt.Errorf("invalid channel: %s", params.Channel)
 	}
 
 	// 验证交易类型
-	if !IsValidTradeType(TradeType(params.TradeType)) {
+	if !IsValidTradeType(types.TradeType(params.TradeType)) {
 		return nil, fmt.Errorf("invalid trade_type: %s", params.TradeType)
 	}
 
@@ -401,13 +403,13 @@ func parseCreateOrderParams(paramsMap map[string]interface{}) (*CreateOrderParam
 }
 
 // parseQueryOrderParams 解析查询订单参数
-func parseQueryOrderParams(paramsMap map[string]interface{}) (*QueryOrderParams, error) {
+func parseQueryOrderParams(paramsMap map[string]interface{}) (*types.QueryOrderParams, error) {
 	data, err := json.Marshal(paramsMap)
 	if err != nil {
 		return nil, fmt.Errorf("marshal params failed: %v", err)
 	}
 
-	var params QueryOrderParams
+	var params types.QueryOrderParams
 	if err := json.Unmarshal(data, &params); err != nil {
 		return nil, fmt.Errorf("unmarshal params failed: %v", err)
 	}
@@ -426,7 +428,7 @@ func parseQueryOrderParams(paramsMap map[string]interface{}) (*QueryOrderParams,
 	}
 
 	// 验证支付渠道
-	if !IsValidChannel(PaymentChannel(params.Channel)) {
+	if !IsValidChannel(types.PaymentChannel(params.Channel)) {
 		return nil, fmt.Errorf("invalid channel: %s", params.Channel)
 	}
 
@@ -434,13 +436,13 @@ func parseQueryOrderParams(paramsMap map[string]interface{}) (*QueryOrderParams,
 }
 
 // parseCreateRefundParams 解析创建退款参数
-func parseCreateRefundParams(paramsMap map[string]interface{}) (*CreateRefundParams, error) {
+func parseCreateRefundParams(paramsMap map[string]interface{}) (*types.CreateRefundParams, error) {
 	data, err := json.Marshal(paramsMap)
 	if err != nil {
 		return nil, fmt.Errorf("marshal params failed: %v", err)
 	}
 
-	var params CreateRefundParams
+	var params types.CreateRefundParams
 	if err := json.Unmarshal(data, &params); err != nil {
 		return nil, fmt.Errorf("unmarshal params failed: %v", err)
 	}
@@ -471,7 +473,7 @@ func parseCreateRefundParams(paramsMap map[string]interface{}) (*CreateRefundPar
 	}
 
 	// 验证支付渠道
-	if !IsValidChannel(PaymentChannel(params.Channel)) {
+	if !IsValidChannel(types.PaymentChannel(params.Channel)) {
 		return nil, fmt.Errorf("invalid channel: %s", params.Channel)
 	}
 
@@ -479,13 +481,13 @@ func parseCreateRefundParams(paramsMap map[string]interface{}) (*CreateRefundPar
 }
 
 // parseQueryRefundParams 解析查询退款参数
-func parseQueryRefundParams(paramsMap map[string]interface{}) (*QueryRefundParams, error) {
+func parseQueryRefundParams(paramsMap map[string]interface{}) (*types.QueryRefundParams, error) {
 	data, err := json.Marshal(paramsMap)
 	if err != nil {
 		return nil, fmt.Errorf("marshal params failed: %v", err)
 	}
 
-	var params QueryRefundParams
+	var params types.QueryRefundParams
 	if err := json.Unmarshal(data, &params); err != nil {
 		return nil, fmt.Errorf("unmarshal params failed: %v", err)
 	}
@@ -504,7 +506,7 @@ func parseQueryRefundParams(paramsMap map[string]interface{}) (*QueryRefundParam
 	}
 
 	// 验证支付渠道
-	if !IsValidChannel(PaymentChannel(params.Channel)) {
+	if !IsValidChannel(types.PaymentChannel(params.Channel)) {
 		return nil, fmt.Errorf("invalid channel: %s", params.Channel)
 	}
 
@@ -512,13 +514,13 @@ func parseQueryRefundParams(paramsMap map[string]interface{}) (*QueryRefundParam
 }
 
 // parseDownloadBillParams 解析下载对账单参数
-func parseDownloadBillParams(paramsMap map[string]interface{}) (*DownloadBillParams, error) {
+func parseDownloadBillParams(paramsMap map[string]interface{}) (*types.DownloadBillParams, error) {
 	data, err := json.Marshal(paramsMap)
 	if err != nil {
 		return nil, fmt.Errorf("marshal params failed: %v", err)
 	}
 
-	var params DownloadBillParams
+	var params types.DownloadBillParams
 	if err := json.Unmarshal(data, &params); err != nil {
 		return nil, fmt.Errorf("unmarshal params failed: %v", err)
 	}
@@ -537,7 +539,7 @@ func parseDownloadBillParams(paramsMap map[string]interface{}) (*DownloadBillPar
 	}
 
 	// 验证支付渠道
-	if !IsValidChannel(PaymentChannel(params.Channel)) {
+	if !IsValidChannel(types.PaymentChannel(params.Channel)) {
 		return nil, fmt.Errorf("invalid channel: %s", params.Channel)
 	}
 
@@ -545,13 +547,13 @@ func parseDownloadBillParams(paramsMap map[string]interface{}) (*DownloadBillPar
 }
 
 // parseReconcileParams 解析对账参数
-func parseReconcileParams(paramsMap map[string]interface{}) (*ReconcileParams, error) {
+func parseReconcileParams(paramsMap map[string]interface{}) (*types.ReconcileParams, error) {
 	data, err := json.Marshal(paramsMap)
 	if err != nil {
 		return nil, fmt.Errorf("marshal params failed: %v", err)
 	}
 
-	var params ReconcileParams
+	var params types.ReconcileParams
 	if err := json.Unmarshal(data, &params); err != nil {
 		return nil, fmt.Errorf("unmarshal params failed: %v", err)
 	}
@@ -570,7 +572,7 @@ func parseReconcileParams(paramsMap map[string]interface{}) (*ReconcileParams, e
 	}
 
 	// 验证支付渠道
-	if !IsValidChannel(PaymentChannel(params.Channel)) {
+	if !IsValidChannel(types.PaymentChannel(params.Channel)) {
 		return nil, fmt.Errorf("invalid channel: %s", params.Channel)
 	}
 
@@ -578,9 +580,9 @@ func parseReconcileParams(paramsMap map[string]interface{}) (*ReconcileParams, e
 }
 
 // IsValidChannel 验证支付渠道是否有效
-func IsValidChannel(channel PaymentChannel) bool {
+func IsValidChannel(channel types.PaymentChannel) bool {
 	switch channel {
-	case ChannelAlipay, ChannelWechat:
+	case types.ChannelAlipay, types.ChannelWechat:
 		return true
 	default:
 		return false
@@ -588,9 +590,9 @@ func IsValidChannel(channel PaymentChannel) bool {
 }
 
 // IsValidTradeType 验证交易类型是否有效
-func IsValidTradeType(tradeType TradeType) bool {
+func IsValidTradeType(tradeType types.TradeType) bool {
 	switch tradeType {
-	case TradeTypeJSAPI, TradeTypeNative, TradeTypeApp, TradeTypeH5, TradeTypeWAP:
+	case types.TradeTypeJSAPI, types.TradeTypeNative, types.TradeTypeApp, types.TradeTypeH5, types.TradeTypeWAP:
 		return true
 	default:
 		return false
@@ -729,12 +731,12 @@ func ProcessGetCertificate(process *process.Process) interface{} {
 	}
 
 	// 验证支付渠道
-	if !IsValidChannel(PaymentChannel(channel)) {
+	if !IsValidChannel(types.PaymentChannel(channel)) {
 		exception.New(fmt.Sprintf("不支持的支付渠道: %s", channel), 400).Throw()
 	}
 
 	// 获取证书配置
-	certConfig, err := Manager.GetCertConfig(merchantID, PaymentChannel(channel))
+	certConfig, err := Manager.GetCertConfig(merchantID, types.PaymentChannel(channel))
 	if err != nil {
 		log.Error("ProcessGetCertificate failed: %v", err)
 		exception.New(fmt.Sprintf("获取证书配置失败: %v", err), 404).Throw()
@@ -770,12 +772,12 @@ func ProcessListCertificates(process *process.Process) interface{} {
 
 	for key, certConfig := range Manager.certConfigs {
 		certs = append(certs, map[string]interface{}{
-			"key":          key,
-			"merchant_id":  certConfig.MerchantID,
-			"channel":      string(certConfig.Channel),
-			"has_app_cert": certConfig.AppCert != "",
+			"key":           key,
+			"merchant_id":   certConfig.MerchantID,
+			"channel":       string(certConfig.Channel),
+			"has_app_cert":  certConfig.AppCert != "",
 			"has_root_cert": certConfig.RootCert != "",
-			"extra_files":  len(certConfig.ExtraFiles),
+			"extra_files":   len(certConfig.ExtraFiles),
 		})
 	}
 

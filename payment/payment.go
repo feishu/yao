@@ -2,6 +2,7 @@
 package payment
 
 import (
+	"github.com/yaoapp/yao/payment/types"
 	"fmt"
 	"sync"
 
@@ -11,8 +12,8 @@ import (
 // PaymentManager 支付管理器
 type PaymentManager struct {
 	providerFactories map[string]ProviderFactory   // Provider 工厂函数
-	providerInstances map[string]PaymentProvider   // 缓存的 Provider 实例
-	providers         map[string]PaymentProvider   // 旧的 providers（保留兼容）
+	providerInstances map[string]types.PaymentProvider   // 缓存的 Provider 实例
+	providers         map[string]types.PaymentProvider   // 旧的 providers（保留兼容）
 	certConfigs       map[string]*CertConfig       // 证书配置缓存（统一配置入口）
 	mutex             sync.RWMutex
 }
@@ -25,14 +26,14 @@ var once sync.Once
 var Manager *PaymentManager
 
 // ProviderFactory Provider 工厂函数类型
-type ProviderFactory func(config map[string]interface{}) (PaymentProvider, error)
+type ProviderFactory func(config map[string]interface{}) (types.PaymentProvider, error)
 
 // NewPaymentManager 创建新的支付管理器
 func NewPaymentManager() *PaymentManager {
 	return &PaymentManager{
 		providerFactories: make(map[string]ProviderFactory),
-		providerInstances: make(map[string]PaymentProvider),
-		providers:         make(map[string]PaymentProvider),
+		providerInstances: make(map[string]types.PaymentProvider),
+		providers:         make(map[string]types.PaymentProvider),
 		certConfigs:       make(map[string]*CertConfig),
 	}
 }
@@ -46,7 +47,7 @@ func GetManager() *PaymentManager {
 }
 
 // RegisterProvider 注册支付提供商（兼容旧接口）
-func (pm *PaymentManager) RegisterProvider(channel string, provider PaymentProvider) error {
+func (pm *PaymentManager) RegisterProvider(channel string, provider types.PaymentProvider) error {
 	pm.mutex.Lock()
 	defer pm.mutex.Unlock()
 
@@ -74,7 +75,7 @@ func (pm *PaymentManager) RegisterProviderFactory(channel string, factory Provid
 }
 
 // GetOrCreateProvider 获取或创建 Provider
-func (pm *PaymentManager) GetOrCreateProvider(merchantID string, channel PaymentChannel) (PaymentProvider, error) {
+func (pm *PaymentManager) GetOrCreateProvider(merchantID string, channel types.PaymentChannel) (types.PaymentProvider, error) {
 	pm.mutex.Lock()
 	defer pm.mutex.Unlock()
 
@@ -120,7 +121,7 @@ func (pm *PaymentManager) GetOrCreateProvider(merchantID string, channel Payment
 }
 
 // InvalidateProviderCache 使 Provider 缓存失效（配置更新时调用）
-func (pm *PaymentManager) InvalidateProviderCache(merchantID string, channel PaymentChannel) {
+func (pm *PaymentManager) InvalidateProviderCache(merchantID string, channel types.PaymentChannel) {
 	pm.mutex.Lock()
 	defer pm.mutex.Unlock()
 
@@ -130,7 +131,7 @@ func (pm *PaymentManager) InvalidateProviderCache(merchantID string, channel Pay
 }
 
 // GetProvider 获取支付提供商
-func (pm *PaymentManager) GetProvider(channel string) (PaymentProvider, error) {
+func (pm *PaymentManager) GetProvider(channel string) (types.PaymentProvider, error) {
 	pm.mutex.RLock()
 	defer pm.mutex.RUnlock()
 
@@ -143,7 +144,7 @@ func (pm *PaymentManager) GetProvider(channel string) (PaymentProvider, error) {
 }
 
 // HasProvider 检查是否存在指定的支付提供商
-func (pm *PaymentManager) HasProvider(channel PaymentChannel) bool {
+func (pm *PaymentManager) HasProvider(channel types.PaymentChannel) bool {
 	pm.mutex.RLock()
 	defer pm.mutex.RUnlock()
 
@@ -162,27 +163,27 @@ func (pm *PaymentManager) GetConfig(merchantID string) (interface{}, error) {
 }
 
 // CreateOrder 创建支付订单
-func (pm *PaymentManager) CreateOrder(params *CreateOrderParams) (*CreateOrderResponse, error) {
+func (pm *PaymentManager) CreateOrder(params *types.CreateOrderParams) (*types.CreateOrderResponse, error) {
 	if params == nil {
-		return &CreateOrderResponse{Success: false}, fmt.Errorf("params cannot be nil")
+		return &types.CreateOrderResponse{Success: false}, fmt.Errorf("params cannot be nil")
 	}
 
 	// 验证参数
 	if err := pm.ValidateCreateOrderParams(params); err != nil {
-		return &CreateOrderResponse{Success: false}, err
+		return &types.CreateOrderResponse{Success: false}, err
 	}
 
 	// 获取或创建支付提供商（根据商户ID和渠道）
-	provider, err := pm.GetOrCreateProvider(params.MerchantNo, PaymentChannel(params.Channel))
+	provider, err := pm.GetOrCreateProvider(params.MerchantNo, types.PaymentChannel(params.Channel))
 	if err != nil {
-		return &CreateOrderResponse{Success: false}, err
+		return &types.CreateOrderResponse{Success: false}, err
 	}
 
 	// 创建订单
 	response, err := provider.CreateOrder(params)
 	if err != nil {
 		log.Error("Failed to create order: %v", err)
-		return &CreateOrderResponse{Success: false}, err
+		return &types.CreateOrderResponse{Success: false}, err
 	}
 
 	log.Info("Order created successfully: %s", params.OutTradeNo)
@@ -190,54 +191,54 @@ func (pm *PaymentManager) CreateOrder(params *CreateOrderParams) (*CreateOrderRe
 }
 
 // QueryOrder 查询支付订单
-func (pm *PaymentManager) QueryOrder(params *QueryOrderParams) (*QueryOrderResponse, error) {
+func (pm *PaymentManager) QueryOrder(params *types.QueryOrderParams) (*types.QueryOrderResponse, error) {
 	if params == nil {
-		return &QueryOrderResponse{Success: false}, fmt.Errorf("params cannot be nil")
+		return &types.QueryOrderResponse{Success: false}, fmt.Errorf("params cannot be nil")
 	}
 
 	// 验证参数
 	if err := pm.ValidateQueryOrderParams(params); err != nil {
-		return &QueryOrderResponse{Success: false}, err
+		return &types.QueryOrderResponse{Success: false}, err
 	}
 
 	// 获取或创建支付提供商
-	provider, err := pm.GetOrCreateProvider(params.MerchantNo, PaymentChannel(params.Channel))
+	provider, err := pm.GetOrCreateProvider(params.MerchantNo, types.PaymentChannel(params.Channel))
 	if err != nil {
-		return &QueryOrderResponse{Success: false}, err
+		return &types.QueryOrderResponse{Success: false}, err
 	}
 
 	// 查询订单
 	response, err := provider.QueryOrder(params)
 	if err != nil {
 		log.Error("Failed to query order: %v", err)
-		return &QueryOrderResponse{Success: false}, err
+		return &types.QueryOrderResponse{Success: false}, err
 	}
 
 	return response, nil
 }
 
 // CreateRefund 创建退款
-func (pm *PaymentManager) CreateRefund(params *CreateRefundParams) (*CreateRefundResponse, error) {
+func (pm *PaymentManager) CreateRefund(params *types.CreateRefundParams) (*types.CreateRefundResponse, error) {
 	if params == nil {
-		return &CreateRefundResponse{Success: false}, fmt.Errorf("params cannot be nil")
+		return &types.CreateRefundResponse{Success: false}, fmt.Errorf("params cannot be nil")
 	}
 
 	// 验证参数
 	if err := pm.ValidateCreateRefundParams(params); err != nil {
-		return &CreateRefundResponse{Success: false, Error: err.Error()}, err
+		return &types.CreateRefundResponse{Success: false, Error: err.Error()}, err
 	}
 
 	// 获取或创建支付提供商
-	provider, err := pm.GetOrCreateProvider(params.MerchantNo, PaymentChannel(params.Channel))
+	provider, err := pm.GetOrCreateProvider(params.MerchantNo, types.PaymentChannel(params.Channel))
 	if err != nil {
-		return &CreateRefundResponse{Success: false, Error: err.Error()}, err
+		return &types.CreateRefundResponse{Success: false, Error: err.Error()}, err
 	}
 
 	// 创建退款
 	response, err := provider.CreateRefund(params)
 	if err != nil {
 		log.Error("Failed to create refund: %v", err)
-		return &CreateRefundResponse{Success: false, Error: err.Error()}, err
+		return &types.CreateRefundResponse{Success: false, Error: err.Error()}, err
 	}
 
 	log.Info("Refund created successfully: %s", params.OutRefundNo)
@@ -245,52 +246,52 @@ func (pm *PaymentManager) CreateRefund(params *CreateRefundParams) (*CreateRefun
 }
 
 // QueryRefund 查询退款状态
-func (pm *PaymentManager) QueryRefund(params *QueryRefundParams) (*QueryRefundResponse, error) {
+func (pm *PaymentManager) QueryRefund(params *types.QueryRefundParams) (*types.QueryRefundResponse, error) {
 	if params == nil {
-		return &QueryRefundResponse{Success: false}, fmt.Errorf("params cannot be nil")
+		return &types.QueryRefundResponse{Success: false}, fmt.Errorf("params cannot be nil")
 	}
 
 	// 验证参数
 	if err := pm.ValidateQueryRefundParams(params); err != nil {
-		return &QueryRefundResponse{Success: false}, err
+		return &types.QueryRefundResponse{Success: false}, err
 	}
 
 	// 获取或创建支付提供商
-	provider, err := pm.GetOrCreateProvider(params.MerchantNo, PaymentChannel(params.Channel))
+	provider, err := pm.GetOrCreateProvider(params.MerchantNo, types.PaymentChannel(params.Channel))
 	if err != nil {
-		return &QueryRefundResponse{Success: false}, err
+		return &types.QueryRefundResponse{Success: false}, err
 	}
 
 	// 查询退款
 	response, err := provider.QueryRefund(params)
 	if err != nil {
 		log.Error("Failed to query refund: %v", err)
-		return &QueryRefundResponse{Success: false}, err
+		return &types.QueryRefundResponse{Success: false}, err
 	}
 
 	return response, nil
 }
 
 // HandleNotify 处理异步通知
-func (pm *PaymentManager) HandleNotify(merchantID string, channel PaymentChannel, notifyData []byte) (*HandleNotifyResponse, error) {
+func (pm *PaymentManager) HandleNotify(merchantID string, channel types.PaymentChannel, notifyData []byte) (*types.HandleNotifyResponse, error) {
 	if merchantID == "" {
-		return &HandleNotifyResponse{Success: false}, fmt.Errorf("merchant ID cannot be empty")
+		return &types.HandleNotifyResponse{Success: false}, fmt.Errorf("merchant ID cannot be empty")
 	}
 
 	if len(notifyData) == 0 {
-		return &HandleNotifyResponse{Success: false}, fmt.Errorf("request body is required")
+		return &types.HandleNotifyResponse{Success: false}, fmt.Errorf("request body is required")
 	}
 
 	// 获取或创建支付提供商
 	provider, err := pm.GetOrCreateProvider(merchantID, channel)
 	if err != nil {
-		return &HandleNotifyResponse{Success: false}, err
+		return &types.HandleNotifyResponse{Success: false}, err
 	}
 
 	// 构建通知参数
-	params := &HandleNotifyParams{
-		MerchantID:  merchantID,
-		Channel:     string(channel),
+	params := &types.HandleNotifyParams{
+		MerchantNo:  merchantID,
+		Channel:     channel,
 		RequestBody: notifyData,
 		NotifyData:  make(map[string]interface{}),
 	}
@@ -299,7 +300,7 @@ func (pm *PaymentManager) HandleNotify(merchantID string, channel PaymentChannel
 	response, err := provider.HandleNotify(params)
 	if err != nil {
 		log.Error("Failed to handle notify: %v", err)
-		return &HandleNotifyResponse{Success: false}, err
+		return &types.HandleNotifyResponse{Success: false}, err
 	}
 
 	log.Info("Notify handled successfully for merchant: %s", merchantID)
@@ -307,27 +308,27 @@ func (pm *PaymentManager) HandleNotify(merchantID string, channel PaymentChannel
 }
 
 // DownloadBill 下载对账单
-func (pm *PaymentManager) DownloadBill(params *DownloadBillParams) (*DownloadBillResponse, error) {
+func (pm *PaymentManager) DownloadBill(params *types.DownloadBillParams) (*types.DownloadBillResponse, error) {
 	if params == nil {
-		return &DownloadBillResponse{Success: false}, fmt.Errorf("params cannot be nil")
+		return &types.DownloadBillResponse{Success: false}, fmt.Errorf("params cannot be nil")
 	}
 
 	// 验证参数
 	if err := pm.ValidateDownloadBillParams(params); err != nil {
-		return &DownloadBillResponse{Success: false, Error: err.Error()}, err
+		return &types.DownloadBillResponse{Success: false, Error: err.Error()}, err
 	}
 
 	// 获取或创建支付提供商
-	provider, err := pm.GetOrCreateProvider(params.MerchantNo, PaymentChannel(params.Channel))
+	provider, err := pm.GetOrCreateProvider(params.MerchantNo, types.PaymentChannel(params.Channel))
 	if err != nil {
-		return &DownloadBillResponse{Success: false, Error: err.Error()}, err
+		return &types.DownloadBillResponse{Success: false, Error: err.Error()}, err
 	}
 
 	// 下载对账单
 	response, err := provider.DownloadBill(params)
 	if err != nil {
 		log.Error("Failed to download bill: %v", err)
-		return &DownloadBillResponse{Success: false, Error: err.Error()}, err
+		return &types.DownloadBillResponse{Success: false, Error: err.Error()}, err
 	}
 
 	log.Info("Bill downloaded successfully: %s", params.BillDate)
@@ -335,7 +336,7 @@ func (pm *PaymentManager) DownloadBill(params *DownloadBillParams) (*DownloadBil
 }
 
 // SetMerchantConfig 设置商户配置
-func (pm *PaymentManager) SetMerchantConfig(merchantID string, channel PaymentChannel, config map[string]interface{}) error {
+func (pm *PaymentManager) SetMerchantConfig(merchantID string, channel types.PaymentChannel, config map[string]interface{}) error {
 	pm.mutex.Lock()
 	defer pm.mutex.Unlock()
 
@@ -450,7 +451,7 @@ func (pm *PaymentManager) SetMerchantConfig(merchantID string, channel PaymentCh
 }
 
 // GetMerchantConfig 获取商户配置
-func (pm *PaymentManager) GetMerchantConfig(merchantID string, channel PaymentChannel) (map[string]interface{}, error) {
+func (pm *PaymentManager) GetMerchantConfig(merchantID string, channel types.PaymentChannel) (map[string]interface{}, error) {
 	pm.mutex.RLock()
 	defer pm.mutex.RUnlock()
 
@@ -465,24 +466,24 @@ func (pm *PaymentManager) GetMerchantConfig(merchantID string, channel PaymentCh
 }
 
 // Reconcile 对账
-func (pm *PaymentManager) Reconcile(params *ReconcileParams) (*ReconcileResponse, error) {
+func (pm *PaymentManager) Reconcile(params *types.ReconcileParams) (*types.ReconcileResponse, error) {
 	if params == nil {
-		return &ReconcileResponse{Success: false}, fmt.Errorf("params cannot be nil")
+		return &types.ReconcileResponse{Success: false}, fmt.Errorf("params cannot be nil")
 	}
 
 	// 验证参数
 	if err := pm.ValidateReconcileParams(params); err != nil {
-		return &ReconcileResponse{Success: false, Error: err.Error()}, err
+		return &types.ReconcileResponse{Success: false, Error: err.Error()}, err
 	}
 
 	// 获取或创建支付提供商
-	provider, err := pm.GetOrCreateProvider(params.MerchantNo, PaymentChannel(params.Channel))
+	provider, err := pm.GetOrCreateProvider(params.MerchantNo, types.PaymentChannel(params.Channel))
 	if err != nil {
-		return &ReconcileResponse{Success: false, Error: err.Error()}, err
+		return &types.ReconcileResponse{Success: false, Error: err.Error()}, err
 	}
 
 	// 下载对账单
-	billParams := &DownloadBillParams{
+	billParams := &types.DownloadBillParams{
 		MerchantNo: params.MerchantNo,
 		Channel:    params.Channel,
 		BillDate:   params.BillDate,
@@ -492,11 +493,11 @@ func (pm *PaymentManager) Reconcile(params *ReconcileParams) (*ReconcileResponse
 	billResponse, err := provider.DownloadBill(billParams)
 	if err != nil {
 		log.Error("Failed to download bill for reconcile: %v", err)
-		return &ReconcileResponse{Success: false, Error: err.Error()}, err
+		return &types.ReconcileResponse{Success: false, Error: err.Error()}, err
 	}
 
 	if !billResponse.Success {
-		return &ReconcileResponse{
+		return &types.ReconcileResponse{
 			Success: false,
 			Error:   billResponse.Error,
 		}, fmt.Errorf("download bill failed: %s", billResponse.Error)
@@ -506,14 +507,14 @@ func (pm *PaymentManager) Reconcile(params *ReconcileParams) (*ReconcileResponse
 	// 比如解析对账单数据，与本地订单数据进行比对等
 
 	log.Info("Reconcile completed successfully: %s", params.BillDate)
-	return &ReconcileResponse{
+	return &types.ReconcileResponse{
 		Success: true,
 		Message: "对账完成",
 	}, nil
 }
 
 // ValidateCreateOrderParams 验证创建订单参数
-func (pm *PaymentManager) ValidateCreateOrderParams(params *CreateOrderParams) error {
+func (pm *PaymentManager) ValidateCreateOrderParams(params *types.CreateOrderParams) error {
 	if params.MerchantNo == "" {
 		return fmt.Errorf("merchant_no is required")
 	}
@@ -543,12 +544,12 @@ func (pm *PaymentManager) ValidateCreateOrderParams(params *CreateOrderParams) e
 	}
 
 	// 验证支付渠道
-	if !isValidPaymentChannel(params.Channel) {
+	if !isValidPaymentChannel(string(params.Channel)) {
 		return fmt.Errorf("invalid payment channel: %s", params.Channel)
 	}
 
 	// 验证交易类型
-	if !isValidTradeType(params.TradeType) {
+	if !isValidTradeType(string(params.TradeType)) {
 		return fmt.Errorf("invalid trade type: %s", params.TradeType)
 	}
 
@@ -556,7 +557,7 @@ func (pm *PaymentManager) ValidateCreateOrderParams(params *CreateOrderParams) e
 }
 
 // ValidateQueryOrderParams 验证查询订单参数
-func (pm *PaymentManager) ValidateQueryOrderParams(params *QueryOrderParams) error {
+func (pm *PaymentManager) ValidateQueryOrderParams(params *types.QueryOrderParams) error {
 	if params.MerchantNo == "" {
 		return fmt.Errorf("merchant_no is required")
 	}
@@ -570,7 +571,7 @@ func (pm *PaymentManager) ValidateQueryOrderParams(params *QueryOrderParams) err
 	}
 
 	// 验证支付渠道
-	if !isValidPaymentChannel(params.Channel) {
+	if !isValidPaymentChannel(string(params.Channel)) {
 		return fmt.Errorf("invalid payment channel: %s", params.Channel)
 	}
 
@@ -578,7 +579,7 @@ func (pm *PaymentManager) ValidateQueryOrderParams(params *QueryOrderParams) err
 }
 
 // ValidateQueryRefundParams 验证查询退款参数
-func (pm *PaymentManager) ValidateQueryRefundParams(params *QueryRefundParams) error {
+func (pm *PaymentManager) ValidateQueryRefundParams(params *types.QueryRefundParams) error {
 	if params.Channel == "" {
 		return fmt.Errorf("channel is required")
 	}
@@ -588,7 +589,7 @@ func (pm *PaymentManager) ValidateQueryRefundParams(params *QueryRefundParams) e
 	}
 
 	// 验证支付渠道
-	if !isValidPaymentChannel(params.Channel) {
+	if !isValidPaymentChannel(string(params.Channel)) {
 		return fmt.Errorf("invalid payment channel: %s", params.Channel)
 	}
 
@@ -596,7 +597,7 @@ func (pm *PaymentManager) ValidateQueryRefundParams(params *QueryRefundParams) e
 }
 
 // ValidateDownloadBillParams 验证下载对账单参数
-func (pm *PaymentManager) ValidateDownloadBillParams(params *DownloadBillParams) error {
+func (pm *PaymentManager) ValidateDownloadBillParams(params *types.DownloadBillParams) error {
 	if params.Channel == "" {
 		return fmt.Errorf("channel is required")
 	}
@@ -606,7 +607,7 @@ func (pm *PaymentManager) ValidateDownloadBillParams(params *DownloadBillParams)
 	}
 
 	// 验证支付渠道
-	if !isValidPaymentChannel(params.Channel) {
+	if !isValidPaymentChannel(string(params.Channel)) {
 		return fmt.Errorf("invalid payment channel: %s", params.Channel)
 	}
 
@@ -619,7 +620,7 @@ func (pm *PaymentManager) ValidateDownloadBillParams(params *DownloadBillParams)
 }
 
 // ValidateCreateRefundParams 验证创建退款参数
-func (pm *PaymentManager) ValidateCreateRefundParams(params *CreateRefundParams) error {
+func (pm *PaymentManager) ValidateCreateRefundParams(params *types.CreateRefundParams) error {
 	if params.Channel == "" {
 		return fmt.Errorf("channel is required")
 	}
@@ -641,7 +642,7 @@ func (pm *PaymentManager) ValidateCreateRefundParams(params *CreateRefundParams)
 	}
 
 	// 验证支付渠道
-	if !isValidPaymentChannel(params.Channel) {
+	if !isValidPaymentChannel(string(params.Channel)) {
 		return fmt.Errorf("invalid payment channel: %s", params.Channel)
 	}
 
@@ -649,7 +650,7 @@ func (pm *PaymentManager) ValidateCreateRefundParams(params *CreateRefundParams)
 }
 
 // ValidateReconcileParams 验证对账参数
-func (pm *PaymentManager) ValidateReconcileParams(params *ReconcileParams) error {
+func (pm *PaymentManager) ValidateReconcileParams(params *types.ReconcileParams) error {
 	if params.Channel == "" {
 		return fmt.Errorf("channel is required")
 	}
@@ -659,7 +660,7 @@ func (pm *PaymentManager) ValidateReconcileParams(params *ReconcileParams) error
 	}
 
 	// 验证支付渠道
-	if !isValidPaymentChannel(params.Channel) {
+	if !isValidPaymentChannel(string(params.Channel)) {
 		return fmt.Errorf("invalid payment channel: %s", params.Channel)
 	}
 
@@ -669,8 +670,8 @@ func (pm *PaymentManager) ValidateReconcileParams(params *ReconcileParams) error
 // isValidPaymentChannel 验证支付渠道是否有效
 func isValidPaymentChannel(channel string) bool {
 	validChannels := []string{
-		string(ChannelAlipay),
-		string(ChannelWechat),
+		string(types.ChannelAlipay),
+		string(types.ChannelWechat),
 	}
 
 	for _, validChannel := range validChannels {
@@ -694,20 +695,20 @@ func isValidBillType(billType string) bool {
 }
 
 // GetSupportedProviders 获取所有支持的支付渠道
-func GetSupportedProviders() []PaymentChannel {
-	return []PaymentChannel{
-		PaymentChannel(ChannelAlipay),
-		PaymentChannel(ChannelWechat),
+func GetSupportedProviders() []types.PaymentChannel {
+	return []types.PaymentChannel{
+		types.PaymentChannel(types.ChannelAlipay),
+		types.PaymentChannel(types.ChannelWechat),
 	}
 }
 
 // isValidTradeType 验证交易类型是否有效
 func isValidTradeType(tradeType string) bool {
 	validTypes := []string{
-		string(TradeTypeNative),
-		string(TradeTypeJSAPI),
-		string(TradeTypeApp),
-		string(TradeTypeH5),
+		string(types.TradeTypeNative),
+		string(types.TradeTypeJSAPI),
+		string(types.TradeTypeApp),
+		string(types.TradeTypeH5),
 	}
 	for _, validType := range validTypes {
 		if tradeType == validType {

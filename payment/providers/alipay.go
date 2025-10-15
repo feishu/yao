@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"github.com/yaoapp/yao/payment/types"
 	"context"
 	"fmt"
 	"strconv"
@@ -29,7 +30,7 @@ type AlipayConfig struct {
 }
 
 // NewAlipayProvider 创建支付宝支付提供商
-func NewAlipayProvider(config map[string]interface{}) (PaymentProvider, error) {
+func NewAlipayProvider(config map[string]interface{}) (types.PaymentProvider, error) {
 	// 如果配置为空，返回默认实例（用于注册）
 	if config == nil {
 		return &AlipayProvider{}, nil
@@ -94,19 +95,19 @@ func NewAlipayProvider(config map[string]interface{}) (PaymentProvider, error) {
 }
 
 // CreateOrder 创建支付订单
-func (ap *AlipayProvider) CreateOrder(params *CreateOrderParams) (*CreateOrderResponse, error) {
+func (ap *AlipayProvider) CreateOrder(params *types.CreateOrderParams) (*types.CreateOrderResponse, error) {
 	ctx := context.Background()
 
 	// 根据交易类型选择不同的支付方式
-	switch TradeType(params.TradeType) {
-	case TradeTypeNative:
+	switch types.TradeType(params.TradeType) {
+	case types.TradeTypeNative:
 		return ap.createNativeOrder(ctx, params)
-	case TradeTypeWAP:
+	case types.TradeTypeWAP:
 		return ap.createWAPOrder(ctx, params)
-	case TradeTypeApp:
+	case types.TradeTypeApp:
 		return ap.createAppOrder(ctx, params)
 	default:
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("不支持的交易类型: %s", params.TradeType),
 		}, fmt.Errorf("unsupported trade type: %s", params.TradeType)
@@ -114,7 +115,7 @@ func (ap *AlipayProvider) CreateOrder(params *CreateOrderParams) (*CreateOrderRe
 }
 
 // createNativeOrder 创建扫码支付订单
-func (ap *AlipayProvider) createNativeOrder(ctx context.Context, params *CreateOrderParams) (*CreateOrderResponse, error) {
+func (ap *AlipayProvider) createNativeOrder(ctx context.Context, params *types.CreateOrderParams) (*types.CreateOrderResponse, error) {
 	// 构建请求参数
 	bm := make(gopay.BodyMap)
 	bm.Set("out_trade_no", params.OutTradeNo)
@@ -135,14 +136,14 @@ func (ap *AlipayProvider) createNativeOrder(ctx context.Context, params *CreateO
 	// 调用支付宝预下单接口
 	aliRsp, err := ap.client.TradePrecreate(ctx, bm)
 	if err != nil {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用支付宝预下单接口失败: %v", err),
 		}, err
 	}
 
 	if aliRsp.Response.Code != "10000" {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("支付宝预下单失败: %s - %s", aliRsp.Response.Code, aliRsp.Response.Msg),
 		}, fmt.Errorf("alipay precreate failed: %s", aliRsp.Response.Msg)
@@ -154,7 +155,7 @@ func (ap *AlipayProvider) createNativeOrder(ctx context.Context, params *CreateO
 		"qr_code":      aliRsp.Response.QrCode,
 	}
 
-	return &CreateOrderResponse{
+	return &types.CreateOrderResponse{
 		Success:    true,
 		OrderID:    aliRsp.Response.OutTradeNo, // 使用商户订单号作为订单ID
 		OutTradeNo: aliRsp.Response.OutTradeNo,
@@ -165,7 +166,7 @@ func (ap *AlipayProvider) createNativeOrder(ctx context.Context, params *CreateO
 }
 
 // createWAPOrder 创建WAP支付订单
-func (ap *AlipayProvider) createWAPOrder(ctx context.Context, params *CreateOrderParams) (*CreateOrderResponse, error) {
+func (ap *AlipayProvider) createWAPOrder(ctx context.Context, params *types.CreateOrderParams) (*types.CreateOrderResponse, error) {
 	// 构建请求参数
 	bm := make(gopay.BodyMap)
 	bm.Set("out_trade_no", params.OutTradeNo)
@@ -204,7 +205,7 @@ func (ap *AlipayProvider) createWAPOrder(ctx context.Context, params *CreateOrde
 	// 调用支付宝WAP支付接口
 	payURL, err := ap.client.TradeWapPay(ctx, bm)
 	if err != nil {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用支付宝WAP支付接口失败: %v", err),
 		}, err
@@ -216,7 +217,7 @@ func (ap *AlipayProvider) createWAPOrder(ctx context.Context, params *CreateOrde
 		"pay_url":      payURL,
 	}
 
-	return &CreateOrderResponse{
+	return &types.CreateOrderResponse{
 		Success:    true,
 		OrderID:    params.OutTradeNo,
 		OutTradeNo: params.OutTradeNo,
@@ -227,7 +228,7 @@ func (ap *AlipayProvider) createWAPOrder(ctx context.Context, params *CreateOrde
 }
 
 // createAppOrder 创建APP支付订单
-func (ap *AlipayProvider) createAppOrder(ctx context.Context, params *CreateOrderParams) (*CreateOrderResponse, error) {
+func (ap *AlipayProvider) createAppOrder(ctx context.Context, params *types.CreateOrderParams) (*types.CreateOrderResponse, error) {
 	// 构建请求参数
 	bm := make(gopay.BodyMap)
 	bm.Set("out_trade_no", params.OutTradeNo)
@@ -262,7 +263,7 @@ func (ap *AlipayProvider) createAppOrder(ctx context.Context, params *CreateOrde
 	// 调用支付宝APP支付接口
 	payParam, err := ap.client.TradeAppPay(ctx, bm)
 	if err != nil {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用支付宝APP支付接口失败: %v", err),
 		}, err
@@ -274,7 +275,7 @@ func (ap *AlipayProvider) createAppOrder(ctx context.Context, params *CreateOrde
 		"pay_param":    payParam,
 	}
 
-	return &CreateOrderResponse{
+	return &types.CreateOrderResponse{
 		Success:    true,
 		OrderID:    params.OutTradeNo,
 		OutTradeNo: params.OutTradeNo,
@@ -284,7 +285,7 @@ func (ap *AlipayProvider) createAppOrder(ctx context.Context, params *CreateOrde
 }
 
 // QueryOrder 查询订单状态
-func (ap *AlipayProvider) QueryOrder(params *QueryOrderParams) (*QueryOrderResponse, error) {
+func (ap *AlipayProvider) QueryOrder(params *types.QueryOrderParams) (*types.QueryOrderResponse, error) {
 	ctx := context.Background()
 
 	// 构建请求参数
@@ -299,14 +300,14 @@ func (ap *AlipayProvider) QueryOrder(params *QueryOrderParams) (*QueryOrderRespo
 	// 调用支付宝查询接口
 	aliRsp, err := ap.client.TradeQuery(ctx, bm)
 	if err != nil {
-		return &QueryOrderResponse{
+		return &types.QueryOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用支付宝查询接口失败: %v", err),
 		}, err
 	}
 
 	if aliRsp.Response.Code != "10000" {
-		return &QueryOrderResponse{
+		return &types.QueryOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("支付宝查询失败: %s - %s", aliRsp.Response.Code, aliRsp.Response.Msg),
 		}, fmt.Errorf("alipay query failed: %s", aliRsp.Response.Msg)
@@ -316,7 +317,7 @@ func (ap *AlipayProvider) QueryOrder(params *QueryOrderParams) (*QueryOrderRespo
 	amount, _ := strconv.ParseFloat(aliRsp.Response.TotalAmount, 64)
 	paidAmount, _ := strconv.ParseFloat(aliRsp.Response.ReceiptAmount, 64)
 
-	return &QueryOrderResponse{
+	return &types.QueryOrderResponse{
 		Success:    true,
 		OutTradeNo: aliRsp.Response.OutTradeNo,
 		TradeNo:    aliRsp.Response.TradeNo,
@@ -329,7 +330,7 @@ func (ap *AlipayProvider) QueryOrder(params *QueryOrderParams) (*QueryOrderRespo
 }
 
 // CreateRefund 创建退款
-func (ap *AlipayProvider) CreateRefund(params *CreateRefundParams) (*CreateRefundResponse, error) {
+func (ap *AlipayProvider) CreateRefund(params *types.CreateRefundParams) (*types.CreateRefundResponse, error) {
 	ctx := context.Background()
 
 	// 构建请求参数
@@ -345,30 +346,30 @@ func (ap *AlipayProvider) CreateRefund(params *CreateRefundParams) (*CreateRefun
 	// 调用支付宝退款接口
 	aliRsp, err := ap.client.TradeRefund(ctx, bm)
 	if err != nil {
-		return &CreateRefundResponse{
+		return &types.CreateRefundResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用支付宝退款接口失败: %v", err),
 		}, err
 	}
 
 	if aliRsp.Response.Code != "10000" {
-		return &CreateRefundResponse{
+		return &types.CreateRefundResponse{
 			Success: false,
 			Error:   fmt.Sprintf("支付宝退款失败: %s - %s", aliRsp.Response.Code, aliRsp.Response.Msg),
 		}, fmt.Errorf("alipay refund failed: %s", aliRsp.Response.Msg)
 	}
 
-	return &CreateRefundResponse{
+	return &types.CreateRefundResponse{
 		Success:     true,
 		OutRefundNo: params.OutRefundNo,
 		RefundID:    params.OutRefundNo,  // 使用 OutRefundNo 作为 RefundID
-		Status:      RefundStatusSuccess, // 支付宝退款是同步的
+		Status:      types.RefundStatusSuccess, // 支付宝退款是同步的
 		Message:     "退款成功",
 	}, nil
 }
 
 // QueryRefund 查询退款状态
-func (ap *AlipayProvider) QueryRefund(params *QueryRefundParams) (*QueryRefundResponse, error) {
+func (ap *AlipayProvider) QueryRefund(params *types.QueryRefundParams) (*types.QueryRefundResponse, error) {
 	ctx := context.Background()
 
 	// 构建请求参数
@@ -385,14 +386,14 @@ func (ap *AlipayProvider) QueryRefund(params *QueryRefundParams) (*QueryRefundRe
 	// 调用支付宝退款查询接口
 	aliRsp, err := ap.client.TradeFastPayRefundQuery(ctx, bm)
 	if err != nil {
-		return &QueryRefundResponse{
+		return &types.QueryRefundResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用支付宝退款查询接口失败: %v", err),
 		}, err
 	}
 
 	if aliRsp.Response.Code != "10000" {
-		return &QueryRefundResponse{
+		return &types.QueryRefundResponse{
 			Success: false,
 			Error:   fmt.Sprintf("支付宝退款查询失败: %s - %s", aliRsp.Response.Code, aliRsp.Response.Msg),
 		}, fmt.Errorf("alipay query refund failed: %s", aliRsp.Response.Msg)
@@ -401,22 +402,22 @@ func (ap *AlipayProvider) QueryRefund(params *QueryRefundParams) (*QueryRefundRe
 	// 转换退款金额（元转分）
 	refundAmount, _ := strconv.ParseFloat(aliRsp.Response.RefundAmount, 64)
 
-	return &QueryRefundResponse{
+	return &types.QueryRefundResponse{
 		Success:      true,
 		OutRefundNo:  params.OutRefundNo,
 		RefundID:     params.OutRefundNo,
 		RefundAmount: int64(refundAmount * 100),
-		Status:       RefundStatusSuccess, // 支付宝退款查询成功即表示退款已完成
+		Status:       types.RefundStatusSuccess, // 支付宝退款查询成功即表示退款已完成
 		RefundTime:   aliRsp.Response.GmtRefundPay,
 		Message:      "查询成功",
 	}, nil
 }
 
 // HandleNotify 处理异步通知
-func (ap *AlipayProvider) HandleNotify(params *HandleNotifyParams) (*HandleNotifyResponse, error) {
+func (ap *AlipayProvider) HandleNotify(params *types.HandleNotifyParams) (*types.HandleNotifyResponse, error) {
 	// 检查是否传入了HTTP请求对象
 	if params.Request == nil {
-		return &HandleNotifyResponse{
+		return &types.HandleNotifyResponse{
 			Success: false,
 			Error:   "HTTP请求对象不能为空",
 		}, fmt.Errorf("HTTP request is required")
@@ -425,7 +426,7 @@ func (ap *AlipayProvider) HandleNotify(params *HandleNotifyParams) (*HandleNotif
 	// 解析支付宝通知参数
 	notifyReq, err := alipay.ParseNotifyToBodyMap(params.Request)
 	if err != nil {
-		return &HandleNotifyResponse{
+		return &types.HandleNotifyResponse{
 			Success: false,
 			Error:   fmt.Sprintf("解析通知数据失败: %v", err),
 		}, err
@@ -434,13 +435,13 @@ func (ap *AlipayProvider) HandleNotify(params *HandleNotifyParams) (*HandleNotif
 	// 验证签名（使用支付宝公钥）
 	ok, err := alipay.VerifySign(ap.config.PublicKey, notifyReq)
 	if err != nil {
-		return &HandleNotifyResponse{
+		return &types.HandleNotifyResponse{
 			Success: false,
 			Error:   fmt.Sprintf("签名验证失败: %v", err),
 		}, err
 	}
 	if !ok {
-		return &HandleNotifyResponse{
+		return &types.HandleNotifyResponse{
 			Success: false,
 			Error:   "签名验证不通过",
 		}, fmt.Errorf("sign verification failed")
@@ -462,7 +463,7 @@ func (ap *AlipayProvider) HandleNotify(params *HandleNotifyParams) (*HandleNotif
 		notifyData[k] = v
 	}
 
-	return &HandleNotifyResponse{
+	return &types.HandleNotifyResponse{
 		Success:    true,
 		OutTradeNo: outTradeNo,
 		TradeNo:    tradeNo,
@@ -475,7 +476,7 @@ func (ap *AlipayProvider) HandleNotify(params *HandleNotifyParams) (*HandleNotif
 }
 
 // DownloadBill 下载对账单
-func (ap *AlipayProvider) DownloadBill(params *DownloadBillParams) (*DownloadBillResponse, error) {
+func (ap *AlipayProvider) DownloadBill(params *types.DownloadBillParams) (*types.DownloadBillResponse, error) {
 	ctx := context.Background()
 
 	// 构建请求参数
@@ -491,21 +492,21 @@ func (ap *AlipayProvider) DownloadBill(params *DownloadBillParams) (*DownloadBil
 	// 调用支付宝对账单下载接口
 	aliRsp, err := ap.client.DataBillDownloadUrlQuery(ctx, bm)
 	if err != nil {
-		return &DownloadBillResponse{
+		return &types.DownloadBillResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用支付宝对账单接口失败: %v", err),
 		}, err
 	}
 
 	if aliRsp.Response.Code != "10000" {
-		return &DownloadBillResponse{
+		return &types.DownloadBillResponse{
 			Success: false,
 			Error:   fmt.Sprintf("支付宝获取对账单失败: %s - %s", aliRsp.Response.Code, aliRsp.Response.Msg),
 		}, fmt.Errorf("alipay download bill failed: %s", aliRsp.Response.Msg)
 	}
 
 	// 返回对账单下载链接
-	return &DownloadBillResponse{
+	return &types.DownloadBillResponse{
 		Success:  true,
 		BillData: aliRsp.Response.BillDownloadUrl, // 返回下载链接
 		Message:  "对账单获取成功",
@@ -513,17 +514,17 @@ func (ap *AlipayProvider) DownloadBill(params *DownloadBillParams) (*DownloadBil
 }
 
 // convertAlipayOrderStatus 转换支付宝订单状态
-func convertAlipayOrderStatus(alipayStatus string) OrderStatus {
+func convertAlipayOrderStatus(alipayStatus string) types.OrderStatus {
 	switch alipayStatus {
 	case "WAIT_BUYER_PAY":
-		return OrderStatusPending
+		return types.OrderStatusPending
 	case "TRADE_SUCCESS":
-		return OrderStatusPaid
+		return types.OrderStatusPaid
 	case "TRADE_CLOSED":
-		return OrderStatusClosed
+		return types.OrderStatusClosed
 	case "TRADE_FINISHED":
-		return OrderStatusPaid
+		return types.OrderStatusPaid
 	default:
-		return OrderStatusPending
+		return types.OrderStatusPending
 	}
 }

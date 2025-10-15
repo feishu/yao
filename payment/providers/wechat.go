@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/yaoapp/yao/payment/types"
+
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/wechat/v3"
 	"github.com/yaoapp/kun/log"
@@ -27,7 +29,7 @@ type WechatConfig struct {
 }
 
 // NewWechatProvider 创建微信支付提供商
-func NewWechatProvider(config map[string]interface{}) (PaymentProvider, error) {
+func NewWechatProvider(config map[string]interface{}) (types.PaymentProvider, error) {
 	// 如果配置为空，返回默认实例
 	if config == nil {
 		return &WechatProvider{}, nil
@@ -95,21 +97,21 @@ func NewWechatProvider(config map[string]interface{}) (PaymentProvider, error) {
 }
 
 // CreateOrder 创建支付订单
-func (wp *WechatProvider) CreateOrder(params *CreateOrderParams) (*CreateOrderResponse, error) {
+func (wp *WechatProvider) CreateOrder(params *types.CreateOrderParams) (*types.CreateOrderResponse, error) {
 	ctx := context.Background()
 
 	// 根据交易类型调用不同的创建方法
-	switch TradeType(params.TradeType) {
-	case TradeTypeJSAPI:
+	switch types.TradeType(params.TradeType) {
+	case types.TradeTypeJSAPI:
 		return wp.createJSAPIOrder(ctx, params)
-	case TradeTypeNative:
+	case types.TradeTypeNative:
 		return wp.createNativeOrder(ctx, params)
-	case TradeTypeApp:
+	case types.TradeTypeApp:
 		return wp.createAppOrder(ctx, params)
-	case TradeTypeH5:
+	case types.TradeTypeH5:
 		return wp.createH5Order(ctx, params)
 	default:
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("不支持的交易类型: %s", params.TradeType),
 		}, fmt.Errorf("unsupported trade type: %s", params.TradeType)
@@ -117,15 +119,15 @@ func (wp *WechatProvider) CreateOrder(params *CreateOrderParams) (*CreateOrderRe
 }
 
 // createJSAPIOrder 创建JSAPI支付订单
-func (wp *WechatProvider) createJSAPIOrder(ctx context.Context, params *CreateOrderParams) (*CreateOrderResponse, error) {
+func (wp *WechatProvider) createJSAPIOrder(ctx context.Context, params *types.CreateOrderParams) (*types.CreateOrderResponse, error) {
 
 	// 构建请求参数
 	bm := make(gopay.BodyMap)
-	bm.Set("appid", wp.config.AppID)
-	bm.Set("mchid", wp.config.MchID)
-	bm.Set("description", params.Subject)
-	bm.Set("out_trade_no", params.OutTradeNo)
-	bm.Set("notify_url", params.NotifyURL)
+	bm.Set("appid", wp.config.AppID).
+		Set("mchid", wp.config.MchID).
+		Set("description", params.Subject).
+		Set("out_trade_no", params.OutTradeNo).
+		Set("notify_url", params.NotifyURL)
 
 	// 设置金额信息
 	bm.SetBodyMap("amount", func(bm gopay.BodyMap) {
@@ -133,17 +135,24 @@ func (wp *WechatProvider) createJSAPIOrder(ctx context.Context, params *CreateOr
 		bm.Set("currency", "CNY")
 	})
 
+	// 设置支付者信息
+	if params.WechatParams != nil && params.WechatParams.OpenID != "" {
+		bm.SetBodyMap("payer", func(bm gopay.BodyMap) {
+			bm.Set("openid", params.WechatParams.OpenID)
+		})
+	}
+
 	// 调用微信JSAPI支付接口
 	wxRsp, err := wp.client.V3TransactionJsapi(ctx, bm)
 	if err != nil {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用微信JSAPI支付接口失败: %v", err),
 		}, err
 	}
 
 	if wxRsp.Code != wechat.Success {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("微信JSAPI支付失败: %s", wxRsp.Error),
 		}, fmt.Errorf("wechat jsapi payment failed: %s", wxRsp.Error)
@@ -152,7 +161,7 @@ func (wp *WechatProvider) createJSAPIOrder(ctx context.Context, params *CreateOr
 	// 生成JSAPI支付参数
 	jsapiParams, err := wp.client.PaySignOfJSAPI(wp.config.AppID, wxRsp.Response.PrepayId)
 	if err != nil {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("生成JSAPI支付参数失败: %v", err),
 		}, err
@@ -168,7 +177,7 @@ func (wp *WechatProvider) createJSAPIOrder(ctx context.Context, params *CreateOr
 		"paySign":   jsapiParams.PaySign,
 	}
 
-	return &CreateOrderResponse{
+	return &types.CreateOrderResponse{
 		Success:    true,
 		OrderID:    params.OutTradeNo,
 		OutTradeNo: params.OutTradeNo,
@@ -178,7 +187,7 @@ func (wp *WechatProvider) createJSAPIOrder(ctx context.Context, params *CreateOr
 }
 
 // createNativeOrder 创建Native支付订单
-func (wp *WechatProvider) createNativeOrder(ctx context.Context, params *CreateOrderParams) (*CreateOrderResponse, error) {
+func (wp *WechatProvider) createNativeOrder(ctx context.Context, params *types.CreateOrderParams) (*types.CreateOrderResponse, error) {
 	// 构建请求参数
 	bm := make(gopay.BodyMap)
 	bm.Set("appid", wp.config.AppID)
@@ -196,20 +205,20 @@ func (wp *WechatProvider) createNativeOrder(ctx context.Context, params *CreateO
 	// 调用微信Native支付接口
 	wxRsp, err := wp.client.V3TransactionNative(ctx, bm)
 	if err != nil {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用微信Native支付接口失败: %v", err),
 		}, err
 	}
 
 	if wxRsp.Code != wechat.Success {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("微信Native支付失败: %s", wxRsp.Error),
 		}, fmt.Errorf("wechat native payment failed: %s", wxRsp.Error)
 	}
 
-	return &CreateOrderResponse{
+	return &types.CreateOrderResponse{
 		Success:    true,
 		OrderID:    params.OutTradeNo,
 		OutTradeNo: params.OutTradeNo,
@@ -221,7 +230,7 @@ func (wp *WechatProvider) createNativeOrder(ctx context.Context, params *CreateO
 }
 
 // createAppOrder 创建APP支付订单
-func (wp *WechatProvider) createAppOrder(ctx context.Context, params *CreateOrderParams) (*CreateOrderResponse, error) {
+func (wp *WechatProvider) createAppOrder(ctx context.Context, params *types.CreateOrderParams) (*types.CreateOrderResponse, error) {
 	// 构建请求参数
 	bm := make(gopay.BodyMap)
 	bm.Set("appid", wp.config.AppID)
@@ -239,14 +248,14 @@ func (wp *WechatProvider) createAppOrder(ctx context.Context, params *CreateOrde
 	// 调用微信APP支付接口
 	wxRsp, err := wp.client.V3TransactionApp(ctx, bm)
 	if err != nil {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用微信APP支付接口失败: %v", err),
 		}, err
 	}
 
 	if wxRsp.Code != wechat.Success {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("微信APP支付失败: %s", wxRsp.Error),
 		}, fmt.Errorf("wechat app payment failed: %s", wxRsp.Error)
@@ -255,7 +264,7 @@ func (wp *WechatProvider) createAppOrder(ctx context.Context, params *CreateOrde
 	// 生成APP支付参数
 	appParams, err := wp.client.PaySignOfApp(wp.config.AppID, wxRsp.Response.PrepayId)
 	if err != nil {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("生成APP支付参数失败: %v", err),
 		}, err
@@ -272,7 +281,7 @@ func (wp *WechatProvider) createAppOrder(ctx context.Context, params *CreateOrde
 		"sign":      appParams.Sign,
 	}
 
-	return &CreateOrderResponse{
+	return &types.CreateOrderResponse{
 		Success:    true,
 		OrderID:    params.OutTradeNo,
 		OutTradeNo: params.OutTradeNo,
@@ -282,7 +291,7 @@ func (wp *WechatProvider) createAppOrder(ctx context.Context, params *CreateOrde
 }
 
 // createH5Order 创建H5支付订单
-func (wp *WechatProvider) createH5Order(ctx context.Context, params *CreateOrderParams) (*CreateOrderResponse, error) {
+func (wp *WechatProvider) createH5Order(ctx context.Context, params *types.CreateOrderParams) (*types.CreateOrderResponse, error) {
 	// H5支付需要场景信息
 	var sceneInfo map[string]interface{}
 	if params.WechatParams != nil && params.WechatParams.SceneInfo != nil {
@@ -336,20 +345,20 @@ func (wp *WechatProvider) createH5Order(ctx context.Context, params *CreateOrder
 	// 调用微信H5支付接口
 	wxRsp, err := wp.client.V3TransactionH5(ctx, bm)
 	if err != nil {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用微信H5支付接口失败: %v", err),
 		}, err
 	}
 
 	if wxRsp.Code != wechat.Success {
-		return &CreateOrderResponse{
+		return &types.CreateOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("微信H5支付失败: %s", wxRsp.Error),
 		}, fmt.Errorf("wechat h5 payment failed: %s", wxRsp.Error)
 	}
 
-	return &CreateOrderResponse{
+	return &types.CreateOrderResponse{
 		Success:    true,
 		OrderID:    params.OutTradeNo,
 		OutTradeNo: params.OutTradeNo,
@@ -361,7 +370,7 @@ func (wp *WechatProvider) createH5Order(ctx context.Context, params *CreateOrder
 }
 
 // QueryOrder 查询支付订单
-func (wp *WechatProvider) QueryOrder(params *QueryOrderParams) (*QueryOrderResponse, error) {
+func (wp *WechatProvider) QueryOrder(params *types.QueryOrderParams) (*types.QueryOrderResponse, error) {
 	ctx := context.Background()
 
 	// 微信支付V3支持使用商户订单号或微信支付订单号查询
@@ -375,21 +384,21 @@ func (wp *WechatProvider) QueryOrder(params *QueryOrderParams) (*QueryOrderRespo
 		// 使用微信支付订单号查询
 		wxRsp, err = wp.client.V3TransactionQueryOrder(ctx, wechat.TransactionId, params.TransactionID)
 	} else {
-		return &QueryOrderResponse{
+		return &types.QueryOrderResponse{
 			Success: false,
 			Error:   "out_trade_no 或 transaction_id 必须提供一个",
 		}, fmt.Errorf("out_trade_no or transaction_id is required")
 	}
 
 	if err != nil {
-		return &QueryOrderResponse{
+		return &types.QueryOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("查询订单失败: %v", err),
 		}, err
 	}
 
 	if wxRsp.Code != wechat.Success {
-		return &QueryOrderResponse{
+		return &types.QueryOrderResponse{
 			Success: false,
 			Error:   fmt.Sprintf("微信查询订单失败: %s", wxRsp.Error),
 		}, fmt.Errorf("wechat query order failed: %s", wxRsp.Error)
@@ -404,14 +413,14 @@ func (wp *WechatProvider) QueryOrder(params *QueryOrderParams) (*QueryOrderRespo
 		paidAt = wxRsp.Response.SuccessTime
 	}
 
-	return &QueryOrderResponse{
+	return &types.QueryOrderResponse{
 		Success:       true,
 		OrderID:       wxRsp.Response.OutTradeNo,
 		OutTradeNo:    wxRsp.Response.OutTradeNo,
 		TransactionID: wxRsp.Response.TransactionId,
 		TradeNo:       wxRsp.Response.TransactionId,
-		Channel:       ChannelWechat,
-		TradeType:     TradeType(wxRsp.Response.TradeType),
+		Channel:       types.ChannelWechat,
+		TradeType:     types.TradeType(wxRsp.Response.TradeType),
 		Status:        status,
 		Amount:        int64(wxRsp.Response.Amount.Total),
 		PaidAmount:    int64(wxRsp.Response.Amount.PayerTotal),
@@ -423,50 +432,50 @@ func (wp *WechatProvider) QueryOrder(params *QueryOrderParams) (*QueryOrderRespo
 }
 
 // convertWechatOrderStatus 转换微信订单状态
-func convertWechatOrderStatus(wechatStatus string) OrderStatus {
+func convertWechatOrderStatus(wechatStatus string) types.OrderStatus {
 	switch wechatStatus {
 	case "SUCCESS":
-		return OrderStatusPaid
+		return types.OrderStatusPaid
 	case "REFUND":
-		return OrderStatusRefund
+		return types.OrderStatusRefund
 	case "NOTPAY":
-		return OrderStatusPending
+		return types.OrderStatusPending
 	case "CLOSED":
-		return OrderStatusClosed
+		return types.OrderStatusClosed
 	case "REVOKED":
-		return OrderStatusClosed
+		return types.OrderStatusClosed
 	case "USERPAYING":
-		return OrderStatusPending
+		return types.OrderStatusPending
 	case "PAYERROR":
-		return OrderStatusClosed
+		return types.OrderStatusClosed
 	default:
-		return OrderStatusPending
+		return types.OrderStatusPending
 	}
 }
 
 // CreateRefund 创建退款
-func (wp *WechatProvider) CreateRefund(params *CreateRefundParams) (*CreateRefundResponse, error) {
+func (wp *WechatProvider) CreateRefund(params *types.CreateRefundParams) (*types.CreateRefundResponse, error) {
 	ctx := context.Background()
 
 	// 构建请求参数
 	bm := make(gopay.BodyMap)
-	
+
 	// 设置订单号（微信支持使用商户订单号或微信订单号）
 	if params.OutTradeNo != "" {
 		bm.Set("out_trade_no", params.OutTradeNo)
 	} else if params.TransactionID != "" {
 		bm.Set("transaction_id", params.TransactionID)
 	}
-	
+
 	bm.Set("out_refund_no", params.OutRefundNo)
-	
+
 	// 设置退款原因
 	if params.Reason != "" {
 		bm.Set("reason", params.Reason)
 	} else if params.RefundReason != "" {
 		bm.Set("reason", params.RefundReason)
 	}
-	
+
 	// 设置退款通知URL
 	if params.NotifyURL != "" {
 		bm.Set("notify_url", params.NotifyURL)
@@ -474,22 +483,22 @@ func (wp *WechatProvider) CreateRefund(params *CreateRefundParams) (*CreateRefun
 
 	// 设置金额信息
 	bm.SetBodyMap("amount", func(bm gopay.BodyMap) {
-		bm.Set("refund", params.RefundAmount)   // 退款金额（分）
-		bm.Set("total", params.TotalAmount)     // 原订单金额（分）
-		bm.Set("currency", "CNY")               // 货币类型
+		bm.Set("refund", params.RefundAmount) // 退款金额（分）
+		bm.Set("total", params.TotalAmount)   // 原订单金额（分）
+		bm.Set("currency", "CNY")             // 货币类型
 	})
 
 	// 调用微信退款接口
 	wxRsp, err := wp.client.V3Refund(ctx, bm)
 	if err != nil {
-		return &CreateRefundResponse{
+		return &types.CreateRefundResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用微信退款接口失败: %v", err),
 		}, err
 	}
 
 	if wxRsp.Code != wechat.Success {
-		return &CreateRefundResponse{
+		return &types.CreateRefundResponse{
 			Success: false,
 			Error:   fmt.Sprintf("微信退款失败: %s", wxRsp.Error),
 		}, fmt.Errorf("wechat refund failed: %s", wxRsp.Error)
@@ -498,7 +507,7 @@ func (wp *WechatProvider) CreateRefund(params *CreateRefundParams) (*CreateRefun
 	// 转换退款状态
 	status := convertWechatRefundStatus(wxRsp.Response.Status)
 
-	return &CreateRefundResponse{
+	return &types.CreateRefundResponse{
 		Success:      true,
 		RefundID:     wxRsp.Response.RefundId,
 		OutRefundNo:  wxRsp.Response.OutRefundNo,
@@ -509,28 +518,28 @@ func (wp *WechatProvider) CreateRefund(params *CreateRefundParams) (*CreateRefun
 }
 
 // convertWechatRefundStatus 转换微信退款状态
-func convertWechatRefundStatus(wechatStatus string) RefundStatus {
+func convertWechatRefundStatus(wechatStatus string) types.RefundStatus {
 	switch wechatStatus {
 	case "SUCCESS":
-		return RefundStatusSuccess
+		return types.RefundStatusSuccess
 	case "CLOSED":
-		return RefundStatusClosed
+		return types.RefundStatusClosed
 	case "PROCESSING":
-		return RefundStatusProcessing
+		return types.RefundStatusProcessing
 	case "ABNORMAL":
-		return RefundStatusAbnormal
+		return types.RefundStatusAbnormal
 	default:
-		return RefundStatusPending
+		return types.RefundStatusPending
 	}
 }
 
 // QueryRefund 查询退款
-func (wp *WechatProvider) QueryRefund(params *QueryRefundParams) (*QueryRefundResponse, error) {
+func (wp *WechatProvider) QueryRefund(params *types.QueryRefundParams) (*types.QueryRefundResponse, error) {
 	ctx := context.Background()
 
 	// 使用商户退款单号查询
 	if params.OutRefundNo == "" {
-		return &QueryRefundResponse{
+		return &types.QueryRefundResponse{
 			Success: false,
 			Error:   "out_refund_no 不能为空",
 		}, fmt.Errorf("out_refund_no is required")
@@ -539,14 +548,14 @@ func (wp *WechatProvider) QueryRefund(params *QueryRefundParams) (*QueryRefundRe
 	// 调用微信查询退款接口（需要传入空的 BodyMap）
 	wxRsp, err := wp.client.V3RefundQuery(ctx, params.OutRefundNo, nil)
 	if err != nil {
-		return &QueryRefundResponse{
+		return &types.QueryRefundResponse{
 			Success: false,
 			Error:   fmt.Sprintf("查询退款失败: %v", err),
 		}, err
 	}
 
 	if wxRsp.Code != wechat.Success {
-		return &QueryRefundResponse{
+		return &types.QueryRefundResponse{
 			Success: false,
 			Error:   fmt.Sprintf("微信查询退款失败: %s", wxRsp.Error),
 		}, fmt.Errorf("wechat query refund failed: %s", wxRsp.Error)
@@ -563,7 +572,7 @@ func (wp *WechatProvider) QueryRefund(params *QueryRefundParams) (*QueryRefundRe
 		refundTime = wxRsp.Response.CreateTime
 	}
 
-	return &QueryRefundResponse{
+	return &types.QueryRefundResponse{
 		Success:      true,
 		RefundID:     wxRsp.Response.RefundId,
 		OutRefundNo:  wxRsp.Response.OutRefundNo,
@@ -575,10 +584,10 @@ func (wp *WechatProvider) QueryRefund(params *QueryRefundParams) (*QueryRefundRe
 }
 
 // HandleNotify 处理支付通知
-func (wp *WechatProvider) HandleNotify(params *HandleNotifyParams) (*HandleNotifyResponse, error) {
+func (wp *WechatProvider) HandleNotify(params *types.HandleNotifyParams) (*types.HandleNotifyResponse, error) {
 	// 检查是否传入了HTTP请求对象
 	if params.Request == nil {
-		return &HandleNotifyResponse{
+		return &types.HandleNotifyResponse{
 			Success: false,
 			Error:   "HTTP请求对象不能为空",
 		}, fmt.Errorf("HTTP request is required")
@@ -587,7 +596,7 @@ func (wp *WechatProvider) HandleNotify(params *HandleNotifyParams) (*HandleNotif
 	// 解析并验证微信通知签名
 	notifyReq, err := wechat.V3ParseNotify(params.Request)
 	if err != nil {
-		return &HandleNotifyResponse{
+		return &types.HandleNotifyResponse{
 			Success: false,
 			Error:   fmt.Sprintf("解析通知数据失败: %v", err),
 		}, err
@@ -595,7 +604,7 @@ func (wp *WechatProvider) HandleNotify(params *HandleNotifyParams) (*HandleNotif
 
 	// 从客户端获取微信平台证书公钥映射进行验签
 	if err = notifyReq.VerifySignByPKMap(wp.client.WxPublicKeyMap()); err != nil {
-		return &HandleNotifyResponse{
+		return &types.HandleNotifyResponse{
 			Success: false,
 			Error:   fmt.Sprintf("签名验证失败: %v", err),
 		}, err
@@ -608,7 +617,7 @@ func (wp *WechatProvider) HandleNotify(params *HandleNotifyParams) (*HandleNotif
 	case "REFUND.SUCCESS", "REFUND.ABNORMAL", "REFUND.CLOSED": // 退款通知
 		return wp.handleRefundNotify(notifyReq)
 	default:
-		return &HandleNotifyResponse{
+		return &types.HandleNotifyResponse{
 			Success: false,
 			Error:   fmt.Sprintf("不支持的通知类型: %s", notifyReq.EventType),
 		}, fmt.Errorf("unsupported event type: %s", notifyReq.EventType)
@@ -616,11 +625,11 @@ func (wp *WechatProvider) HandleNotify(params *HandleNotifyParams) (*HandleNotif
 }
 
 // handlePaymentNotify 处理支付成功通知
-func (wp *WechatProvider) handlePaymentNotify(notifyReq *wechat.V3NotifyReq) (*HandleNotifyResponse, error) {
+func (wp *WechatProvider) handlePaymentNotify(notifyReq *wechat.V3NotifyReq) (*types.HandleNotifyResponse, error) {
 	// 解密支付通知数据
 	payResult, err := notifyReq.DecryptPayCipherText(wp.config.APIv3Key)
 	if err != nil {
-		return &HandleNotifyResponse{
+		return &types.HandleNotifyResponse{
 			Success: false,
 			Error:   fmt.Sprintf("解密支付通知数据失败: %v", err),
 		}, err
@@ -628,15 +637,15 @@ func (wp *WechatProvider) handlePaymentNotify(notifyReq *wechat.V3NotifyReq) (*H
 
 	// 构建通知数据
 	notifyData := map[string]interface{}{
-		"appid":           payResult.Appid,
-		"mchid":           payResult.Mchid,
-		"out_trade_no":    payResult.OutTradeNo,
-		"transaction_id":  payResult.TransactionId,
-		"trade_type":      payResult.TradeType,
-		"trade_state":     payResult.TradeState,
+		"appid":            payResult.Appid,
+		"mchid":            payResult.Mchid,
+		"out_trade_no":     payResult.OutTradeNo,
+		"transaction_id":   payResult.TransactionId,
+		"trade_type":       payResult.TradeType,
+		"trade_state":      payResult.TradeState,
 		"trade_state_desc": payResult.TradeStateDesc,
-		"bank_type":       payResult.BankType,
-		"success_time":    payResult.SuccessTime,
+		"bank_type":        payResult.BankType,
+		"success_time":     payResult.SuccessTime,
 	}
 
 	// 提取金额信息
@@ -650,7 +659,7 @@ func (wp *WechatProvider) handlePaymentNotify(notifyReq *wechat.V3NotifyReq) (*H
 		}
 	}
 
-	return &HandleNotifyResponse{
+	return &types.HandleNotifyResponse{
 		Success:    true,
 		OutTradeNo: payResult.OutTradeNo,
 		TradeNo:    payResult.TransactionId,
@@ -663,11 +672,11 @@ func (wp *WechatProvider) handlePaymentNotify(notifyReq *wechat.V3NotifyReq) (*H
 }
 
 // handleRefundNotify 处理退款通知
-func (wp *WechatProvider) handleRefundNotify(notifyReq *wechat.V3NotifyReq) (*HandleNotifyResponse, error) {
+func (wp *WechatProvider) handleRefundNotify(notifyReq *wechat.V3NotifyReq) (*types.HandleNotifyResponse, error) {
 	// 解密退款通知数据
 	refundResult, err := notifyReq.DecryptRefundCipherText(wp.config.APIv3Key)
 	if err != nil {
-		return &HandleNotifyResponse{
+		return &types.HandleNotifyResponse{
 			Success: false,
 			Error:   fmt.Sprintf("解密退款通知数据失败: %v", err),
 		}, err
@@ -675,13 +684,13 @@ func (wp *WechatProvider) handleRefundNotify(notifyReq *wechat.V3NotifyReq) (*Ha
 
 	// 构建通知数据
 	notifyData := map[string]interface{}{
-		"mchid":           refundResult.Mchid,
-		"out_trade_no":    refundResult.OutTradeNo,
-		"transaction_id":  refundResult.TransactionId,
-		"out_refund_no":   refundResult.OutRefundNo,
-		"refund_id":       refundResult.RefundId,
-		"refund_status":   refundResult.RefundStatus,
-		"success_time":    refundResult.SuccessTime,
+		"mchid":                 refundResult.Mchid,
+		"out_trade_no":          refundResult.OutTradeNo,
+		"transaction_id":        refundResult.TransactionId,
+		"out_refund_no":         refundResult.OutRefundNo,
+		"refund_id":             refundResult.RefundId,
+		"refund_status":         refundResult.RefundStatus,
+		"success_time":          refundResult.SuccessTime,
 		"user_received_account": refundResult.UserReceivedAccount,
 	}
 
@@ -690,17 +699,17 @@ func (wp *WechatProvider) handleRefundNotify(notifyReq *wechat.V3NotifyReq) (*Ha
 	if refundResult.Amount != nil {
 		refundAmount = int64(refundResult.Amount.Refund)
 		notifyData["amount"] = map[string]interface{}{
-			"total":    refundResult.Amount.Total,
-			"refund":   refundResult.Amount.Refund,
-			"payer_total": refundResult.Amount.PayerTotal,
+			"total":        refundResult.Amount.Total,
+			"refund":       refundResult.Amount.Refund,
+			"payer_total":  refundResult.Amount.PayerTotal,
 			"payer_refund": refundResult.Amount.PayerRefund,
 		}
 	}
 
-	return &HandleNotifyResponse{
+	return &types.HandleNotifyResponse{
 		Success:    true,
 		OutTradeNo: refundResult.OutTradeNo,
-		Status:     OrderStatus(refundResult.RefundStatus),
+		Status:     types.OrderStatus(refundResult.RefundStatus),
 		Amount:     refundAmount,
 		PayTime:    refundResult.SuccessTime,
 		NotifyData: notifyData,
@@ -714,13 +723,13 @@ func (wp *WechatProvider) handleRefundNotify(notifyReq *wechat.V3NotifyReq) (*Ha
 }
 
 // DownloadBill 下载对账单
-func (wp *WechatProvider) DownloadBill(params *DownloadBillParams) (*DownloadBillResponse, error) {
+func (wp *WechatProvider) DownloadBill(params *types.DownloadBillParams) (*types.DownloadBillResponse, error) {
 	ctx := context.Background()
 
 	// 构建请求参数
 	bm := make(gopay.BodyMap)
 	bm.Set("bill_date", params.BillDate) // 格式：YYYY-MM-DD
-	
+
 	// 设置账单类型
 	if params.BillType != "" {
 		bm.Set("bill_type", params.BillType) // ALL（默认值）、SUCCESS、REFUND
@@ -731,14 +740,14 @@ func (wp *WechatProvider) DownloadBill(params *DownloadBillParams) (*DownloadBil
 	// 调用微信获取对账单接口
 	wxRsp, err := wp.client.V3BillTradeBill(ctx, bm)
 	if err != nil {
-		return &DownloadBillResponse{
+		return &types.DownloadBillResponse{
 			Success: false,
 			Error:   fmt.Sprintf("调用微信对账单接口失败: %v", err),
 		}, err
 	}
 
 	if wxRsp.Code != wechat.Success {
-		return &DownloadBillResponse{
+		return &types.DownloadBillResponse{
 			Success: false,
 			Error:   fmt.Sprintf("微信获取对账单失败: %s", wxRsp.Error),
 		}, fmt.Errorf("wechat download bill failed: %s", wxRsp.Error)
@@ -747,7 +756,7 @@ func (wp *WechatProvider) DownloadBill(params *DownloadBillParams) (*DownloadBil
 	// 获取下载链接
 	downloadUrl := wxRsp.Response.DownloadUrl
 	if downloadUrl == "" {
-		return &DownloadBillResponse{
+		return &types.DownloadBillResponse{
 			Success: false,
 			Error:   "未获取到下载链接",
 		}, fmt.Errorf("download url is empty")
@@ -757,7 +766,7 @@ func (wp *WechatProvider) DownloadBill(params *DownloadBillParams) (*DownloadBil
 	billData, err := wp.client.V3BillDownLoadBill(ctx, downloadUrl)
 	if err != nil {
 		// 如果下载失败，返回下载链接
-		return &DownloadBillResponse{
+		return &types.DownloadBillResponse{
 			Success:  true,
 			BillData: downloadUrl, // 返回下载链接
 			Message:  "获取对账单下载链接成功",
@@ -765,7 +774,7 @@ func (wp *WechatProvider) DownloadBill(params *DownloadBillParams) (*DownloadBil
 	}
 
 	// 返回对账单内容
-	return &DownloadBillResponse{
+	return &types.DownloadBillResponse{
 		Success:  true,
 		BillData: string(billData), // 返回对账单数据
 		Message:  "对账单下载成功",

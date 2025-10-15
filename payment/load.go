@@ -3,6 +3,8 @@ package payment
 import (
 	"fmt"
 
+	"github.com/yaoapp/yao/payment/types"
+
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/yao/payment/providers"
@@ -61,7 +63,7 @@ func loadCertificates() error {
 
 	if len(certConfigs) > 0 {
 		log.Info("Certificates auto-loaded: %d configurations", len(certConfigs))
-		
+
 		// 打印加载的配置
 		for key, certConfig := range certConfigs {
 			log.Debug("  - %s: merchant=%s, channel=%s", key, certConfig.MerchantID, certConfig.Channel)
@@ -76,30 +78,20 @@ func loadCertificates() error {
 // registerProviders 注册支付提供商工厂函数
 func registerProviders() error {
 	// 注册支付宝工厂函数
-	alipayFactory := func(config map[string]interface{}) (PaymentProvider, error) {
+	alipayFactory := func(config map[string]interface{}) (types.PaymentProvider, error) {
 		log.Debug("Creating Alipay provider with config")
-		provider, err := providers.NewAlipayProvider(config)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create alipay provider: %v", err)
-		}
-		// 返回适配器包装的 provider
-		return &ProviderAdapter{provider: provider.(providers.PaymentProvider)}, nil
+		return providers.NewAlipayProvider(config)
 	}
-	if err := Manager.RegisterProviderFactory(string(ChannelAlipay), alipayFactory); err != nil {
+	if err := Manager.RegisterProviderFactory(string(types.ChannelAlipay), alipayFactory); err != nil {
 		return fmt.Errorf("failed to register alipay factory: %v", err)
 	}
 
 	// 注册微信支付工厂函数
-	wechatFactory := func(config map[string]interface{}) (PaymentProvider, error) {
+	wechatFactory := func(config map[string]interface{}) (types.PaymentProvider, error) {
 		log.Debug("Creating Wechat provider with config")
-		provider, err := providers.NewWechatProvider(config)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create wechat provider: %v", err)
-		}
-		// 返回适配器包装的 provider
-		return &ProviderAdapter{provider: provider.(providers.PaymentProvider)}, nil
+		return providers.NewWechatProvider(config)
 	}
-	if err := Manager.RegisterProviderFactory(string(ChannelWechat), wechatFactory); err != nil {
+	if err := Manager.RegisterProviderFactory(string(types.ChannelWechat), wechatFactory); err != nil {
 		return fmt.Errorf("failed to register wechat factory: %v", err)
 	}
 
@@ -110,8 +102,9 @@ func registerProviders() error {
 // registerProcesses 注册Process接口
 func registerProcesses() error {
 	// 配置管理相关Process
-	process.Register("payment.SetConfig", ProcessSetConfig)
-	process.Register("payment.GetConfig", ProcessGetConfig)
+	process.Register("payment.SetMerchantConfig", ProcessSetMerchantConfig)
+	process.Register("payment.GetMerchantConfig", ProcessGetMerchantConfig)
+	process.Register("payment.ListMerchants", ProcessListMerchants)
 
 	// 证书管理相关Process
 	process.Register("payment.LoadCert", ProcessLoadCert)
@@ -189,50 +182,50 @@ func GetProcesses() []string {
 }
 
 // GetProviders 获取所有支持的支付提供商
-func GetProviders() []PaymentChannel {
-	return []PaymentChannel{
-		ChannelAlipay,
-		ChannelWechat,
+func GetProviders() []types.PaymentChannel {
+	return []types.PaymentChannel{
+		types.ChannelAlipay,
+		types.ChannelWechat,
 	}
 }
 
 // GetTradeTypes 获取所有支持的交易类型
-func GetTradeTypes() []TradeType {
-	return []TradeType{
-		TradeTypeJSAPI,
-		TradeTypeNative,
-		TradeTypeApp,
-		TradeTypeH5,
-		TradeTypeWAP,
+func GetTradeTypes() []types.TradeType {
+	return []types.TradeType{
+		types.TradeTypeJSAPI,
+		types.TradeTypeNative,
+		types.TradeTypeApp,
+		types.TradeTypeH5,
+		types.TradeTypeWAP,
 	}
 }
 
 // GetOrderStatuses 获取所有订单状态
-func GetOrderStatuses() []OrderStatus {
-	return []OrderStatus{
-		OrderStatusPending,
-		OrderStatusPaid,
-		OrderStatusClosed,
-		OrderStatusRefund,
+func GetOrderStatuses() []types.OrderStatus {
+	return []types.OrderStatus{
+		types.OrderStatusPending,
+		types.OrderStatusPaid,
+		types.OrderStatusClosed,
+		types.OrderStatusRefund,
 	}
 }
 
 // GetRefundStatuses 获取所有退款状态
-func GetRefundStatuses() []RefundStatus {
-	return []RefundStatus{
-		RefundStatusPending,
-		RefundStatusProcessing,
-		RefundStatusSuccess,
-		RefundStatusFailed,
+func GetRefundStatuses() []types.RefundStatus {
+	return []types.RefundStatus{
+		types.RefundStatusPending,
+		types.RefundStatusProcessing,
+		types.RefundStatusSuccess,
+		types.RefundStatusFailed,
 	}
 }
 
 // ValidateConfig 验证支付配置
-func ValidateConfig(channel PaymentChannel, config map[string]interface{}) error {
+func ValidateConfig(channel types.PaymentChannel, config map[string]interface{}) error {
 	switch channel {
-	case ChannelAlipay:
+	case types.ChannelAlipay:
 		return validateAlipayConfig(config)
-	case ChannelWechat:
+	case types.ChannelWechat:
 		return validateWechatConfig(config)
 	default:
 		return fmt.Errorf("unsupported payment channel: %s", channel)

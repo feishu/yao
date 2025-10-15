@@ -1,6 +1,7 @@
 package payment
 
 import (
+	"github.com/yaoapp/yao/payment/types"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,7 +15,7 @@ import (
 type CertConfig struct {
 	// 基本信息
 	MerchantID string         // 商户ID
-	Channel    PaymentChannel // 支付渠道
+	Channel    types.PaymentChannel // 支付渠道
 
 	// 证书文件（从文件加载）
 	PrivateKey string // 私钥内容
@@ -117,7 +118,7 @@ func LoadCertsFromDirectory() (map[string]*CertConfig, error) {
 }
 
 // loadCertFiles 从指定路径加载证书文件
-func loadCertFiles(merchantID string, channel PaymentChannel, certPath string) (*CertConfig, error) {
+func loadCertFiles(merchantID string, channel types.PaymentChannel, certPath string) (*CertConfig, error) {
 	certConfig := &CertConfig{
 		MerchantID:  merchantID,
 		Channel:     channel,
@@ -159,10 +160,10 @@ func loadCertFiles(merchantID string, channel PaymentChannel, certPath string) (
 
 	// 根据渠道加载额外文件
 	switch channel {
-	case ChannelAlipay:
+	case types.ChannelAlipay:
 		// 支付宝可能需要证书模式的文件
 		certConfig.loadAlipayExtraFiles(certPath)
-	case ChannelWechat:
+	case types.ChannelWechat:
 		// 微信可能需要额外的证书文件
 		certConfig.loadWechatExtraFiles(certPath)
 	}
@@ -266,22 +267,22 @@ func findCertFile(certPath, baseName string, extensions []string) (string, error
 }
 
 // parseChannel 解析渠道名称
-func parseChannel(channelName string) PaymentChannel {
+func parseChannel(channelName string) types.PaymentChannel {
 	// 标准化渠道名称
 	channelName = strings.ToLower(channelName)
 
 	switch channelName {
 	case "alipay", "支付宝":
-		return ChannelAlipay
+		return types.ChannelAlipay
 	case "wechat", "wechatpay", "wxpay", "微信", "微信支付":
-		return ChannelWechat
+		return types.ChannelWechat
 	default:
 		return ""
 	}
 }
 
 // GetCertConfig 从缓存中获取证书配置
-func (pm *PaymentManager) GetCertConfig(merchantID string, channel PaymentChannel) (*CertConfig, error) {
+func (pm *PaymentManager) GetCertConfig(merchantID string, channel types.PaymentChannel) (*CertConfig, error) {
 	pm.mutex.RLock()
 	defer pm.mutex.RUnlock()
 
@@ -307,7 +308,7 @@ func (c *CertConfig) ToProviderConfig() map[string]interface{} {
 	}
 
 	// 支付宝特有配置
-	if c.Channel == ChannelAlipay {
+	if c.Channel == types.ChannelAlipay {
 		if c.AppID != "" {
 			config["app_id"] = c.AppID
 		}
@@ -325,7 +326,7 @@ func (c *CertConfig) ToProviderConfig() map[string]interface{} {
 	}
 
 	// 微信特有配置
-	if c.Channel == ChannelWechat {
+	if c.Channel == types.ChannelWechat {
 		if c.AppID != "" {
 			config["app_id"] = c.AppID
 		}
