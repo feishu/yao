@@ -16,10 +16,6 @@
 WARP.md
 _reference
 
-# yao binary 不提交到版本控制
-yao/yao
-yao
-
 # Dependency directories (remove the comment below to include it)
 # vendor/
 .DS_Store
