@@ -2040,7 +2040,7 @@ var _bindata = map[string]func() (*asset, error){
 	"yao/langs/zh-hk/global.yml":                                       yaoLangsZhHkGlobalYml,
 	"yao/langs/zh-hk/logins/admin.login.yml":                           yaoLangsZhHkLoginsAdminLoginYml,
 	"yao/langs/zh-hk/logins/user.login.yml":                            yaoLangsZhHkLoginsUserLoginYml,
-	// "yao/release/app.yaz":                                              yaoReleaseAppYaz,
+	"yao/release/app.yaz":                                              yaoReleaseAppYaz,
 }
 
 // AssetDir returns the file names below a certain
@@ -2264,7 +2264,7 @@ var _bintree = &bintree{nil, map[string]*bintree{
 			}},
 		}},
 		"release": {nil, map[string]*bintree{
-			// "app.yaz": {yaoReleaseAppYaz, map[string]*bintree{}},
+			"app.yaz": {yaoReleaseAppYaz, map[string]*bintree{}},
 		}},
 	}},
 }}

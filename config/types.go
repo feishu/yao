@@ -1,6 +1,6 @@
 package config
 
-// Config 象传应用引擎配置
+// Config 圣医达互联网医院应用引擎配置
 type Config struct {
 	Mode          string   `json:"mode,omitempty" env:"YAO_ENV" envDefault:"production"`            // The start mode production/development
 	AppSource     string   `json:"app,omitempty"  env:"YAO_APP_SOURCE"`                             // The Application Source Root Path default same as Root

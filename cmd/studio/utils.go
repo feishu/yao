@@ -12,7 +12,7 @@ var appPath string
 var envFile string
 
 var langs = map[string]string{
-	"Start Engine": "启动象传应用引擎",
+	"Start Engine": "启动圣医达互联网医院应用引擎",
 }
 
 // L 多语言切换
