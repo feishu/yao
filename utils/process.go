@@ -10,6 +10,7 @@ import (
 	"github.com/yaoapp/yao/utils/throw"
 	"github.com/yaoapp/yao/utils/tree"
 	"github.com/yaoapp/yao/utils/url"
+	"github.com/yaoapp/yao/utils/x2j"
 )
 
 // Init the utils
@@ -120,5 +121,15 @@ func Init() {
 		"remove":        template.ProcessRemove,
 		"clear":         template.ProcessClear,
 		"init":          template.ProcessInit,
+	})
+
+	// Xml2Json
+	process.RegisterGroup("utils.x2j", map[string]process.Handler{
+		"XmlToJson":          x2j.ProcessXmlToJson,
+		"XmlToMap":           x2j.ProcessXmlToMap,
+		"MapToXml":           x2j.ProcessMapToXml,
+		"XmlValuesForTag":    x2j.ProcessXmlValuesForTag,
+		"XmlPathsForTag":     x2j.ProcessXmlPathsForTag,
+		"XmlUpdateValsForPath": x2j.ProcessXmlUpdateValsForPath,
 	})
 }
