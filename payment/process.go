@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/yaoapp/yao/payment/types"
+	"github.com/yaoapp/yao/utils/longfields"
 
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
@@ -353,8 +354,16 @@ func ProcessReconcile(process *process.Process) interface{} {
 
 // parseCreateOrderParams 解析创建订单参数
 func parseCreateOrderParams(paramsMap map[string]interface{}) (*types.CreateOrderParams, error) {
+	// 提取长整数字段配置
+	longFieldsList, processedParams := longfields.ExtractLongFields(paramsMap)
+
+	// 如果有长整数字段，转换为字符串
+	if len(longFieldsList) > 0 {
+		processedParams = longfields.ConvertStringFieldsToLongs(processedParams, longFieldsList)
+	}
+
 	// 转换为JSON再解析，确保类型正确
-	data, err := json.Marshal(paramsMap)
+	data, err := json.Marshal(processedParams)
 	if err != nil {
 		return nil, fmt.Errorf("marshal params failed: %v", err)
 	}

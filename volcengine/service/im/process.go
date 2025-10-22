@@ -12,6 +12,7 @@ import (
 
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
+	"github.com/yaoapp/yao/utils/longfields"
 	"github.com/yaoapp/yao/volcengine"
 )
 
@@ -204,12 +205,12 @@ func ProcessClient(p *process.Process) interface{} {
 	}
 
 	// 提取longFields并获取处理后的body
-	longFields, processedBody := extractLongFields(body)
+	longFieldsList, processedBody := longfields.ExtractLongFields(body)
 
 	// 将processedBody中的longFields字段从字符串转换为int64
 	// 这是必要的，因为GetInstance().Client.CtxJson期望longFields中的字段为int64类型
-	if len(longFields) > 0 {
-		processedBody = convertStringFieldsToLongs(processedBody, longFields)
+	if len(longFieldsList) > 0 {
+		processedBody = longfields.ConvertStringFieldsToLongs(processedBody, longFieldsList)
 	}
 
 	// 检查请求体中是否存在AppId字段，如果不存在则设置默认值
@@ -220,7 +221,7 @@ func ProcessClient(p *process.Process) interface{} {
 	}
 
 	// 将body序列化为JSON，支持大整数处理
-	bodyBytes, err := marshalToJsonWithLongSupport(processedBody)
+	bodyBytes, err := longfields.MarshalToJsonWithLongSupport(processedBody)
 	if err != nil {
 		exception.New("Failed to marshal body to JSON: %s", 500, err.Error()).Throw()
 	}
