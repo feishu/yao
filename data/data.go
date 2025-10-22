@@ -11,7 +11,7 @@ import (
 // XgenV0 XGen 0.9
 func XgenV0() *assetfs.AssetFS {
 	assetInfo := func(path string) (os.FileInfo, error) {
-		return os.Stat(path)
+		return AssetInfo(path)
 	}
 	for k := range _bintree.Children {
 		k = "xgen/v0.9"
@@ -23,7 +23,7 @@ func XgenV0() *assetfs.AssetFS {
 // XgenV1 XGen 1.0
 func XgenV1() *assetfs.AssetFS {
 	assetInfo := func(path string) (os.FileInfo, error) {
-		return os.Stat(path)
+		return AssetInfo(path)
 	}
 	for k := range _bintree.Children {
 		k = "xgen/v1.0"
@@ -35,7 +35,7 @@ func XgenV1() *assetfs.AssetFS {
 // Setup Setup ui
 func Setup() *assetfs.AssetFS {
 	assetInfo := func(path string) (os.FileInfo, error) {
-		return os.Stat(path)
+		return AssetInfo(path)
 	}
 	for k := range _bintree.Children {
 		k = "xgen/setup"

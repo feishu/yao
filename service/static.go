@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/yaoapp/kun/log"
-	"github.com/yaoapp/yao/data"
+	// "github.com/yaoapp/yao/data"
 	"github.com/yaoapp/yao/service/fs"
 	"github.com/yaoapp/yao/share"
 )
@@ -16,7 +16,7 @@ import (
 var AppFileServer http.Handler
 
 // XGenFileServerV1 XGen v1.0
-var XGenFileServerV1 http.Handler = http.FileServer(data.XgenV1())
+// var XGenFileServerV1 http.Handler = http.FileServer(data.XgenV1())
 
 // AdminRoot cache
 var AdminRoot = ""
