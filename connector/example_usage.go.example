@@ -1,0 +1,55 @@
+package main
+
+// 这是一个使用示例，展示如何在代码中使用配置连接器
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/yaoapp/yao/connector"
+)
+
+func ExampleUsage() {
+	// 示例 1: 获取完整的配置选项
+	options, err := connector.GetConfigOptions("wechat")
+	if err != nil {
+		log.Printf("获取配置失败: %v", err)
+		return
+	}
+	
+	fmt.Printf("AppID: %s\n", options["appid"])
+	fmt.Printf("Secret: %s\n", options["secret"])
+
+	// 示例 2: 获取单个配置值
+	appid, err := connector.GetConfigOption("wechat", "appid")
+	if err != nil {
+		log.Printf("获取 appid 失败: %v", err)
+		return
+	}
+	
+	fmt.Printf("AppID: %s\n", appid.(string))
+
+	// 示例 3: 使用配置对象
+	config, err := connector.SelectConfig("wechat")
+	if err != nil {
+		log.Printf("选择配置失败: %v", err)
+		return
+	}
+
+	// 获取基本信息
+	fmt.Printf("配置ID: %s\n", config.ID())
+	fmt.Printf("配置名称: %s\n", config.Name())
+	fmt.Printf("配置标签: %s\n", config.Label())
+
+	// 获取特定配置值
+	if secret, err := config.GetString("secret"); err == nil {
+		fmt.Printf("Secret: %s\n", secret)
+	}
+
+	// 检查配置是否存在
+	if val, exists := config.Get("token"); exists {
+		fmt.Printf("Token: %s\n", val.(string))
+	} else {
+		fmt.Println("Token 配置不存在")
+	}
+}

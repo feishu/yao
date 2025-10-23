@@ -18,9 +18,18 @@ func Load(cfg config.Config) error {
 		if isdir {
 			return nil
 		}
-		_, err := connector.Load(file, share.ID(root, file))
+		id := share.ID(root, file)
+		_, err := connector.Load(file, id)
 		if err != nil {
-			messages = append(messages, err.Error())
+			// 如果是 "does not support" 错误，尝试作为配置文件加载
+			if strings.Contains(err.Error(), "does not support") {
+				_, configErr := LoadConfig(file, id)
+				if configErr != nil {
+					messages = append(messages, fmt.Sprintf("failed to load as config: %s", configErr.Error()))
+				}
+			} else {
+				messages = append(messages, err.Error())
+			}
 		}
 		return nil
 	}, exts...)
@@ -45,6 +54,12 @@ func Unload() error {
 		}
 		delete(connector.Connectors, id)
 	}
+
+	// 清理配置连接器
+	configMutex.Lock()
+	ConfigConnectors = make(map[string]*ConfigConnector)
+	configMutex.Unlock()
+
 	if len(messages) > 0 {
 		return fmt.Errorf("%s", strings.Join(messages, ";\n"))
 	}

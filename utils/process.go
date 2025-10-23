@@ -2,6 +2,7 @@ package utils
 
 import (
 	"github.com/yaoapp/gou/process"
+	"github.com/yaoapp/yao/utils/conn"
 	"github.com/yaoapp/yao/utils/datetime"
 	"github.com/yaoapp/yao/utils/fmt"
 	"github.com/yaoapp/yao/utils/json"
@@ -125,11 +126,16 @@ func Init() {
 
 	// Xml2Json
 	process.RegisterGroup("utils.x2j", map[string]process.Handler{
-		"XmlToJson":          x2j.ProcessXmlToJson,
-		"XmlToMap":           x2j.ProcessXmlToMap,
-		"MapToXml":           x2j.ProcessMapToXml,
-		"XmlValuesForTag":    x2j.ProcessXmlValuesForTag,
-		"XmlPathsForTag":     x2j.ProcessXmlPathsForTag,
+		"XmlToJson":            x2j.ProcessXmlToJson,
+		"XmlToMap":             x2j.ProcessXmlToMap,
+		"MapToXml":             x2j.ProcessMapToXml,
+		"XmlValuesForTag":      x2j.ProcessXmlValuesForTag,
+		"XmlPathsForTag":       x2j.ProcessXmlPathsForTag,
 		"XmlUpdateValsForPath": x2j.ProcessXmlUpdateValsForPath,
+	})
+
+	// Connector
+	process.RegisterGroup("utils.connector", map[string]process.Handler{
+		"select": conn.ProcessSelectConnector,
 	})
 }
