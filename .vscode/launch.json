@@ -10,8 +10,8 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/main.go",
-            // "args": ["run","scripts.test.consult_test.runCreatTest"],
-            "args": ["start","-f","app.yaz"],
+            "args": ["run","scripts.test.consult_test.runCreatTest"],
+            // "args": ["start","-f","app.yaz"],
             "cwd": "/Users/L/Desktop/Code/yao_projects/ih/service"
         }
     ]

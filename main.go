@@ -7,7 +7,8 @@ import (
 	// 导入模块以触发 init 函数
 	_ "github.com/yaoapp/gou/diff"
 	_ "github.com/yaoapp/gou/encoding"
-	_ "github.com/yaoapp/yao/aigc"
+
+	// _ "github.com/yaoapp/yao/aigc"
 	_ "github.com/yaoapp/yao/crypto"
 	_ "github.com/yaoapp/yao/excel"
 	_ "github.com/yaoapp/yao/helper"
