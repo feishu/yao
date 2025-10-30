@@ -41,6 +41,7 @@ func Load(cfg config.Config) error {
 	if len(messages) > 0 {
 		return fmt.Errorf("%s", strings.Join(messages, ";\n"))
 	}
+
 	return nil
 }
 

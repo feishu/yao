@@ -6,6 +6,7 @@ import (
 	"github.com/yaoapp/yao/utils/datetime"
 	"github.com/yaoapp/yao/utils/fmt"
 	"github.com/yaoapp/yao/utils/json"
+	"github.com/yaoapp/yao/utils/redis"
 	"github.com/yaoapp/yao/utils/str"
 	"github.com/yaoapp/yao/utils/template"
 	"github.com/yaoapp/yao/utils/throw"
@@ -16,6 +17,9 @@ import (
 
 // Init the utils
 func Init() {
+	// 加载所有 Redis 连接器客户端
+	redis.LoadAllClients()
+
 	process.Alias("xiang.helper.Captcha", "yao.utils.Captcha")                 // deprecated
 	process.Alias("xiang.helper.CaptchaValidate", "yao.utils.CaptchaValidate") // deprecated
 
@@ -137,5 +141,76 @@ func Init() {
 	// Connector
 	process.RegisterGroup("utils.connector", map[string]process.Handler{
 		"select": conn.ProcessSelectConnector,
+	})
+
+	// Redis - 实用的高级方法
+	process.RegisterGroup("utils.redis", map[string]process.Handler{
+		// JSON 操作 - 便捷存取 JSON 对象
+		"SetJSON": redis.ProcessSetJSON,
+		"GetJSON": redis.ProcessGetJSON,
+
+		// 批量操作 - 一次操作多个键
+		"MSet": redis.ProcessMSet,
+		"MGet": redis.ProcessMGet,
+
+		// 计数器 - 页面访问、点赞等
+		"CounterIncr":  redis.ProcessCounterIncr,
+		"CounterDecr":  redis.ProcessCounterDecr,
+		"CounterGet":   redis.ProcessCounterGet,
+		"CounterReset": redis.ProcessCounterReset,
+
+		// 排行榜 - 游戏分数、热度排名等
+		"RankingAdd":     redis.ProcessRankingAdd,
+		"RankingIncrBy":  redis.ProcessRankingIncrBy,
+		"RankingTop":     redis.ProcessRankingTop,
+		"RankingGetRank": redis.ProcessRankingGetRank,
+		"RankingRemove":  redis.ProcessRankingRemove,
+
+		// 批量操作 - Pipeline 简化版
+		"Batch": redis.ProcessBatch,
+
+		// 清理工具
+		"ClearPattern": redis.ProcessClearPattern,
+
+		// 基础操作（保留最常用的）
+		"Get":    redis.ProcessGet,
+		"Set":    redis.ProcessSet,
+		"Del":    redis.ProcessDel,
+		"Unlink": redis.ProcessUnlink,
+		"Exists": redis.ProcessExists,
+		"Expire": redis.ProcessExpire,
+		"TTL":    redis.ProcessTTL,
+		"Keys":   redis.ProcessKeys,
+
+		// Hash 操作
+		"HGet":    redis.ProcessHGet,
+		"HSet":    redis.ProcessHSet,
+		"HMSet":   redis.ProcessHMSet,
+		"HGetAll": redis.ProcessHGetAll,
+		"HDel":    redis.ProcessHDel,
+
+		// List 操作
+		"LPush":  redis.ProcessLPush,
+		"RPush":  redis.ProcessRPush,
+		"LPop":   redis.ProcessLPop,
+		"RPop":   redis.ProcessRPop,
+		"LRange": redis.ProcessLRange,
+		"LLen":   redis.ProcessLLen,
+
+		// Set 操作
+		"SAdd":     redis.ProcessSAdd,
+		"SRem":     redis.ProcessSRem,
+		"SMembers": redis.ProcessSMembers,
+
+		// Sorted Set 操作
+		"ZAdd":      redis.ProcessZAdd,
+		"ZRem":      redis.ProcessZRem,
+		"ZRange":    redis.ProcessZRange,
+		"ZRevRange": redis.ProcessZRevRange,
+		"ZScore":    redis.ProcessZScore,
+		"ZCard":     redis.ProcessZCard,
+		"ZIncrBy":   redis.ProcessZIncrBy,
+		"ZRank":     redis.ProcessZRank,
+		"ZRevRank":  redis.ProcessZRevRank,
 	})
 }
