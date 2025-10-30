@@ -17,7 +17,9 @@
  * ```
  */
 declare const Process: (name: string, ...args: any[]) => any;
-
+declare class Exception {
+  constructor(message: string, code?: number);
+}
 /**
  * Redis 排行榜项
  */
@@ -86,6 +88,25 @@ export class RedisHelper {
   private keyPrefix: string;
 
   /**
+ * 清空符合模式的键
+ * @param connName redis 连接器的名称
+ * @param pattern 匹配模式，支持通配符：* ? [] [^] \
+ *   - * 匹配任意数量的字符
+ *   - ? 匹配单个字符
+ *   - [abc] 匹配 a、b 或 c
+ *   - [^a] 匹配除 a 以外的字符
+ * @returns 
+ */
+  static clearPattern(connName: string, pattern: string): Exception | number {
+    if (!connName)
+      return new Exception("Redis 连接器名称不能为空", 500)
+    if (!pattern)
+      return new Exception("pattern 不能为空", 500)
+
+    return Process("utils.redis.ClearPattern", connName, pattern);
+  }
+
+  /**
    * 创建 RedisHelper 实例
    * 
    * @param connName Redis 连接器名称（在 connector 配置中定义）
@@ -107,13 +128,15 @@ export class RedisHelper {
   }
 
   /**
-   * 生成完整的 Redis key（添加前缀）
-   * 
-   * @param key 原始 key
-   * @returns 带前缀的完整 key
-   */
+    * 生成完整的 Redis key（添加前缀）
+    * 
+    * @param key 原始 key
+    * @returns 带前缀的完整 key
+    */
   private getFullKey(key: string): string {
-    return this.keyPrefix + key;
+    if (!this.keyPrefix)
+      return `${this.connName}:${key}`;
+    return `${this.connName}:${this.keyPrefix}:${key}`;
   }
 
   // ============================================
@@ -464,19 +487,19 @@ export class RedisHelper {
   mGet(...keys: string[]): Record<string, any> {
     const fullKeys = keys.map(k => this.getFullKey(k));
     const result = Process("utils.redis.MGet", this.connName, ...fullKeys);
-    
+
     // 移除前缀，返回原始 key
     if (this.keyPrefix && result) {
       const newResult: Record<string, any> = {};
       for (const [fullKey, value] of Object.entries(result)) {
-        const originalKey = fullKey.startsWith(this.keyPrefix) 
-          ? fullKey.substring(this.keyPrefix.length) 
+        const originalKey = fullKey.startsWith(this.keyPrefix)
+          ? fullKey.substring(this.keyPrefix.length)
           : fullKey;
         newResult[originalKey] = value;
       }
       return newResult;
     }
-    
+
     return result;
   }
 
@@ -1452,15 +1475,15 @@ export class RedisHelper {
     // 处理命令中的 key，添加前缀
     const processedCommands = commands.map(cmd => {
       const args = [...cmd.args];
-      
+
       // 大多数命令的第一个参数是 key，需要添加前缀
       if (args.length > 0 && typeof args[0] === 'string') {
         args[0] = this.getFullKey(args[0]);
       }
-      
+
       return { cmd: cmd.cmd, args };
     });
-    
+
     return Process("utils.redis.Batch", this.connName, processedCommands);
   }
 
