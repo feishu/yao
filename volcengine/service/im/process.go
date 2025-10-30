@@ -2,7 +2,6 @@ package im
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"reflect"
@@ -10,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	json "github.com/goccy/go-json"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/yao/utils/longfields"
@@ -61,12 +61,12 @@ func convertInt64ToStringRecursive(data interface{}) interface{} {
 			for i := 0; i < val.NumField(); i++ {
 				field := val.Field(i)
 				fieldType := typ.Field(i)
-				
+
 				// 跳过未导出的字段
 				if !field.CanInterface() {
 					continue
 				}
-				
+
 				// 获取字段名（优先使用 json tag）
 				fieldName := fieldType.Name
 				if jsonTag := fieldType.Tag.Get("json"); jsonTag != "" && jsonTag != "-" {
@@ -76,7 +76,7 @@ func convertInt64ToStringRecursive(data interface{}) interface{} {
 						fieldName = jsonTag
 					}
 				}
-				
+
 				result[fieldName] = convertInt64ToStringRecursive(field.Interface())
 			}
 			return result

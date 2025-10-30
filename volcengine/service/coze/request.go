@@ -3,13 +3,13 @@ package coze
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
+	json "github.com/goccy/go-json"
 	"github.com/yaoapp/kun/log"
 )
 

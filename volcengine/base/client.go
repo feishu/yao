@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	json "github.com/goccy/go-json"
 	"golang.org/x/net/http/httpproxy"
 )
 

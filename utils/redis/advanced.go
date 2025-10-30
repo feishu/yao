@@ -1,13 +1,58 @@
 package redis
 
 import (
-	"encoding/json"
+	"sync"
 	"time"
+	"unsafe"
 
 	goredis "github.com/go-redis/redis/v8"
+	json "github.com/goccy/go-json"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 )
+
+var (
+	// JSON 解析缓存：value 字符串 -> 解析后对象 ；TTL 5 min
+	jsonCache sync.Map // map[string]cacheItem
+)
+
+type cacheItem struct {
+	v      interface{}
+	expire int64
+}
+
+func parseValue(val interface{}) interface{} {
+	if val == nil {
+		return nil
+	}
+	str, ok := val.(string)
+	if !ok {
+		return val // 非 string 直接返回
+	}
+
+	// 零拷贝转 []byte
+	b := unsafe.Slice(unsafe.StringData(str), len(str))
+
+	// 缓存命中？
+	if hit, ok := jsonCache.Load(str); ok {
+		item := hit.(cacheItem)
+		if time.Now().Unix() < item.expire {
+			return item.v
+		}
+		// 过期删除
+		jsonCache.Delete(str)
+	}
+
+	// 解析
+	var v interface{}
+	if err := json.Unmarshal(b, &v); err == nil {
+		// 写入缓存
+		jsonCache.Store(str, cacheItem{v: v, expire: time.Now().Add(5 * time.Minute).Unix()})
+		return v
+	}
+	// 非 JSON
+	return str
+}
 
 // ============================================
 // 高级封装方法：JSON 操作
@@ -127,17 +172,25 @@ func ProcessMGet(process *process.Process) interface{} {
 		exception.New(err.Error(), 500).Throw()
 	}
 
+	// 1. MGet 获取所有键的值
 	vals, err := rdb.MGet(ctx, keys...).Result()
 	if err != nil {
 		exception.New("redis MGET error: %s", 500, err.Error()).Throw()
 	}
 
-	// 转换为 map
-	result := make(map[string]interface{})
-	for i, key := range keys {
-		result[key] = vals[i]
-	}
+	// 2. 预分配结果
+	result := make(map[string]interface{}, len(keys))
 
+	// 3. 并行 JSON 解码
+	var wg sync.WaitGroup
+	wg.Add(len(keys))
+	for i, key := range keys {
+		go func(idx int, k string, val interface{}) {
+			defer wg.Done()
+			result[k] = parseValue(val)
+		}(i, key, vals[i])
+	}
+	wg.Wait()
 	return result
 }
 

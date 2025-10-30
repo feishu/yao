@@ -10,7 +10,7 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/main.go",
-            "args": ["run","utils.redis.set","redis","mykey", "myvalue"],
+            "args": ["run","scripts.service.dict.selectOptionsMap","1","2", "card_type,clinical_title,doctor_sort_rule,hospital_level,service_item,user_relationship,user_sex"],
             // "args": ["start","-f","app.yaz"],
             "cwd": "/Users/L/Desktop/Code/yao_projects/ih/service"
         }

@@ -4,7 +4,6 @@ import (
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	json "github.com/goccy/go-json"
 	"github.com/google/uuid"
 )
 

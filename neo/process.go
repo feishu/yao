@@ -2,12 +2,12 @@ package neo
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	json "github.com/goccy/go-json"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/gou/rag/driver"
 	"github.com/yaoapp/kun/exception"

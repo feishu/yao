@@ -2,7 +2,6 @@ package payment
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +10,7 @@ import (
 	"github.com/yaoapp/yao/payment/types"
 	"github.com/yaoapp/yao/utils/longfields"
 
+	json "github.com/goccy/go-json"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/kun/log"

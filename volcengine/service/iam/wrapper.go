@@ -1,8 +1,9 @@
 package iam
 
 import (
-	"encoding/json"
 	"net/url"
+
+	json "github.com/goccy/go-json"
 )
 
 // helper func

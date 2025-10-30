@@ -2,8 +2,8 @@ package coze
 
 import (
 	"context"
-	"encoding/json"
 
+	json "github.com/goccy/go-json"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/kun/log"

@@ -2,11 +2,11 @@ package im
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"reflect"
 
+	json "github.com/goccy/go-json"
 	common "github.com/yaoapp/yao/volcengine/base"
 )
 

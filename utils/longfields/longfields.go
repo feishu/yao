@@ -1,11 +1,12 @@
 package longfields
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
+	json "github.com/goccy/go-json"
 )
 
 // ExtractLongFields 从请求体中提取_longFields数组，并返回清理后的body

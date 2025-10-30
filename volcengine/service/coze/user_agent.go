@@ -1,11 +1,12 @@
 package coze
 
 import (
-	"encoding/json"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
+
+	json "github.com/goccy/go-json"
 )
 
 const version = "0.1.0"
