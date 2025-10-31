@@ -16,9 +16,16 @@ var (
 	jsonCache sync.Map // map[string]cacheItem
 )
 
+// 缓存项
 type cacheItem struct {
 	v      interface{}
 	expire int64
+}
+
+// 任务单元
+type job struct {
+	key string
+	val interface{}
 }
 
 func parseValue(val interface{}) interface{} {
@@ -162,7 +169,7 @@ func ProcessMSet(process *process.Process) interface{} {
 func ProcessMGet(process *process.Process) interface{} {
 	process.ValidateArgNums(2)
 	connName := process.ArgsString(0)
-	keys := make([]string, 0)
+	keys := make([]string, 0, process.NumOfArgs()-1)
 	for i := 1; i < process.NumOfArgs(); i++ {
 		keys = append(keys, process.ArgsString(i))
 	}
@@ -181,15 +188,43 @@ func ProcessMGet(process *process.Process) interface{} {
 	// 2. 预分配结果
 	result := make(map[string]interface{}, len(keys))
 
+	// 3. worker pool 参数
+	workers := 32
+	if len(keys) < workers {
+		workers = len(keys) // 小批量没必要启动过多 worker
+	}
+
+	// 4. 任务通道 + 信号量
+	jobs := make(chan job, len(keys))
+	sem := make(chan struct{}, workers)
+
 	// 3. 并行 JSON 解码
 	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	// 5. 启动固定数目的 worker
+	for w := 0; w < workers; w++ {
+		go func() {
+			for j := range jobs {
+				sem <- struct{}{}           // 占用槽位
+				parsed := parseValue(j.val) // CPU 密集：JSON 解析 + 缓存查找
+				mu.Lock()
+				result[j.key] = parsed
+				mu.Unlock()
+				<-sem // 释放槽位
+				wg.Done()
+			}
+		}()
+	}
+
+	// 6. 分发任务
 	wg.Add(len(keys))
 	for i, key := range keys {
-		go func(idx int, k string, val interface{}) {
-			defer wg.Done()
-			result[k] = parseValue(val)
-		}(i, key, vals[i])
+		jobs <- job{key: key, val: vals[i]}
 	}
+	close(jobs)
+
+	// 7. 等待全部完成
 	wg.Wait()
 	return result
 }
