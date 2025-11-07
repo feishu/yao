@@ -14,6 +14,7 @@ import (
 	"github.com/yaoapp/kun/utils"
 	"github.com/yaoapp/yao/config"
 	"github.com/yaoapp/yao/engine"
+    "github.com/yaoapp/yao/runtime/await"
 	"github.com/yaoapp/yao/share"
 	"github.com/yaoapp/yao/studio"
 )
@@ -95,6 +96,7 @@ var RunCmd = &cobra.Command{
 		if err != nil {
 			fmt.Println(color.RedString(L("Fatal: %s"), err.Error()))
 		}
+        await.Register(ctx)
 		defer ctx.Close()
 
 		res, err := ctx.Call(method, pargs...)

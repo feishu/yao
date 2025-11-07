@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	jsoniter "github.com/json-iterator/go"
 	v8 "github.com/yaoapp/gou/runtime/v8"
+	"github.com/yaoapp/yao/runtime/await"
 	"github.com/yaoapp/yao/neo"
 )
 
@@ -224,6 +225,7 @@ func setRouter(router *gin.Engine) {
 			throw(c, code, message)
 			return
 		}
+		await.Register(ctx)
 		defer ctx.Close()
 
 		res, err := ctx.Call(fun.Method, fun.Args...)

@@ -17,6 +17,7 @@ import (
 	"github.com/yaoapp/yao/neo/store"
 	neovision "github.com/yaoapp/yao/neo/vision"
 	"github.com/yaoapp/yao/openai"
+	"github.com/yaoapp/yao/runtime/await"
 	"github.com/yaoapp/yao/share"
 	"gopkg.in/yaml.v3"
 )
@@ -649,6 +650,7 @@ func (ast *Assistant) initialize() error {
 		if err != nil {
 			return err
 		}
+		await.Register(scriptCtx)
 		defer scriptCtx.Close()
 		ast.initHook = scriptCtx.Global().Has("init")
 	}

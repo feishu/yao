@@ -23,6 +23,7 @@ import (
 	"github.com/yaoapp/yao/neo"
 	"github.com/yaoapp/yao/neo/assistant"
 	"github.com/yaoapp/yao/share"
+	"github.com/yaoapp/yao/runtime/await"
 	"github.com/yaoapp/yao/widgets/login"
 )
 
@@ -303,6 +304,8 @@ func processService(process *process.Process) interface{} {
 		exception.New(message, 500).Throw()
 		return nil
 	}
+	// Inject syncAwait into this context
+	await.Register(v8ctx)
 	defer v8ctx.Close()
 
 	res, err := v8ctx.CallWith(ctx, method, args...)
