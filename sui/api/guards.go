@@ -14,7 +14,6 @@ import (
 	v8 "github.com/yaoapp/gou/runtime/v8"
 	"github.com/yaoapp/gou/runtime/v8/bridge"
 	"github.com/yaoapp/kun/log"
-	"github.com/yaoapp/yao/runtime/await"
 	"github.com/yaoapp/yao/helper"
 	"rogchap.com/v8go"
 )
@@ -184,7 +183,7 @@ func (r *Request) scriptGuardExec(c *gin.Context, name string, args []interface{
 		c.Abort()
 		return err
 	}
-	await.Register(ctx)
+
 	defer ctx.Close()
 
 	// Should be refector after the runtime refector

@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/yaoapp/gou/runtime/v8/bridge"
 	"github.com/yaoapp/kun/log"
-	"github.com/yaoapp/yao/runtime/await"
 	chatctx "github.com/yaoapp/yao/neo/context"
 	chatMessage "github.com/yaoapp/yao/neo/message"
 	"rogchap.com/v8go"
@@ -463,7 +462,6 @@ func (obj *objectCall) triggerAnonymous(chatCtx chatctx.Context, global *GlobalV
 	if err != nil {
 		return err
 	}
-	await.Register(ctx)
 	defer ctx.Close()
 
 	// Update Context

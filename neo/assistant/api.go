@@ -17,7 +17,6 @@ import (
 	chatctx "github.com/yaoapp/yao/neo/context"
 	"github.com/yaoapp/yao/neo/message"
 	chatMessage "github.com/yaoapp/yao/neo/message"
-	"github.com/yaoapp/yao/runtime/await"
 )
 
 // Get get the assistant by id
@@ -316,7 +315,6 @@ func (ast *Assistant) Call(c *gin.Context, payload APIPayload) (interface{}, err
 	if err != nil {
 		return nil, err
 	}
-    await.Register(scriptCtx)
 	defer scriptCtx.Close()
 	ctx := c.Request.Context()
 

@@ -7,7 +7,6 @@ import (
 	"github.com/fatih/color"
 	"github.com/yaoapp/gou/runtime/v8/bridge"
 	v8plan "github.com/yaoapp/gou/runtime/v8/objects/plan"
-	"github.com/yaoapp/yao/runtime/await"
 	"rogchap.com/v8go"
 )
 
@@ -41,7 +40,7 @@ func TaskFn(plan_id string, task_id string, source bool, method string, args ...
 	if err != nil {
 		return nil, err
 	}
-	await.Register(scriptCtx)
+
 	defer scriptCtx.Close()
 
 	// Initialize the object
@@ -91,7 +90,7 @@ func SubscribeFn(plan_id string, key string, value interface{}, source bool, met
 		color.Red("Subscribe Failed: Failed to create the script context: %s", err.Error())
 		return
 	}
-	await.Register(scriptCtx)
+
 	defer scriptCtx.Close()
 
 	fnargs := []interface{}{plan_id, key, value}

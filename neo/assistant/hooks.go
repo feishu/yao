@@ -13,7 +13,6 @@ import (
 	chatctx "github.com/yaoapp/yao/neo/context"
 	"github.com/yaoapp/yao/neo/message"
 	chatMessage "github.com/yaoapp/yao/neo/message"
-	"github.com/yaoapp/yao/runtime/await"
 )
 
 // HookCreate create a new assistant
@@ -363,7 +362,7 @@ func (ast *Assistant) call(ctx context.Context, method string, c *gin.Context, c
 	if err != nil {
 		return nil, err
 	}
-	await.Register(scriptCtx)
+
 	defer scriptCtx.Close()
 
 	// Initialize the object, add the global variables, methods to the script context

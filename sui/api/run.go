@@ -12,7 +12,6 @@ import (
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/yao/sui/core"
-	"github.com/yaoapp/yao/runtime/await"
 )
 
 var configs = map[string]*core.PageConfig{}
@@ -113,7 +112,6 @@ func Run(process *process.Process) interface{} {
 	if err != nil {
 		return nil
 	}
-	await.Register(scriptCtx)
 	defer scriptCtx.Close()
 
 	global := scriptCtx.Global()

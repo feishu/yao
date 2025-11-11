@@ -12,7 +12,6 @@ import (
 	v8 "github.com/yaoapp/gou/runtime/v8"
 	"github.com/yaoapp/gou/runtime/v8/bridge"
 	"github.com/yaoapp/yao/share"
-	"github.com/yaoapp/yao/runtime/await"
 )
 
 // Scripts loaded scripts
@@ -97,7 +96,6 @@ func (script *Script) Call(r *Request, method string, args ...any) (interface{},
 	if err != nil {
 		return nil, err
 	}
-	await.Register(ctx)
 	defer ctx.Close()
 	if args == nil {
 		args = []any{}
@@ -120,7 +118,6 @@ func (script *Script) BeforeRender(r *Request, props map[string]interface{}) (Da
 	if err != nil {
 		return nil, err
 	}
-	await.Register(ctx)
 	defer ctx.Close()
 
 	if !ctx.Global().Has("BeforeRender") {
@@ -162,7 +159,6 @@ func (script *Script) Constants() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	await.Register(ctx)
 	defer ctx.Close()
 
 	global := ctx.Global()
@@ -200,7 +196,7 @@ func (script *Script) Helpers() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	await.Register(ctx)
+
 	defer ctx.Close()
 
 	global := ctx.Global()
