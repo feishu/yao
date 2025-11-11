@@ -2,6 +2,7 @@ package utils
 
 import (
 	"github.com/yaoapp/gou/process"
+	"github.com/yaoapp/yao/utils/await"
 	"github.com/yaoapp/yao/utils/conn"
 	"github.com/yaoapp/yao/utils/datetime"
 	"github.com/yaoapp/yao/utils/fmt"
@@ -213,4 +214,6 @@ func Init() {
 		"ZRank":     redis.ProcessZRank,
 		"ZRevRank":  redis.ProcessZRevRank,
 	})
+
+	process.Register("utils.syncAwait", await.ProcessAwait)
 }
