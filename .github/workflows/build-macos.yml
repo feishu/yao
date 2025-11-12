@@ -73,8 +73,8 @@ jobs:
         #  ** new repository: https://github.com/YaoApp/cui.git **
         uses: actions/checkout@v4
         with:
-          repository: yaoapp/cui
-          path: cui-v1.0
+          repository: feishu/xgen
+          path: xgen-v1.0
 
       - name: Checkout Yao-Init
         uses: actions/checkout@v4
@@ -93,7 +93,20 @@ jobs:
           rm -f ../cui-v1.0/packages/setup/vite.config.ts.*
           ls -l .
           ls -l ../
-          ls -l ../cui-v1.0/packages/setup/
+          ls -l ../xgen-v1.0/packages/setup/
+      
+      # - name: Unzip file
+      #   run: |
+
+      #     unzip ./darwin_arm64/libv8.a.zip -d ./darwin_arm64  # 解压ZIP文件到指定目录
+      #     unzip ./darwin_x86_64/libv8.a.zip -d ./darwin_x86_64  # 解压ZIP文件到指定目录
+      #     unzip ./linux_arm64/libv8.a.zip -d ./linux_arm64  # 解压ZIP文件到指定目录
+      #     unzip ./linux_x86_64/libv8.a.zip -d ./linux_x86_64  # 解压ZIP文件到指定目录
+      #     ls -l ./darwin_arm64
+      #     ls -l ./darwin_x86_64
+      #     ls -l ./linux_arm64
+      #     ls -l ./linux_x86_64
+      #   working-directory: ../v8go/deps  # 指定工作目录，假设ZIP文件在
 
       - name: Checkout Code
         uses: actions/checkout@v4

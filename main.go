@@ -8,11 +8,7 @@ import (
 	_ "github.com/yaoapp/yao/excel"
 	_ "github.com/yaoapp/yao/helper"
 	_ "github.com/yaoapp/yao/openai"
-<<<<<<< HEAD
 	_ "github.com/yaoapp/yao/seed"
-=======
-	_ "github.com/yaoapp/yao/volcengine/service/coze"
->>>>>>> db4f9276 (添加扣子token process)
 	_ "github.com/yaoapp/yao/volcengine/service/im"
 	_ "github.com/yaoapp/yao/wework"
 

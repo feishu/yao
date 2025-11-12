@@ -38,14 +38,21 @@ func (t *TokenResponse) IsExpired() bool {
 		return true
 	}
 
+<<<<<<< HEAD
 	// 计算预计过期时间（生成时间 + 有效期秒数）
 	expiresAt := t.GeneratedAt + t.ExpiresIn
 
+=======
+>>>>>>> 75afbb7eabf91a35216b44dcf965b727f815e84b
 	// 当前时间 + 缓冲期
 	now := time.Now().Unix() + TokenExpiryBufferSeconds
 
 	// 如果当前时间+缓冲期已接近或超过过期时间，则认为已过期
+<<<<<<< HEAD
 	return now >= expiresAt
+=======
+	return now >= t.ExpiresIn
+>>>>>>> 75afbb7eabf91a35216b44dcf965b727f815e84b
 }
 
 // Remaining 返回token剩余有效时间（秒）
@@ -54,10 +61,16 @@ func (t *TokenResponse) Remaining() int64 {
 		return 0
 	}
 
+<<<<<<< HEAD
 	expiresAt := t.GeneratedAt + t.ExpiresIn
 	now := time.Now().Unix()
 
 	remaining := expiresAt - now
+=======
+	now := time.Now().Unix()
+
+	remaining := t.ExpiresIn - now
+>>>>>>> 75afbb7eabf91a35216b44dcf965b727f815e84b
 	if remaining < 0 {
 		return 0
 	}

@@ -3,7 +3,6 @@ package plugin
 import (
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -18,11 +17,6 @@ func Load(cfg config.Config) error {
 	root, err := Root(cfg)
 	if err != nil {
 		return err
-	}
-
-	// Ignore if the plugins directory does not exist
-	if _, err := os.Stat(root); os.IsNotExist(err) {
-		return nil
 	}
 
 	messages := []string{}

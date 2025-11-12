@@ -75,8 +75,13 @@ func GenerateToken(appID int32, userID, tokenExpireTime int64, appKey string) (s
 }
 
 // GetDefaultExpireTime 获取默认的过期时间（当前时间30分钟后）
+<<<<<<< HEAD
 func GetDefaultExpireTime() int64 {
 	return time.Now().Unix() + 30*60
+=======
+func generateExpireTime(minutes int64) int64 {
+	return time.Now().UnixNano()/int64(time.Millisecond) + 1000*60*minutes // 30分钟
+>>>>>>> 75afbb7eabf91a35216b44dcf965b727f815e84b
 }
 
 // pkcs5Padding PKCS#5填充算法实现

@@ -32,7 +32,7 @@ var TransCmd = &cobra.Command{
 		Boot()
 
 		cfg := config.Conf
-		loadWarnings, err := engine.Load(cfg, engine.LoadOption{Action: "sui.trans"})
+		err := engine.Load(cfg, engine.LoadOption{Action: "sui.trans"})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, color.RedString(err.Error()))
 			return
@@ -135,13 +135,6 @@ var TransCmd = &cobra.Command{
 			fmt.Println(color.YellowString("Translate succeeded for %s in %s", mode, timecost))
 			return
 		}
-
-		if len(loadWarnings) > 0 {
-			for _, warning := range loadWarnings {
-				fmt.Println(color.YellowString("[%s] %s", warning.Widget, warning.Error))
-			}
-		}
-
 		if len(warnings) > 0 {
 			for _, warning := range warnings {
 				fmt.Println(color.YellowString("Warning: %s", warning))
