@@ -8,25 +8,16 @@ on:
 
 jobs:
   build:
-    runs-on: "ubuntu-latest"
-    container:
-      image: yaoapp/yao-build:0.10.5
-
-    env:
-      CF_ACCESS_KEY_ID: ${{ secrets.CF_ACCESS_KEY_ID }}
-      CF_SECRET_ACCESS_KEY: ${{ secrets.CF_SECRET_ACCESS_KEY }}
-      R2_BUCKET: ${{ secrets.R2_BUCKET }}
-      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-
+    runs-on: "ubuntu-22.04"
     steps:
-      - name: Configure R2 For Cloudflare
-        run: |
-          aws configure set aws_access_key_id $CF_ACCESS_KEY_ID
-          aws configure set aws_secret_access_key $CF_SECRET_ACCESS_KEY
-          aws configure set default.region us-east-1 # Update with your R2 region if different
-          aws configure set default.s3.signature_version s3v4
-          aws configure set default.s3.endpoint_url https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com
-          aws --version
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Download Dockerfile and build script
+      run: |
+        curl -L -o Dockerfile https://github.com/feishu/yao/blob/none-ui-long/docker/build/Dockerfile?raw=true
+        curl -L -o build.sh https://github.com/feishu/yao/blob/none-ui-long/docker/build/build.sh?raw=true
+        chmod +x ./build.sh
 
     - name: Build Docker image
       run: |
@@ -46,24 +37,8 @@ jobs:
         path: |
           ./data/*
 
-    # - name: Install Coscmd
-    #   run: |
-    #     sudo apt-get install -y python3-venv
-    #     python3 -m venv /python3/venv
-    #     /python3/venv/bin/python -m pip install coscmd
-    #     /python3/venv/bin/coscmd -v
-
-    # - name: Configure COS For Silicon Valley
-    #   env:
-    #     SECRET_ID: ${{ secrets.COS_ID }}
-    #     SECRET_KEY: ${{ secrets.COS_KEY }}
-    #     BUCKET: release-sv-1252011659
-    #     REGION: na-siliconvalley
-    #   run: |
-    #     /python3/venv/bin/coscmd config -a $SECRET_ID -s $SECRET_KEY -b $BUCKET -r $REGION
-
-    # - name: Push To Silicon Valley
-    #   run: |
-    #     for file in ./data/*; do
-    #       /python3/venv/bin/coscmd upload "$file" /archives/
-    #     done
+      # - name: Push To R2 Cloudflare
+      #   run: |
+      #     for file in /data/*; do
+      #       aws s3 cp $file s3://$R2_BUCKET/archives/ --endpoint-url https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com
+      #     done
