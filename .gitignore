@@ -20,6 +20,7 @@ _reference
 .DS_Store
 .env*
 .tmp
+.trae
 dist
 ui
 ^ui/index.html
