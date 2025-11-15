@@ -1,6 +1,7 @@
 package x2j
 
 import (
+	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 )
@@ -43,7 +44,14 @@ func ProcessXmlToJson(process *process.Process) interface{} {
 		exception.New("Failed to convert XML to JSON: %v", 500, err.Error()).Throw()
 	}
 
-	return jsonVal
+	// Parse JSON bytes back to map for structured output
+	resultMap := make(map[string]interface{})
+
+	if err := jsoniter.Unmarshal(jsonVal, &resultMap); err != nil {
+		exception.New("Failed to convert JSON to map: %v", 500, err.Error()).Throw()
+	}
+
+	return resultMap
 }
 
 // ProcessXmlToMap converts XML to map
