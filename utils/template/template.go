@@ -417,8 +417,11 @@ func RenderTemplate(code string, data map[string]interface{}) (string, error) {
 	// 如果缓存中没有，则编译模板
 	if !cached {
 		log.Debug("Template '%s' not in cache, compiling...", code)
+		funcMap := template.FuncMap{
+			"default": defaultFunc, // 将函数注册为 "default"
+		}
 		var err error
-		tmpl, err = template.New(code).Parse(content)
+		tmpl, err = template.New(code).Funcs(funcMap).Parse(content)
 		if err != nil {
 			err = fmt.Errorf("failed to parse template '%s': %v", code, err)
 			log.Error("RenderTemplate failed: %v", err)
@@ -459,9 +462,13 @@ func RenderTemplateContent(content string, data map[string]interface{}) (string,
 	}
 
 	log.Debug("Rendering template content with data keys: %v", getMapKeys(data))
+	// 添加自定义函数到 FuncMap
+	funcMap := template.FuncMap{
+		"default": defaultFunc, // 将函数注册为 "default"
+	}
 
 	// 编译模板（不使用缓存，因为没有唯一的code标识）
-	tmpl, err := template.New("content").Parse(content)
+	tmpl, err := template.New("content").Funcs(funcMap).Parse(content)
 	if err != nil {
 		err = fmt.Errorf("failed to parse template content: %v", err)
 		log.Error("RenderTemplateContent failed: %v", err)
@@ -583,4 +590,13 @@ func getMapKeys(m map[string]interface{}) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// defaultFunc 是一个自定义函数，如果给定的值为空，则返回默认值
+func defaultFunc(def, val interface{}) interface{} {
+	// 检查 val 是否为零值（nil, "", 0 等）
+	if val == nil || val == "" {
+		return def
+	}
+	return val
 }
