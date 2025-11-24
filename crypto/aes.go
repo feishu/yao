@@ -5,7 +5,6 @@ import (
 	"crypto/cipher"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 )
 
@@ -57,6 +56,47 @@ func AES256Decrypt(key string, algorithm string, nonce string, ciphertext string
 		}
 
 		return string(text), nil
+	case "CBC":
+		var bytes []byte
+		var err error
+		var keyBytes []byte
+		var ivBytes []byte
+
+		if len(encoding) > 0 && encoding[0] == "base64" {
+			bytes, err = base64.StdEncoding.DecodeString(ciphertext)
+			if err != nil {
+				return "", err
+			}
+			keyBytes, err = base64.StdEncoding.DecodeString(key)
+			if err != nil {
+				return "", err
+			}
+			ivBytes, err = base64.StdEncoding.DecodeString(nonce)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			bytes, err = hex.DecodeString(ciphertext)
+			if err != nil {
+				return "", err
+			}
+			keyBytes = []byte(key)
+			ivBytes = []byte(nonce)
+		}
+
+		block, err := aes.NewCipher(keyBytes)
+		if err != nil {
+			return "", err
+		}
+
+		if len(ivBytes) != block.BlockSize() {
+			return "", fmt.Errorf("iv length must be %d", block.BlockSize())
+		}
+
+		mode := cipher.NewCBCDecrypter(block, ivBytes)
+		mode.CryptBlocks(bytes, bytes)
+		bytes = PKCS7UnPadding(bytes)
+		return string(bytes), nil
 	}
 	return "", fmt.Errorf("algorithm %s not support", algorithm)
 }
@@ -103,46 +143,6 @@ func aes256GCMEncrypt(key, nonce, text, additionalData []byte) ([]byte, error) {
 
 	ciphertext := gcm.Seal(nil, nonce, text, additionalData)
 	return ciphertext, nil
-}
-
-// WechatDecrypt decrypt wechat data
-func WechatDecrypt(sessionKey, encryptedData, iv string) (map[string]interface{}, error) {
-	aesKey, err := base64.StdEncoding.DecodeString(sessionKey)
-	if err != nil {
-		return nil, err
-	}
-
-	cipherText, err := base64.StdEncoding.DecodeString(encryptedData)
-	if err != nil {
-		return nil, err
-	}
-
-	ivBytes, err := base64.StdEncoding.DecodeString(iv)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(ivBytes) != 16 {
-		return nil, fmt.Errorf("iv length must be 16")
-	}
-
-	block, err := aes.NewCipher(aesKey)
-	if err != nil {
-		return nil, err
-	}
-
-	mode := cipher.NewCBCDecrypter(block, ivBytes)
-	mode.CryptBlocks(cipherText, cipherText)
-
-	cipherText = PKCS7UnPadding(cipherText)
-
-	var decrypted map[string]interface{}
-	err = json.Unmarshal(cipherText, &decrypted)
-	if err != nil {
-		return nil, err
-	}
-
-	return decrypted, nil
 }
 
 // PKCS7UnPadding unpadding
