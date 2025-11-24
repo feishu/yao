@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 )
 
@@ -102,4 +103,51 @@ func aes256GCMEncrypt(key, nonce, text, additionalData []byte) ([]byte, error) {
 
 	ciphertext := gcm.Seal(nil, nonce, text, additionalData)
 	return ciphertext, nil
+}
+
+// WechatDecrypt decrypt wechat data
+func WechatDecrypt(sessionKey, encryptedData, iv string) (map[string]interface{}, error) {
+	aesKey, err := base64.StdEncoding.DecodeString(sessionKey)
+	if err != nil {
+		return nil, err
+	}
+
+	cipherText, err := base64.StdEncoding.DecodeString(encryptedData)
+	if err != nil {
+		return nil, err
+	}
+
+	ivBytes, err := base64.StdEncoding.DecodeString(iv)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(ivBytes) != 16 {
+		return nil, fmt.Errorf("iv length must be 16")
+	}
+
+	block, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return nil, err
+	}
+
+	mode := cipher.NewCBCDecrypter(block, ivBytes)
+	mode.CryptBlocks(cipherText, cipherText)
+
+	cipherText = PKCS7UnPadding(cipherText)
+
+	var decrypted map[string]interface{}
+	err = json.Unmarshal(cipherText, &decrypted)
+	if err != nil {
+		return nil, err
+	}
+
+	return decrypted, nil
+}
+
+// PKCS7UnPadding unpadding
+func PKCS7UnPadding(origData []byte) []byte {
+	length := len(origData)
+	unpadding := int(origData[length-1])
+	return origData[:(length - unpadding)]
 }

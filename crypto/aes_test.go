@@ -1,6 +1,10 @@
 package crypto
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"encoding/base64"
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -85,4 +89,58 @@ func TestAES256ProcessGCMBase64(t *testing.T) {
 	}
 
 	assert.Equal(t, text, decrypted)
+}
+
+func TestWechatDecrypt(t *testing.T) {
+	sessionKey := "tiihtNczf5v6AKRyjwEUhQ=="
+	iv := "r7BXXKkLb8qrSNn05n0qiA=="
+	
+	// Construct expected data
+	expectedData := map[string]interface{}{
+		"phoneNumber": "13580006666",
+		"purePhoneNumber": "13580006666",
+		"countryCode": "86",
+		"watermark": map[string]interface{}{
+			"timestamp": 1477314187.0,
+			"appid":     appID,
+		},
+	}
+	
+	payload, _ := json.Marshal(expectedData)
+	
+	// Encrypt data to generate encryptedData
+	keyBytes, _ := base64.StdEncoding.DecodeString(sessionKey)
+	ivBytes, _ := base64.StdEncoding.DecodeString(iv)
+	
+	block, _ := aes.NewCipher(keyBytes)
+	// PKCS7 Padding
+	blockSize := block.BlockSize()
+	padding := blockSize - len(payload)%blockSize
+	padtext := make([]byte, padding)
+	for i := range padtext {
+		padtext[i] = byte(padding)
+	}
+	payload = append(payload, padtext...)
+	
+	ciphertext := make([]byte, len(payload))
+	mode := cipher.NewCBCEncrypter(block, ivBytes)
+	mode.CryptBlocks(ciphertext, payload)
+	
+	encryptedData := base64.StdEncoding.EncodeToString(ciphertext)
+
+	// Test Decrypt
+	decrypted, err := WechatDecrypt(sessionKey, encryptedData, iv)
+	if err != nil {
+		t.Fatalf("WechatDecrypt error: %s", err)
+	}
+
+	assert.Equal(t, expectedData["phoneNumber"], decrypted["phoneNumber"])
+	assert.Equal(t, expectedData["purePhoneNumber"], decrypted["purePhoneNumber"])
+	assert.Equal(t, expectedData["countryCode"], decrypted["countryCode"])
+	
+	// Test Invalid AppID
+	wrongAppID := "wx_wrong_app_id"
+	_, err = WechatDecrypt(wrongAppID, sessionKey, encryptedData, iv)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid buffer")
 }
