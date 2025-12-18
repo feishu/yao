@@ -23,7 +23,7 @@ func Load(cfg config.Config) error {
 	// Load system uploaders
 	err := loadSystemUploaders(cfg)
 	if err != nil {
-		return err
+		// return err
 	}
 
 	// Load filesystem uploaders

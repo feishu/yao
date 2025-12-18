@@ -17,6 +17,7 @@ import (
 	_ "github.com/yaoapp/yao/volcengine/service/coze"
 	_ "github.com/yaoapp/yao/volcengine/service/im"
 	_ "github.com/yaoapp/yao/wework"
+	_ "github.com/yaoapp/yao/attachment"
 	// _ "net/http/pprof"
 )
 

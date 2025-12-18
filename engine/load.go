@@ -170,9 +170,7 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 	// Load Uploaders
 	err = loadStep("Uploader", func() error {
 		return attachment.Load(cfg)
-	}, func(s1, s2 string) {
-		printErr(cfg.Mode, s1, err)
-	})
+	}, nil)
 
 	// Load Plugins
 	err = plugin.Load(cfg)

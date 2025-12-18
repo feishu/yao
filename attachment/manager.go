@@ -671,12 +671,12 @@ func (manager Manager) Download(ctx context.Context, fileID string) (*FileRespon
 // URL get file url with expiration
 func (manager Manager) URL(ctx context.Context, fileID string) string {
 	// Get real storage path from database
-	storagePath, err := manager.getStoragePathFromDatabase(ctx, fileID)
-	if err != nil {
-		return ""
-	}
+	//storagePath, err := manager.getStoragePathFromDatabase(ctx, fileID)
+	//if err != nil {
+	//	return ""
+	//}
 
-	return manager.storage.URL(ctx, storagePath)
+	return manager.storage.URL(ctx, fileID)
 }
 
 // Read reads a file and returns the content as bytes
