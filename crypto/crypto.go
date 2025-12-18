@@ -44,12 +44,17 @@ type hmacOption struct {
 }
 
 // Hash string
-func Hash(hash crypto.Hash, value string) (string, error) {
+func Hash(hash crypto.Hash, value string, encoding ...string) (string, error) {
 	h := hash.New()
 	_, err := h.Write([]byte(value))
 	if err != nil {
 		return "", err
 	}
+
+	if len(encoding) > 0 && encoding[0] == "base64" {
+		return base64.StdEncoding.EncodeToString(h.Sum(nil)), nil
+	}
+
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
 }
 
