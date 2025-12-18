@@ -231,16 +231,21 @@ func processBase64(process *process.Process) interface{} {
 	return Base64(getContext(process), value, dataURI)
 }
 
-// processGetURL attachments.GetURL uploader fileID
+// processGetURL attachments.GetURL uploader fileID [contentType]
 func processGetURL(process *process.Process) interface{} {
 	process.ValidateArgNums(2)
 	uploader := process.ArgsString(0)
 	fileID := process.ArgsString(1)
+
+	contentType := ""
+	if process.NumOfArgs() > 2 {
+		contentType = process.ArgsString(2)
+	}
 
 	manager, err := Select(uploader)
 	if err != nil {
 		exception.New(err.Error(), 404).Throw()
 	}
 
-	return manager.URL(getContext(process), fileID)
+	return manager.GetPresignedUrl(getContext(process), fileID, contentType)
 }

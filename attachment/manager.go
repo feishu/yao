@@ -679,6 +679,11 @@ func (manager Manager) URL(ctx context.Context, fileID string) string {
 	return manager.storage.URL(ctx, fileID)
 }
 
+// GetPresignedUrl gets a presigned URL for a file
+func (manager Manager) GetPresignedUrl(ctx context.Context, fileID string, contentType string) string {
+	return manager.storage.GetPresignedUrl(ctx, fileID, contentType)
+}
+
 // Read reads a file and returns the content as bytes
 func (manager Manager) Read(ctx context.Context, fileID string) ([]byte, error) {
 	// Get file info from database to check if it's gzipped

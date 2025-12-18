@@ -126,6 +126,7 @@ type Storage interface {
 	Reader(ctx context.Context, path string) (io.ReadCloser, error)
 	GetContent(ctx context.Context, path string) ([]byte, error)
 	URL(ctx context.Context, path string) string
+	GetPresignedUrl(ctx context.Context, path string, contentType string) string
 	Exists(ctx context.Context, path string) bool
 	Delete(ctx context.Context, path string) error
 	LocalPath(ctx context.Context, path string) (string, string, error) // Returns absolute path and content type

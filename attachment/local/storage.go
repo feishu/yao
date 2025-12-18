@@ -231,6 +231,11 @@ func (storage *Storage) URL(ctx context.Context, path string) string {
 	return fmt.Sprintf("%s/%s", storage.Path, path)
 }
 
+// GetPresignedUrl gets a presigned URL for a file
+func (storage *Storage) GetPresignedUrl(ctx context.Context, fileID string, contentType string) string {
+	return storage.URL(ctx, fileID)
+}
+
 // GetContent gets file content as bytes
 func (storage *Storage) GetContent(ctx context.Context, path string) ([]byte, error) {
 	reader, err := storage.Reader(ctx, path)

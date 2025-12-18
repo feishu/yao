@@ -360,6 +360,34 @@ func (storage *Storage) URL(ctx context.Context, path string) string {
 	return request.URL
 }
 
+// GetPresignedUrl gets a presigned URL for a file
+func (storage *Storage) GetPresignedUrl(ctx context.Context, path string, contentType string) string {
+	if storage.client == nil {
+		return ""
+	}
+
+	key := filepath.Join(storage.prefix, path)
+	if contentType == "" {
+		detected, _ := detectContentType(key)
+		if detected != "" {
+			contentType = detected
+		}
+	}
+
+	presignClient := s3.NewPresignClient(storage.client)
+	request, err := presignClient.PresignPutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(storage.Bucket),
+		Key:         aws.String(key),
+		ContentType: aws.String(contentType),
+	}, s3.WithPresignExpires(storage.Expiration))
+
+	if err != nil {
+		return ""
+	}
+
+	return request.URL
+}
+
 // Exists checks if a file exists in S3
 func (storage *Storage) Exists(ctx context.Context, path string) bool {
 	if storage.client == nil {
