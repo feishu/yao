@@ -5,6 +5,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/yaoapp/gou/application"
@@ -42,6 +43,8 @@ import (
 	"github.com/yaoapp/yao/websocket"
 	"github.com/yaoapp/yao/widget"
 	"github.com/yaoapp/yao/widgets"
+
+	"github.com/yaoapp/yao/attachment"
 )
 
 // LoadHooks used to load custom widgets/processes
@@ -62,6 +65,19 @@ type LoadOption struct {
 	Action           string `json:"action"`
 	IgnoredAfterLoad bool   `json:"ignoredAfterLoad"`
 	IsReload         bool   `json:"reload"`
+}
+
+// loadStep wraps a loading function with timing and progress reporting
+func loadStep(name string, loadFunc func() error, callback func(string, string)) error {
+	start := time.Now()
+	err := loadFunc()
+	duration := time.Since(start)
+
+	if callback != nil {
+		callback(name, duration.String())
+	}
+
+	return err
 }
 
 // Load application engine
@@ -150,6 +166,13 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 	if err != nil {
 		printErr(cfg.Mode, "Store", err)
 	}
+
+	// Load Uploaders
+	err = loadStep("Uploader", func() error {
+		return attachment.Load(cfg)
+	}, func(s1, s2 string) {
+		printErr(cfg.Mode, s1, err)
+	})
 
 	// Load Plugins
 	err = plugin.Load(cfg)

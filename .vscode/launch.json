@@ -12,7 +12,7 @@
             "program": "${workspaceFolder}/main.go",
             "args": ["start"],
             // "args": ["start","-f","app.yaz"],
-            "cwd": "/Users/L/Desktop/Code/yao_projects/ih/service"
+            "cwd": "/Users/L/Desktop/Code/yao_projects/ih/his-adapter"
         }
     ]
 }

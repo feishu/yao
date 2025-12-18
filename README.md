@@ -54,3 +54,4 @@ Yao apps also support running on edge devices equipped with arm64 or x64 chips, 
 ### build yao 
 
 go build -o yao .
+go build -o dist/release . 2>&1 | head -20
