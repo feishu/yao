@@ -3,6 +3,7 @@ package utils
 import (
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/yao/utils/await"
+	"github.com/yaoapp/yao/utils/browser"
 	"github.com/yaoapp/yao/utils/conn"
 	"github.com/yaoapp/yao/utils/datetime"
 	"github.com/yaoapp/yao/utils/fmt"
@@ -143,6 +144,9 @@ func Init() {
 	process.RegisterGroup("utils.connector", map[string]process.Handler{
 		"select": conn.ProcessSelectConnector,
 	})
+
+	// Browser
+	browser.Init()
 
 	// Redis - 实用的高级方法
 	process.RegisterGroup("utils.redis", map[string]process.Handler{

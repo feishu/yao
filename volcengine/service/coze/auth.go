@@ -231,7 +231,8 @@ func newOAuthClient(clientID, clientSecret string, opts ...OAuthClientOption) (*
 	if initSettings.httpClient != nil {
 		httpClient = initSettings.httpClient
 	} else {
-		httpClient = &http.Client{Timeout: time.Second * 5}
+		// Default to 15 seconds to prevent context deadline exceeded on slower networks
+		httpClient = &http.Client{Timeout: time.Second * 15}
 	}
 
 	if initSettings.wwwURL == "" {
@@ -854,6 +855,11 @@ func LoadOAuthAppFromConfig(config *OAuthConfig) (OAuthClient, error) {
 	}
 	if config.CozeWWWBase != "" {
 		opts = append(opts, WithAuthWWWURL(config.CozeWWWBase))
+	}
+	if config.Timeout > 0 {
+		opts = append(opts, WithAuthHttpClient(&http.Client{
+			Timeout: time.Duration(config.Timeout) * time.Second,
+		}))
 	}
 
 	switch config.ClientType {

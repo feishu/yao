@@ -15,7 +15,7 @@
             // ],
             "args": [
                 "run",
-                "scripts.test.consult_test.ssragsign"
+                "scripts.test.pdf_test.runTest"
             ],
             // "args": ["start","-f","app.yaz"],
             "cwd": "/Users/L/Desktop/Code/yao_projects/ih/service"

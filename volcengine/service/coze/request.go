@@ -32,7 +32,7 @@ type core struct {
 func newCore(opt *clientOption) *core {
 	if opt.client == nil {
 		opt.client = &http.Client{
-			Timeout: time.Second * 5,
+			Timeout: time.Second * 15, // Relaxed from 5s to 15s to prevent unexpected timeouts
 		}
 	}
 	return &core{

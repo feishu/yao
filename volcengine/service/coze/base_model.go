@@ -21,6 +21,7 @@ type OAuthConfig struct {
 	PublicKeyID  string `json:"public_key_id,omitempty"`
 	CozeAPIBase  string `json:"coze_api_base,omitempty"`
 	CozeWWWBase  string `json:"coze_www_base,omitempty"`
+	Timeout      int    `json:"timeout,omitempty"` // Timeout in seconds
 }
 
 // TokenResponse 封装OAuth token响应
