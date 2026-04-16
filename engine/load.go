@@ -99,6 +99,22 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 	err = loadApp(cfg.AppSource)
 	if err != nil {
 		printErr(cfg.Mode, "Load Application", err)
+		if options.Action == "scripts" || options.Action == "scripts.error" {
+			return err
+		}
+	}
+
+	if options.Action == "scripts" || options.Action == "scripts.error" {
+		err = runtime.Start(cfg)
+		if err != nil {
+			return err
+		}
+
+		err = script.Load(cfg)
+		if options.Action == "scripts.error" {
+			return err
+		}
+		return nil
 	}
 
 	// Make Database connections

@@ -30,6 +30,8 @@ var langs = map[string]string{
 	"Execute process":                       "运行处理器",
 	"Show version":                          "显示当前版本号",
 	"Show registered scripts":               "显示已注册脚本",
+	"Match registered scripts":              "按模式匹配已注册脚本",
+	"Show registered script errors":         "显示已注册脚本错误",
 	"Development mode":                      "使用开发模式启动",
 	"Enabled unstable features":             "启用内测功能",
 	"Fatal: %s":                             "失败: %s",

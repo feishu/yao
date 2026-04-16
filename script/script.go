@@ -12,13 +12,21 @@ import (
 // Load load all scripts and services
 func Load(cfg config.Config) error {
 	v8.CLearModules()
+	v8.Scripts = map[string]*v8.Script{}
+	setLastLoadErrors(nil)
 	exts := []string{"*.js", "*.ts"}
+	loadErrs := &LoadErrors{}
+
 	err := application.App.Walk("scripts", func(root, file string, isdir bool) error {
 		if isdir {
 			return nil
 		}
-		_, err := v8.Load(file, share.ID(root, file))
-		return err
+		id := share.ID(root, file)
+		_, err := v8.Load(file, id)
+		if err != nil {
+			loadErrs.Add(file, id, err)
+		}
+		return nil
 	}, exts...)
 
 	if err != nil {
@@ -46,12 +54,37 @@ func Load(cfg config.Config) error {
 	// 	return err
 	// }
 
-	return application.App.Walk("services", func(root, file string, isdir bool) error {
+	if has, _ := application.App.Exists("services"); !has {
+		if len(loadErrs.Items) == 0 {
+			return nil
+		}
+
+		loadErrs.Sort()
+		setLastLoadErrors(loadErrs)
+		return loadErrs
+	}
+
+	err = application.App.Walk("services", func(root, file string, isdir bool) error {
 		if isdir {
 			return nil
 		}
 		id := fmt.Sprintf("__yao_service.%s", share.ID(root, file))
 		_, err := v8.Load(file, id)
-		return err
+		if err != nil {
+			loadErrs.Add(file, id, err)
+		}
+		return nil
 	}, exts...)
+
+	if err != nil {
+		return err
+	}
+
+	if len(loadErrs.Items) == 0 {
+		return nil
+	}
+
+	loadErrs.Sort()
+	setLastLoadErrors(loadErrs)
+	return loadErrs
 }

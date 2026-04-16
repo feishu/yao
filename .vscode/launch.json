@@ -11,7 +11,8 @@
             "mode": "auto",
             "program": "${workspaceFolder}/main.go",
             "args": [
-                "scripts"
+                "scripts",
+                "--error"
             ],
             // "args": [
             //     "run",

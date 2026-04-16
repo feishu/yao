@@ -71,3 +71,37 @@
 - 输出按字典序排序，包含 `__yao_service.*`
 - 已补单测覆盖名称收集与命令输出
 - 已验证 `go test ./cmd` 通过，`go run . help` 可见新命令
+
+## 过滤增强
+- 目标：为 `yao scripts` 增加可重复的 `-m` 参数，支持精确匹配、`*.xxx`、`xxx.*` 和多模式 OR 过滤。
+
+## 过滤增强实施清单
+- [x] 新增失败测试，覆盖 `-m` 精确匹配、glob 匹配、多模式 OR 和非法模式
+- [x] 为 `scripts` 命令增加 `-m, --match` flag
+- [x] 在输出前应用过滤逻辑
+- [x] 运行针对性测试和 `go test ./cmd`
+
+## 过滤增强 Review
+- 已为 `yao scripts` 增加可重复的 `-m, --match` 参数
+- 已支持精确匹配、`*.xxx`、`xxx.*` 和多模式 OR 过滤
+- 非法模式会直接返回错误，不会静默忽略
+- 已验证针对性测试和 `go test ./cmd` 通过
+
+## TS 错误聚合
+- 目标：让 `script.Load` 遇到 TS 错误时记录错误继续加载，并让 `yao scripts --error` 只输出所有错误的文件名与具体错误。
+
+## TS 错误聚合实施清单
+- [x] 新增失败测试，覆盖 `script.Load` 聚合错误并继续扫描
+- [x] 新增失败测试，覆盖 `yao scripts --error` 只输出错误
+- [x] 在 `gou/runtime/v8` 保留 TS 错误的文件、行、列、文本
+- [x] 在 `script.Load` 中聚合错误而不是首错即停
+- [x] 为 `scripts` 命令增加 `-e, --error`
+- [x] 为 `scripts` 命令接入脚本专用加载路径
+- [x] 运行针对性测试和回归测试
+
+## TS 错误聚合 Review
+- `script.Load` 已改为记录错误继续扫描，最终统一返回聚合错误
+- `v8` 层已保留 TS 错误的文件、行、列和文本
+- `yao scripts` 已增加 `-e, --error`，只输出脚本错误
+- 已验证：`go test ./script -run TestLoadAggregatesErrorsAndContinues`、`go test ./cmd`、`go run . scripts --help`
+- 额外尝试直接跑 `github.com/yaoapp/gou/runtime/v8` 测试，但该包现有测试夹具缺失 `runtime/basic.js`，失败与本次改动无直接关系
