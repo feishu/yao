@@ -7,6 +7,7 @@ import (
 const (
 	outputBase64 = "base64"
 	outputFile   = "file"
+	outputStream = "stream"
 )
 
 type validationError struct {
@@ -35,7 +36,7 @@ func normalizeOptions(options Options) (Options, error) {
 	}
 
 	switch options.Output {
-	case outputBase64, outputFile:
+	case outputBase64, outputFile, outputStream:
 	default:
 		return options, newValidationError("invalid output type: %s", options.Output)
 	}

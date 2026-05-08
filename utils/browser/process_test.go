@@ -12,15 +12,23 @@ import (
 	"github.com/yaoapp/gou/process"
 )
 
-func TestProcessPDFRejectsInvalidOutput(t *testing.T) {
+func TestProcessPDFSupportsStreamOutput(t *testing.T) {
 	Init()
 
-	err := process.New("utils.browser.pdf", "<html><body>hello</body></html>", map[string]interface{}{
-		"output": "stream",
-	}).Execute()
+	previous := pdfRenderer
+	pdfRenderer = func(html string, options Options) ([]byte, error) {
+		return []byte("pdf-data"), nil
+	}
+	defer func() {
+		pdfRenderer = previous
+	}()
 
-	assert.NotNil(t, err)
-	assert.Equal(t, "Exception|400: invalid output type: stream", err.Error())
+	res, err := process.New("utils.browser.pdf", "<html><body>hello</body></html>", map[string]interface{}{
+		"output": "stream",
+	}).Exec()
+
+	assert.NoError(t, err)
+	assert.Equal(t, []byte("pdf-data"), res)
 }
 
 func TestProcessPDFRequiresFilenameForFileOutput(t *testing.T) {

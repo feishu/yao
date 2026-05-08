@@ -60,6 +60,10 @@ func buildOutput(content []byte, options Options, contentType string) (interface
 		return base64.StdEncoding.EncodeToString(content), nil
 	}
 
+	if options.Output == outputStream {
+		return content, nil
+	}
+
 	if filepath.IsAbs(options.Filename) {
 		if err := os.MkdirAll(filepath.Dir(options.Filename), os.ModePerm); err != nil && !os.IsExist(err) {
 			return nil, err
