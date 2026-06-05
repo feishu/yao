@@ -2,14 +2,14 @@
 #  Yao Build Environment (Ubuntu 24.04 AMD64)
 #
 #  Build:
-#  docker build --platform linux/amd64 -t yaoapp/yao-build:0.10.4 .
+#  docker build --platform linux/amd64 -t yaoapp/yao-build:0.10.5 .
 #
 #  Usage:
-#  docker run --rm -it -v /local/path/dist:/data yaoapp/yao-build:0.10.4
+#  docker run --rm -it -v /local/path/dist:/data yaoapp/yao-build:0.10.5
 #
 #  Tests:
-#  docker run --rm -it yaoapp/yao-build:0.10.4 /bin/bash
-#  docker run --rm -it -v ./test:/data yaoapp/yao-build:0.10.4 /bin/bash
+#  docker run --rm -it yaoapp/yao-build:0.10.5 /bin/bash
+#  docker run --rm -it -v ./test:/data yaoapp/yao-build:0.10.5 /bin/bash
 #
 # ===========================================
 FROM ubuntu:24.04

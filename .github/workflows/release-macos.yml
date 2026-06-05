@@ -61,4 +61,4 @@ jobs:
     #     run: |
     #       echo "Creating a release..."
     #       VERSION=$(git rev-parse --short HEAD)
-    #       gh release create "v1.0.0-$VERSION" ./artifacts/* --title "Release v0.10.4-$VERSION" --notes "Notarization succeeded. This is the release for version v1.0.0-$VERSION."
+    #       gh release create "v1.0.0-$VERSION" ./artifacts/* --title "Release v0.10.5-$VERSION" --notes "Notarization succeeded. This is the release for version v1.0.0-$VERSION."

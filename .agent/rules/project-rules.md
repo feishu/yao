@@ -379,7 +379,7 @@ GitHub Actions 工作流：
 
 当前版本定义在 `share/const.go`：
 ```go
-const VERSION = "0.10.4"
+const VERSION = "0.10.5"
 const PRVERSION = "f393289387f0-2025-03-24T14:30:18+0800-debug"
 ```
 

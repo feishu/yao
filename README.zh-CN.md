@@ -50,7 +50,7 @@ Yao 内置了一套数据管理系统，通过编写 **JSON** 描述界面布局
 
 ## 安装
 
-Yao v0.10.4 使用说明
+Yao v0.10.5 使用说明
 
 https://github.com/YaoApp/xgen-dev-app/blob/main/README.zh-CN.md
 
