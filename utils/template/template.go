@@ -64,7 +64,7 @@ func loadTemplatesFromDatabase() error {
 		"wheres": []map[string]interface{}{
 			{
 				"column": "status",
-				"value":  0, // 只加载启用状态的模板
+				"value":  1, // 只加载启用状态的模板
 			},
 		},
 		"select": []string{"code", "content"},

@@ -10,14 +10,14 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/main.go",
-            "args": [
-                "scripts",
-                "--error"
-            ],
             // "args": [
-            //     "run",
-            //     "scripts.test.pdf_test.runTest"
+            //     "scripts",
+            //     "--error"
             // ],
+            "args": [
+                "run",
+                "scripts.test.consult_test.template"
+            ],
             // "args": ["start","-f","app.yaz"],
             "cwd": "/Users/L/Desktop/Code/yao_projects/ih/service"
         }
