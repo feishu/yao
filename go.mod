@@ -22,6 +22,7 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-pay/gopay v1.5.114
 	github.com/go-redis/redis/v8 v8.11.5
+	github.com/go-rod/rod v0.116.2
 	github.com/goccy/go-json v0.10.5
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/uuid v1.6.0
@@ -32,7 +33,6 @@ require (
 	github.com/mozillazg/go-pinyin v0.20.0
 	github.com/pkoukk/tiktoken-go v0.1.7
 	github.com/rhysd/go-github-selfupdate v1.2.3
-	github.com/go-rod/rod v0.116.2
 	github.com/spf13/cast v1.9.2
 	github.com/spf13/cobra v1.9.1
 	github.com/stretchr/testify v1.10.0
