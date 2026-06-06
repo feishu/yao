@@ -2,6 +2,9 @@ package runtime
 
 import (
 	"fmt"
+	"net"
+	"strconv"
+	"strings"
 
 	jsoniter "github.com/json-iterator/go"
 	"github.com/yaoapp/gou/application"
@@ -15,6 +18,11 @@ func Start(cfg config.Config) error {
 	debug := false
 	if cfg.Mode == "development" {
 		debug = true
+	}
+
+	inspect, err := parseInspect(cfg.Runtime.Inspect, cfg.Mode)
+	if err != nil {
+		return err
 	}
 
 	option := &v8.Option{
@@ -31,6 +39,7 @@ func Start(cfg config.Config) error {
 		Import:            cfg.Runtime.Import,
 		Debug:             debug,
 		ConsoleMode:       cfg.Mode,
+		Inspect:           inspect,
 	}
 
 	// Read the tsconfig.json
@@ -50,12 +59,58 @@ func Start(cfg config.Config) error {
 		}
 	}
 
-	err := v8.Start(option)
+	err = v8.Start(option)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func parseInspect(value string, mode string) (v8.Inspect, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return v8.Inspect{}, nil
+	}
+	if mode != "development" {
+		return v8.Inspect{}, fmt.Errorf("runtime inspect is only allowed in development mode")
+	}
+
+	host := "127.0.0.1"
+	portText := value
+	if strings.Contains(value, ":") {
+		parsedHost, parsedPort, err := net.SplitHostPort(value)
+		if err != nil {
+			parts := strings.Split(value, ":")
+			if len(parts) != 2 {
+				return v8.Inspect{}, fmt.Errorf("invalid inspect address %q", value)
+			}
+			parsedHost, parsedPort = parts[0], parts[1]
+		}
+		if parsedHost != "" {
+			host = parsedHost
+		}
+		portText = parsedPort
+	}
+
+	if !isLocalInspectHost(host) {
+		return v8.Inspect{}, fmt.Errorf("inspect host must be localhost, got %s", host)
+	}
+
+	port, err := strconv.Atoi(portText)
+	if err != nil || port <= 0 || port > 65535 {
+		return v8.Inspect{}, fmt.Errorf("invalid inspect port %q", portText)
+	}
+
+	return v8.Inspect{
+		Enabled: true,
+		Host:    host,
+		Port:    port,
+	}, nil
+}
+
+func isLocalInspectHost(host string) bool {
+	return host == "127.0.0.1" || host == "localhost" || host == "::1"
 }
 
 // Stop v8 runtime

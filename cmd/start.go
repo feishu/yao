@@ -31,6 +31,7 @@ import (
 
 var startDebug = false
 var startDisableWatching = false
+var startInspect = ""
 
 var startCmd = &cobra.Command{
 	Use:   "start",
@@ -74,6 +75,9 @@ var startCmd = &cobra.Command{
 		// force debug
 		if startDebug {
 			config.Development()
+		}
+		if startInspect != "" {
+			config.Conf.Runtime.Inspect = startInspect
 		}
 
 		// load the application engine
@@ -494,4 +498,5 @@ func colorMehtod(method string) string {
 func init() {
 	startCmd.PersistentFlags().BoolVarP(&startDebug, "debug", "", false, L("Development mode"))
 	startCmd.PersistentFlags().BoolVarP(&startDisableWatching, "disable-watching", "", false, L("Disable watching"))
+	startCmd.PersistentFlags().StringVar(&startInspect, "inspect", "", L("V8 inspector address"))
 }
