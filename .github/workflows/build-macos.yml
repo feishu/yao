@@ -29,13 +29,13 @@ jobs:
       - name: Checkout Kun
         uses: actions/checkout@v4
         with:
-          repository: yaoapp/kun
+          repository: feishu/kun
           path: kun
 
       - name: Checkout Xun
         uses: actions/checkout@v4
         with:
-          repository: yaoapp/xun
+          repository: feishu/xun
           path: xun
 
       - name: Checkout Gou
@@ -47,7 +47,7 @@ jobs:
       - name: Checkout V8Go
         uses: actions/checkout@v4
         with:
-          repository: yaoapp/v8go
+          repository: feishu/v8go
           path: v8go
 
       - name: Unzip libv8
