@@ -20,7 +20,7 @@ func Start(cfg config.Config) error {
 		debug = true
 	}
 
-	inspect, err := parseInspect(cfg.Runtime.Inspect, cfg.Mode)
+	inspect, err := inspectFromConfig(cfg)
 	if err != nil {
 		return err
 	}
@@ -67,7 +67,11 @@ func Start(cfg config.Config) error {
 	return nil
 }
 
-func parseInspect(value string, mode string) (v8.Inspect, error) {
+func inspectFromConfig(cfg config.Config) (v8.Inspect, error) {
+	return parseInspect(cfg.Runtime.Inspect, cfg.Mode, cfg.Runtime.InspectTrace, cfg.Runtime.InspectTracePath, cfg.Runtime.InspectSourceContent)
+}
+
+func parseInspect(value string, mode string, trace bool, tracePath string, exposeSourceContent *bool) (v8.Inspect, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return v8.Inspect{}, nil
@@ -103,9 +107,12 @@ func parseInspect(value string, mode string) (v8.Inspect, error) {
 	}
 
 	return v8.Inspect{
-		Enabled: true,
-		Host:    host,
-		Port:    port,
+		Enabled:             true,
+		Host:                host,
+		Port:                port,
+		Trace:               trace,
+		TracePath:           tracePath,
+		ExposeSourceContent: exposeSourceContent,
 	}, nil
 }
 

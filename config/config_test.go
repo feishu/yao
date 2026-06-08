@@ -65,3 +65,37 @@ func TestLoadFrom(t *testing.T) {
 	assert.Equal(t, cfg.DB.Primary[0], os.Getenv("YAO_DB_PRIMARY"))
 	// assert.Equal(t, cfg.DB.Secondary[0], os.Getenv("YAO_DB_SECONDARY"))
 }
+
+func TestLoadDefaultsInspectSourceContentOn(t *testing.T) {
+	withUnsetEnv(t, "YAO_RUNTIME_INSPECT_SOURCE_CONTENT")
+
+	cfg := Load()
+	if assert.NotNil(t, cfg.Runtime.InspectSourceContent) {
+		assert.True(t, *cfg.Runtime.InspectSourceContent)
+	}
+}
+
+func TestLoadCanDisableInspectSourceContent(t *testing.T) {
+	t.Setenv("YAO_RUNTIME_INSPECT_SOURCE_CONTENT", "false")
+
+	cfg := Load()
+	if assert.NotNil(t, cfg.Runtime.InspectSourceContent) {
+		assert.False(t, *cfg.Runtime.InspectSourceContent)
+	}
+}
+
+func withUnsetEnv(t *testing.T, key string) {
+	t.Helper()
+
+	old, had := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if had {
+			_ = os.Setenv(key, old)
+			return
+		}
+		_ = os.Unsetenv(key)
+	})
+}
