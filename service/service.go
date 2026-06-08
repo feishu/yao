@@ -9,6 +9,7 @@ import (
 	"github.com/yaoapp/yao/config"
 	"github.com/yaoapp/yao/neo"
 	"github.com/yaoapp/yao/share"
+	"github.com/yaoapp/yao/sse"
 )
 
 // Start the yao service
@@ -68,6 +69,7 @@ func Stop(srv *http.Server) error {
 }
 
 func prepare() error {
+	sse.Init()
 
 	// Session server
 	err := share.SessionStart()

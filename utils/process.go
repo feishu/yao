@@ -2,6 +2,7 @@ package utils
 
 import (
 	"github.com/yaoapp/gou/process"
+	"github.com/yaoapp/yao/sse"
 	"github.com/yaoapp/yao/utils/await"
 	"github.com/yaoapp/yao/utils/browser"
 	"github.com/yaoapp/yao/utils/conn"
@@ -19,6 +20,8 @@ import (
 
 // Init the utils
 func Init() {
+	sse.Init()
+
 	// 加载所有 Redis 连接器客户端
 	redis.LoadAllClients()
 

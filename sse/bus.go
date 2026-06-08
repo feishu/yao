@@ -37,54 +37,58 @@ func currentBus() Bus {
 
 type SubscriptionRegistry struct {
 	hub           *Hub
-	subscriptions map[string]context.CancelFunc
-	available     map[string]bool
+	subscriptions map[string]*subscriptionState
 	mu            sync.Mutex
+}
+
+type subscriptionState struct {
+	cancel    context.CancelFunc
+	available bool
 }
 
 func NewSubscriptionRegistry(hub *Hub) *SubscriptionRegistry {
 	return &SubscriptionRegistry{
 		hub:           hub,
-		subscriptions: map[string]context.CancelFunc{},
-		available:     map[string]bool{},
+		subscriptions: map[string]*subscriptionState{},
 	}
 }
 
 func (registry *SubscriptionRegistry) Ensure(ctx context.Context, key string, bus Bus) bool {
 	registry.mu.Lock()
-	if registry.available[key] {
+	if state, ok := registry.subscriptions[key]; ok && state.available {
 		registry.mu.Unlock()
 		return true
 	}
-	if cancel, ok := registry.subscriptions[key]; ok {
-		cancel()
+	if state, ok := registry.subscriptions[key]; ok {
+		state.cancel()
 		delete(registry.subscriptions, key)
-		delete(registry.available, key)
 	}
 
 	subCtx, cancel := context.WithCancel(ctx)
-	registry.subscriptions[key] = cancel
-	registry.available[key] = false
+	state := &subscriptionState{cancel: cancel}
+	registry.subscriptions[key] = state
 	registry.mu.Unlock()
 
 	if bus == nil {
-		registry.Stop(key)
+		registry.stopIfCurrent(key, state)
 		return false
 	}
 
 	if err := bus.Probe(ctx); err != nil {
-		registry.markUnavailable(key)
-		registry.Stop(key)
+		registry.stopIfCurrent(key, state)
 		return false
 	}
 
-	registry.markAvailable(key)
+	if !registry.markAvailable(key, state) {
+		cancel()
+		return false
+	}
 	go func() {
 		err := bus.Subscribe(subCtx, func(event Event) {
 			registry.hub.Deliver(event)
 		})
 		if err != nil && !errors.Is(err, context.Canceled) && subCtx.Err() == nil {
-			registry.markUnavailable(key)
+			registry.markUnavailable(key, state)
 		}
 	}()
 
@@ -95,37 +99,53 @@ func (registry *SubscriptionRegistry) IsAvailable(key string) bool {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
-	return registry.available[key]
+	state, ok := registry.subscriptions[key]
+	return ok && state.available
 }
 
 func (registry *SubscriptionRegistry) Stop(key string) {
 	registry.mu.Lock()
-	cancel, ok := registry.subscriptions[key]
+	state, ok := registry.subscriptions[key]
 	if ok {
 		delete(registry.subscriptions, key)
 	}
-	delete(registry.available, key)
 	registry.mu.Unlock()
 
 	if ok {
-		cancel()
+		state.cancel()
 	}
 }
 
-func (registry *SubscriptionRegistry) markAvailable(key string) {
+func (registry *SubscriptionRegistry) markAvailable(key string, state *subscriptionState) bool {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
-	if _, ok := registry.subscriptions[key]; ok {
-		registry.available[key] = true
+	if registry.subscriptions[key] != state {
+		return false
+	}
+	state.available = true
+	return true
+}
+
+func (registry *SubscriptionRegistry) markUnavailable(key string, state *subscriptionState) {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+
+	if registry.subscriptions[key] == state {
+		state.available = false
 	}
 }
 
-func (registry *SubscriptionRegistry) markUnavailable(key string) {
+func (registry *SubscriptionRegistry) stopIfCurrent(key string, state *subscriptionState) {
 	registry.mu.Lock()
-	defer registry.mu.Unlock()
+	if registry.subscriptions[key] != state {
+		registry.mu.Unlock()
+		return
+	}
+	delete(registry.subscriptions, key)
+	registry.mu.Unlock()
 
-	if _, ok := registry.subscriptions[key]; ok {
-		registry.available[key] = false
+	if state != nil {
+		state.cancel()
 	}
 }

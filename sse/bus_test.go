@@ -16,6 +16,33 @@ type fakeSubscriberBus struct {
 	mu             sync.Mutex
 }
 
+type blockingProbeBus struct {
+	fakeSubscriberBus
+	probeStarted chan struct{}
+	releaseProbe chan struct{}
+	probeErr     error
+	once         sync.Once
+}
+
+func newBlockingProbeBus(probeErr error) *blockingProbeBus {
+	return &blockingProbeBus{
+		fakeSubscriberBus: fakeSubscriberBus{published: make(chan Event, 1)},
+		probeStarted:      make(chan struct{}),
+		releaseProbe:      make(chan struct{}),
+		probeErr:          probeErr,
+	}
+}
+
+func (bus *blockingProbeBus) Probe(ctx context.Context) error {
+	bus.once.Do(func() { close(bus.probeStarted) })
+	select {
+	case <-bus.releaseProbe:
+		return bus.probeErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 func (bus *fakeSubscriberBus) Probe(ctx context.Context) error {
 	return bus.probeErr
 }
@@ -143,6 +170,46 @@ func TestSubscriptionRegistryMarksUnavailableWhenSubscribeFails(t *testing.T) {
 	eventually(t, time.Second, func() bool {
 		return !registry.IsAvailable("redis")
 	})
+}
+
+func TestSubscriptionRegistryIgnoresStaleProbeFailureAfterReplacement(t *testing.T) {
+	hub := NewHub(2)
+	staleBus := newBlockingProbeBus(errors.New("stale probe failed"))
+	replacementBus := &fakeSubscriberBus{published: make(chan Event, 1)}
+	registry := NewSubscriptionRegistry(hub)
+	t.Cleanup(func() { registry.Stop("redis") })
+
+	done := make(chan bool, 1)
+	go func() {
+		done <- registry.Ensure(context.Background(), "redis", staleBus)
+	}()
+
+	select {
+	case <-staleBus.probeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("stale probe did not start")
+	}
+
+	if ok := registry.Ensure(context.Background(), "redis", replacementBus); !ok {
+		t.Fatal("replacement Ensure returned false")
+	}
+	if !registry.IsAvailable("redis") {
+		t.Fatal("replacement subscription is unavailable before stale probe returns")
+	}
+
+	close(staleBus.releaseProbe)
+	select {
+	case ok := <-done:
+		if ok {
+			t.Fatal("stale Ensure returned true")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("stale Ensure did not finish")
+	}
+
+	if !registry.IsAvailable("redis") {
+		t.Fatal("stale probe failure changed replacement subscription availability")
+	}
 }
 
 func eventually(t *testing.T, timeout time.Duration, condition func() bool) {
