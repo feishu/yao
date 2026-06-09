@@ -243,6 +243,9 @@ func ProcessZScore(process *process.Process) interface{} {
 	}
 
 	score, err := rdb.ZScore(ctx, key, member).Result()
+	if err == goredis.Nil {
+		return nil
+	}
 	if err != nil {
 		exception.New("redis ZSCORE error: %s", 500, err.Error()).Throw()
 	}
@@ -341,6 +344,9 @@ func ProcessZRank(process *process.Process) interface{} {
 	}
 
 	rank, err := rdb.ZRank(ctx, key, member).Result()
+	if err == goredis.Nil {
+		return nil
+	}
 	if err != nil {
 		exception.New("redis ZRANK error: %s", 500, err.Error()).Throw()
 	}
@@ -365,6 +371,9 @@ func ProcessZRevRank(process *process.Process) interface{} {
 	}
 
 	rank, err := rdb.ZRevRank(ctx, key, member).Result()
+	if err == goredis.Nil {
+		return nil
+	}
 	if err != nil {
 		exception.New("redis ZREVRANK error: %s", 500, err.Error()).Throw()
 	}

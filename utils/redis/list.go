@@ -1,6 +1,7 @@
 package redis
 
 import (
+	goredis "github.com/go-redis/redis/v8"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 )
@@ -74,6 +75,9 @@ func ProcessLPop(process *process.Process) interface{} {
 	}
 
 	val, err := rdb.LPop(ctx, key).Result()
+	if err == goredis.Nil {
+		return nil
+	}
 	if err != nil {
 		exception.New("redis LPOP error: %s", 500, err.Error()).Throw()
 	}
@@ -96,6 +100,9 @@ func ProcessRPop(process *process.Process) interface{} {
 	}
 
 	val, err := rdb.RPop(ctx, key).Result()
+	if err == goredis.Nil {
+		return nil
+	}
 	if err != nil {
 		exception.New("redis RPOP error: %s", 500, err.Error()).Throw()
 	}
@@ -168,6 +175,9 @@ func ProcessLIndex(process *process.Process) interface{} {
 	}
 
 	val, err := rdb.LIndex(ctx, key, int64(index)).Result()
+	if err == goredis.Nil {
+		return nil
+	}
 	if err != nil {
 		exception.New("redis LINDEX error: %s", 500, err.Error()).Throw()
 	}

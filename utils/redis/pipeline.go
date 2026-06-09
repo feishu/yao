@@ -317,13 +317,21 @@ func parseCommandResult(cmd goredis.Cmder) (interface{}, error) {
 		return val, err
 
 	case *goredis.IntCmd:
-		return c.Result()
+		val, err := c.Result()
+		if err == goredis.Nil {
+			return nil, nil
+		}
+		return val, err
 
 	case *goredis.BoolCmd:
 		return c.Result()
 
 	case *goredis.FloatCmd:
-		return c.Result()
+		val, err := c.Result()
+		if err == goredis.Nil {
+			return nil, nil
+		}
+		return val, err
 
 	case *goredis.StringSliceCmd:
 		return c.Result()

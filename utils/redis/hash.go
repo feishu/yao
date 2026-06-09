@@ -1,6 +1,7 @@
 package redis
 
 import (
+	goredis "github.com/go-redis/redis/v8"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 )
@@ -22,6 +23,9 @@ func ProcessHGet(process *process.Process) interface{} {
 	}
 
 	val, err := rdb.HGet(ctx, key, field).Result()
+	if err == goredis.Nil {
+		return nil
+	}
 	if err != nil {
 		exception.New("redis HGET error: %s", 500, err.Error()).Throw()
 	}

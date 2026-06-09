@@ -196,6 +196,11 @@ func Init() {
 		"HMSet":   redis.ProcessHMSet,
 		"HGetAll": redis.ProcessHGetAll,
 		"HDel":    redis.ProcessHDel,
+		"HExists": redis.ProcessHExists,
+		"HKeys":   redis.ProcessHKeys,
+		"HVals":   redis.ProcessHVals,
+		"HLen":    redis.ProcessHLen,
+		"HIncrBy": redis.ProcessHIncrBy,
 
 		// List 操作
 		"LPush":  redis.ProcessLPush,
@@ -204,22 +209,34 @@ func Init() {
 		"RPop":   redis.ProcessRPop,
 		"LRange": redis.ProcessLRange,
 		"LLen":   redis.ProcessLLen,
+		"LIndex": redis.ProcessLIndex,
+		"LSet":   redis.ProcessLSet,
+		"LRem":   redis.ProcessLRem,
 
 		// Set 操作
-		"SAdd":     redis.ProcessSAdd,
-		"SRem":     redis.ProcessSRem,
-		"SMembers": redis.ProcessSMembers,
+		"SAdd":        redis.ProcessSAdd,
+		"SRem":        redis.ProcessSRem,
+		"SMembers":    redis.ProcessSMembers,
+		"SIsMember":   redis.ProcessSIsMember,
+		"SCard":       redis.ProcessSCard,
+		"SPop":        redis.ProcessSPop,
+		"SRandMember": redis.ProcessSRandMember,
+		"SUnion":      redis.ProcessSUnion,
+		"SInter":      redis.ProcessSInter,
+		"SDiff":       redis.ProcessSDiff,
 
 		// Sorted Set 操作
-		"ZAdd":      redis.ProcessZAdd,
-		"ZRem":      redis.ProcessZRem,
-		"ZRange":    redis.ProcessZRange,
-		"ZRevRange": redis.ProcessZRevRange,
-		"ZScore":    redis.ProcessZScore,
-		"ZCard":     redis.ProcessZCard,
-		"ZIncrBy":   redis.ProcessZIncrBy,
-		"ZRank":     redis.ProcessZRank,
-		"ZRevRank":  redis.ProcessZRevRank,
+		"ZAdd":          redis.ProcessZAdd,
+		"ZRem":          redis.ProcessZRem,
+		"ZRange":        redis.ProcessZRange,
+		"ZRevRange":     redis.ProcessZRevRange,
+		"ZRangeByScore": redis.ProcessZRangeByScore,
+		"ZScore":        redis.ProcessZScore,
+		"ZCard":         redis.ProcessZCard,
+		"ZCount":        redis.ProcessZCount,
+		"ZIncrBy":       redis.ProcessZIncrBy,
+		"ZRank":         redis.ProcessZRank,
+		"ZRevRank":      redis.ProcessZRevRank,
 	})
 
 	process.Register("utils.syncAwait", await.ProcessAwait)

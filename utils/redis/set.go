@@ -1,6 +1,7 @@
 package redis
 
 import (
+	goredis "github.com/go-redis/redis/v8"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 )
@@ -142,6 +143,9 @@ func ProcessSPop(process *process.Process) interface{} {
 	}
 
 	member, err := rdb.SPop(ctx, key).Result()
+	if err == goredis.Nil {
+		return nil
+	}
 	if err != nil {
 		exception.New("redis SPOP error: %s", 500, err.Error()).Throw()
 	}
@@ -174,6 +178,9 @@ func ProcessSRandMember(process *process.Process) interface{} {
 	}
 
 	member, err := rdb.SRandMember(ctx, key).Result()
+	if err == goredis.Nil {
+		return nil
+	}
 	if err != nil {
 		exception.New("redis SRANDMEMBER error: %s", 500, err.Error()).Throw()
 	}

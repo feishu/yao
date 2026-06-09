@@ -450,12 +450,18 @@ func ProcessRankingGetRank(process *process.Process) interface{} {
 
 	// 获取排名（从高到低）
 	rank, err := rdb.ZRevRank(ctx, key, member).Result()
+	if err == goredis.Nil {
+		return nil
+	}
 	if err != nil {
 		exception.New("redis ZREVRANK error: %s", 500, err.Error()).Throw()
 	}
 
 	// 获取分数
 	score, err := rdb.ZScore(ctx, key, member).Result()
+	if err == goredis.Nil {
+		return nil
+	}
 	if err != nil {
 		exception.New("redis ZSCORE error: %s", 500, err.Error()).Throw()
 	}
