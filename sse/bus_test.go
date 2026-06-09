@@ -225,3 +225,83 @@ func eventually(t *testing.T, timeout time.Duration, condition func() bool) {
 
 	t.Fatal("condition was not met before timeout")
 }
+
+type reconnectingFakeBus struct {
+	fakeSubscriberBus
+	probeAttempts int
+	subAttempts   int
+	lock          sync.Mutex
+}
+
+func (bus *reconnectingFakeBus) Probe(ctx context.Context) error {
+	bus.lock.Lock()
+	bus.probeAttempts++
+	bus.lock.Unlock()
+	return bus.probeErr
+}
+
+func (bus *reconnectingFakeBus) Subscribe(ctx context.Context, handler func(Event)) error {
+	bus.lock.Lock()
+	bus.subAttempts++
+	currentAttempt := bus.subAttempts
+	bus.lock.Unlock()
+
+	if currentAttempt == 1 {
+		return errors.New("temporary subscription error")
+	}
+
+	for {
+		select {
+		case event := <-bus.published:
+			handler(event)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func TestSubscriptionRegistryAutoReconnects(t *testing.T) {
+	hub := NewHub(2)
+	connection := hub.Add(Identity{SessionID: "sid-831", UserID: "831"})
+
+	bus := &reconnectingFakeBus{
+		fakeSubscriberBus: fakeSubscriberBus{published: make(chan Event, 1)},
+	}
+	registry := NewSubscriptionRegistry(hub)
+	t.Cleanup(func() { registry.Stop("redis") })
+
+	// 第一次 Ensure，由于 Subscribe 会在第一次尝试时报错，所以虽然 Ensure 返回 true (因为 Probe 成功了)，
+	// 但底层的 Subscribe 协程会抛错并导致被标记为 unavailable，然后再自动重连恢复。
+	if ok := registry.Ensure(context.Background(), "redis", bus); !ok {
+		t.Fatal("Ensure returned false")
+	}
+
+	// 等待发生自动重连并标记为重新可用
+	eventually(t, 2*time.Second, func() bool {
+		bus.lock.Lock()
+		attempts := bus.subAttempts
+		bus.lock.Unlock()
+		return attempts >= 2 && registry.IsAvailable("redis")
+	})
+
+	// 重新可用后，发布消息应该能正常投递
+	want := Event{UserID: "831", Event: "message", Data: "hello-reconnect"}
+	if err := bus.Publish(context.Background(), want); err != nil {
+		t.Fatalf("Publish returned error: %v", err)
+	}
+
+	select {
+	case got := <-connection.Events():
+		if got.UserID != want.UserID {
+			t.Fatalf("UserID = %q, want %q", got.UserID, want.UserID)
+		}
+		if got.Event != want.Event {
+			t.Fatalf("Event = %q, want %q", got.Event, want.Event)
+		}
+		if got.Data != want.Data {
+			t.Fatalf("Data = %#v, want %#v", got.Data, want.Data)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected bus event after reconnect")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 )
 
 type Bus interface {
@@ -84,11 +85,37 @@ func (registry *SubscriptionRegistry) Ensure(ctx context.Context, key string, bu
 		return false
 	}
 	go func() {
-		err := bus.Subscribe(subCtx, func(event Event) {
-			registry.hub.Deliver(event)
-		})
-		if err != nil && !errors.Is(err, context.Canceled) && subCtx.Err() == nil {
+		backoff := 100 * time.Millisecond
+		maxBackoff := 5 * time.Second
+		for {
+			if subCtx.Err() != nil {
+				return
+			}
+
+			err := bus.Subscribe(subCtx, func(event Event) {
+				backoff = 100 * time.Millisecond
+				registry.hub.Deliver(event)
+			})
+
+			if err == nil || errors.Is(err, context.Canceled) || subCtx.Err() != nil {
+				return
+			}
+
 			registry.markUnavailable(key, state)
+
+			select {
+			case <-subCtx.Done():
+				return
+			case <-time.After(backoff):
+				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
+			}
+
+			if err := bus.Probe(subCtx); err == nil {
+				registry.markAvailable(key, state)
+			}
 		}
 	}()
 
