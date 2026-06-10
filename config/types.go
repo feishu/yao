@@ -25,6 +25,14 @@ type Config struct {
 	Session       Session  `json:"session,omitempty"`                                         // Session Config
 	Studio        Studio   `json:"studio,omitempty"`                                          // Studio config
 	Runtime       Runtime  `json:"runtime,omitempty"`                                         // Runtime config
+	PProf         PProf    `json:"pprof,omitempty"`                                           // pprof 诊断服务配置
+}
+
+// PProf pprof 诊断服务配置
+type PProf struct {
+	Enabled bool   `json:"enabled,omitempty" env:"YAO_PPROF_ENABLED" envDefault:"false"` // 是否启用 pprof 诊断服务
+	Host    string `json:"host,omitempty" env:"YAO_PPROF_HOST" envDefault:"127.0.0.1"`   // 监听地址，默认只绑定本机
+	Port    int    `json:"port,omitempty" env:"YAO_PPROF_PORT" envDefault:"6060"`        // 监听端口
 }
 
 // Studio the studio config

@@ -41,6 +41,10 @@ func Start(cfg config.Config) (*http.Server, error) {
 		neo.Neo.API(router, "/api/__yao/neo")
 	}
 
+	if err := startConfiguredPProf(cfg.PProf); err != nil {
+		return nil, err
+	}
+
 	go func() {
 		err = srv.Start()
 	}()
@@ -55,17 +59,25 @@ func Restart(srv *http.Server, cfg config.Config) error {
 	api.SetGuards(Guards)
 	api.SetRoutes(router, "/api", cfg.AllowFrom...)
 	srv.Reset(router)
+	if err := startConfiguredPProf(cfg.PProf); err != nil {
+		return err
+	}
 	return srv.Restart()
 }
 
 // Stop the yao service
 func Stop(srv *http.Server) error {
+	if srv == nil {
+		return stopConfiguredPProf()
+	}
+
 	err := srv.Stop()
 	if err != nil {
+		_ = stopConfiguredPProf()
 		return err
 	}
 	<-srv.Event()
-	return nil
+	return stopConfiguredPProf()
 }
 
 func prepare() error {

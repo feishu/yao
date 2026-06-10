@@ -84,6 +84,28 @@ func TestLoadCanDisableInspectSourceContent(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultsPProfOff(t *testing.T) {
+	withUnsetEnv(t, "YAO_PPROF_ENABLED")
+	withUnsetEnv(t, "YAO_PPROF_HOST")
+	withUnsetEnv(t, "YAO_PPROF_PORT")
+
+	cfg := Load()
+	assert.False(t, cfg.PProf.Enabled)
+	assert.Equal(t, "127.0.0.1", cfg.PProf.Host)
+	assert.Equal(t, 6060, cfg.PProf.Port)
+}
+
+func TestLoadCanEnablePProf(t *testing.T) {
+	t.Setenv("YAO_PPROF_ENABLED", "true")
+	t.Setenv("YAO_PPROF_HOST", "127.0.0.2")
+	t.Setenv("YAO_PPROF_PORT", "6061")
+
+	cfg := Load()
+	assert.True(t, cfg.PProf.Enabled)
+	assert.Equal(t, "127.0.0.2", cfg.PProf.Host)
+	assert.Equal(t, 6061, cfg.PProf.Port)
+}
+
 func withUnsetEnv(t *testing.T, key string) {
 	t.Helper()
 
