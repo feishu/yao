@@ -84,6 +84,15 @@ func TestLoadCanDisableInspectSourceContent(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultsRuntimePoolSize(t *testing.T) {
+	withUnsetEnv(t, "YAO_RUNTIME_MIN")
+	withUnsetEnv(t, "YAO_RUNTIME_MAX")
+
+	cfg := Load()
+	assert.Equal(t, uint(10), cfg.Runtime.MinSize)
+	assert.Equal(t, uint(100), cfg.Runtime.MaxSize)
+}
+
 func TestLoadDefaultsPProfOff(t *testing.T) {
 	withUnsetEnv(t, "YAO_PPROF_ENABLED")
 	withUnsetEnv(t, "YAO_PPROF_HOST")
