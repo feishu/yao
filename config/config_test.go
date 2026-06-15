@@ -84,6 +84,20 @@ func TestLoadCanDisableInspectSourceContent(t *testing.T) {
 	}
 }
 
+func TestLoadDefaultsRuntimeSourceMapOff(t *testing.T) {
+	withUnsetEnv(t, "YAO_RUNTIME_SOURCE_MAP")
+
+	cfg := Load()
+	assert.False(t, cfg.Runtime.SourceMap)
+}
+
+func TestLoadCanEnableRuntimeSourceMap(t *testing.T) {
+	t.Setenv("YAO_RUNTIME_SOURCE_MAP", "true")
+
+	cfg := Load()
+	assert.True(t, cfg.Runtime.SourceMap)
+}
+
 func TestLoadDefaultsRuntimePoolSize(t *testing.T) {
 	withUnsetEnv(t, "YAO_RUNTIME_MIN")
 	withUnsetEnv(t, "YAO_RUNTIME_MAX")

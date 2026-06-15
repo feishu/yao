@@ -103,6 +103,30 @@ func TestInspectFromProgrammaticConfigKeepsSourceContentDefault(t *testing.T) {
 	}
 }
 
+func TestSourceMapEnabledOnlyInDevelopment(t *testing.T) {
+	if !sourceMapEnabled(config.Config{
+		Mode: "development",
+		Runtime: config.Runtime{
+			SourceMap: true,
+		},
+	}) {
+		t.Fatal("expected source map to be enabled in development when configured")
+	}
+
+	if sourceMapEnabled(config.Config{
+		Mode: "production",
+		Runtime: config.Runtime{
+			SourceMap: true,
+		},
+	}) {
+		t.Fatal("expected production source map config to be ignored")
+	}
+
+	if sourceMapEnabled(config.Config{Mode: "development"}) {
+		t.Fatal("expected development source map to stay off by default")
+	}
+}
+
 func boolPtr(value bool) *bool {
 	return &value
 }

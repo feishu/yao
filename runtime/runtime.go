@@ -15,10 +15,7 @@ import (
 // Start v8 runtime
 func Start(cfg config.Config) error {
 
-	debug := false
-	if cfg.Mode == "development" {
-		debug = true
-	}
+	debug := cfg.Mode == "development"
 
 	inspect, err := inspectFromConfig(cfg)
 	if err != nil {
@@ -37,6 +34,7 @@ func Start(cfg config.Config) error {
 		DefaultTimeout:    cfg.Runtime.DefaultTimeout,
 		ContextTimeout:    cfg.Runtime.ContextTimeout,
 		Import:            cfg.Runtime.Import,
+		SourceMap:         sourceMapEnabled(cfg),
 		Debug:             debug,
 		ConsoleMode:       cfg.Mode,
 		Inspect:           inspect,
@@ -65,6 +63,10 @@ func Start(cfg config.Config) error {
 	}
 
 	return nil
+}
+
+func sourceMapEnabled(cfg config.Config) bool {
+	return cfg.Mode == "development" && cfg.Runtime.SourceMap
 }
 
 func inspectFromConfig(cfg config.Config) (v8.Inspect, error) {

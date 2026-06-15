@@ -74,6 +74,7 @@ type Runtime struct {
 	HeapAvailableSize    uint64 `json:"heapAvailableSize,omitempty" env:"YAO_RUNTIME_HEAP_AVAILABLE" envDefault:"524288000"`       // the isolate will be re-created when the available size is smaller than this value, and the default value is 524288000 (500M)
 	Precompile           bool   `json:"precompile,omitempty" env:"YAO_RUNTIME_PRECOMPILE" envDefault:"false"`                      // if true compile scripts when the VM is created. this will increase the load time, but the script will run faster. the default value is false
 	Import               bool   `json:"import,omitempty"  env:"YAO_RUNTIME_IMPORT" envDefault:"true"`                              // If false the import statement will be disabled, the default value is true.
+	SourceMap            bool   `json:"sourceMap,omitempty" env:"YAO_RUNTIME_SOURCE_MAP" envDefault:"false"`                       // If true and running in development mode, keep TypeScript source maps for debug and stack trace mapping.
 	Inspect              string `json:"inspect,omitempty" env:"YAO_RUNTIME_INSPECT"`                                               // V8 inspector address, development only. e.g. 127.0.0.1:9229
 	InspectTrace         bool   `json:"inspectTrace,omitempty" env:"YAO_RUNTIME_INSPECT_TRACE" envDefault:"false"`                 // If true, write V8 inspector CDP trace messages.
 	InspectTracePath     string `json:"inspectTracePath,omitempty" env:"YAO_RUNTIME_INSPECT_TRACE_PATH"`                           // Optional CDP trace path. Defaults to /tmp/cdp_trace.log when trace is enabled.
