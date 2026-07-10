@@ -105,3 +105,52 @@
 - `yao scripts` 已增加 `-e, --error`，只输出脚本错误
 - 已验证：`go test ./script -run TestLoadAggregatesErrorsAndContinues`、`go test ./cmd`、`go run . scripts --help`
 - 额外尝试直接跑 `github.com/yaoapp/gou/runtime/v8` 测试，但该包现有测试夹具缺失 `runtime/basic.js`，失败与本次改动无直接关系
+
+---
+
+# gou task 并发 map 修复计划
+
+## 背景
+- yao 进程崩溃日志显示 `fatal error: concurrent map writes`。
+- 栈顶位于 `github.com/yaoapp/gou/task.(*Task).start`。
+- `Task.Add` 写入 `t.jobs` 时持有锁，但 `Task.start` 删除 `t.jobs`、`Task.Get` 读取 `t.jobs`、`Progress` 读取并更新 job 状态时缺少同一把锁保护。
+
+## 实施清单
+- [x] 新增失败测试，复现任务完成时并发删除 `t.jobs` 的问题
+- [x] 为 `Task` 增加专门保护 `jobs` 和 job 状态的读写锁
+- [x] 统一保护 `t.jobs` 的 add/delete/get/progress 访问路径
+- [x] 避免持有 `jobs` 锁执行业务 handler
+- [x] 运行 `gou/task` 针对性测试和回归测试
+
+## Review
+- 已新增 `TestTaskConcurrentJobCompletionDoesNotRace`，红灯时 `go test -race ./task -run TestTaskConcurrentJobCompletionDoesNotRace -count=1` 复现 `task.go:171` 的 data race 和 `fatal error: concurrent map writes`。
+- 已在 `Task` 内增加 `jobsMu sync.RWMutex`，保护 `t.jobs` 以及 `job.status`、`job.response`、`job.curr`、`job.total`、`job.message` 的并发读写。
+- 已将任务完成删除改为 `deleteJob`，避免多个 worker 同时 `delete(t.jobs, id)`。
+- 已验证：
+  - `/usr/local/go/bin/go test -race ./task -run TestTaskConcurrentJobCompletionDoesNotRace -count=1`
+  - `/usr/local/go/bin/go test ./task -run 'Test(Start|Get|TaskConcurrentJobCompletionDoesNotRace)$' -count=1`
+  - `/usr/local/go/bin/go test ./task -run '^$' -count=1`（yao 侧编译检查）
+- 完整 `gou/task` 包测试当前仍被既有夹具缺失阻塞：`task/scripts/tests/task/mail.js` 不存在。
+- 完整 `yao/task` 包测试当前仍被既有应用夹具缺失阻塞：`app.yao` / `app.jsonc` / `app.json` 不存在。
+
+---
+
+# JWT 签名校验加固计划
+
+## 背景
+- 用户报告 `helper/jwt.go` 可能存在 `alg=none` 变体攻击和空签名攻击风险。
+- 当前 `JwtMake` 固定使用 HS256，但 `JwtValidate` 未显式限制可接受算法。
+- 当前格式检查只拒绝超过三段的 token，未提前拒绝少于三段或签名段为空的 token。
+
+## 实施清单
+- [x] 新增失败测试，证明非 HS256 签名算法会被拒绝
+- [x] 新增回归测试，覆盖 `none` 大小写变体和空签名 token
+- [x] 将 `JwtValidate` 校验算法限制为 HS256
+- [x] 将 token 格式检查收紧为正好三段且签名段非空
+- [x] 运行 `helper` 包针对性测试
+
+## Review
+- 已确认当前实现会接受用同一 secret 签出的 HS384 token，属于校验策略与签发策略不一致。
+- 已新增 `alg=none` 大小写变体、非 HS256 算法、空签名 token 的回归测试。
+- 已将 `JwtValidate` 的解析限制为 `HS256`，并在进入 JWT 解析前要求 token 正好三段且签名段非空。
+- 已验证 `/usr/local/go/bin/go test ./helper -count=1` 通过。

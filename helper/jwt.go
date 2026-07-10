@@ -43,9 +43,9 @@ func JwtValidate(tokenString string, secret ...[]byte) *JwtClaims {
 		return nil
 	}
 
-	// Check number of parts
+	// 校验 token 格式
 	parts := strings.Split(tokenString, ".")
-	if len(parts) > MaxTokenParts {
+	if len(parts) != MaxTokenParts || parts[0] == "" || parts[1] == "" || parts[2] == "" {
 		exception.New("Invalid token format", 401).Throw()
 		return nil
 	}
@@ -55,9 +55,14 @@ func JwtValidate(tokenString string, secret ...[]byte) *JwtClaims {
 		jwtSecret = secret[0]
 	}
 
-	token, err := jwt.ParseWithClaims(tokenString, &JwtClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return jwtSecret, nil
-	})
+	token, err := jwt.ParseWithClaims(
+		tokenString,
+		&JwtClaims{},
+		func(token *jwt.Token) (interface{}, error) {
+			return jwtSecret, nil
+		},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
+	)
 
 	if err != nil {
 		log.Error("JWT ParseWithClaims Error: %s", err)
