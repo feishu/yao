@@ -3,6 +3,7 @@ package utils
 import (
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/yao/sse"
+	"github.com/yaoapp/yao/utils/asynq"
 	"github.com/yaoapp/yao/utils/await"
 	"github.com/yaoapp/yao/utils/browser"
 	"github.com/yaoapp/yao/utils/conn"
@@ -240,4 +241,12 @@ func Init() {
 	})
 
 	process.Register("utils.syncAwait", await.ProcessAwait)
+
+	// Asynq 延时队列
+	asynq.Init()
+	process.RegisterGroup("utils.asynq", map[string]process.Handler{
+		"EnqueueIn": asynq.ProcessEnqueueIn,
+		"EnqueueAt": asynq.ProcessEnqueueAt,
+		"Cancel":    asynq.ProcessCancel,
+	})
 }
