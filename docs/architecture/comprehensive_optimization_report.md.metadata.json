@@ -1,0 +1,5 @@
+{
+  "summary": "Yao 引擎生态（yao / gou / kun / xun / v8go）全栈全维度架构与性能深度优化分析报告，涵盖核心架构瓶颈、并发安全与竞态排查、数据库与ORM执行效率、V8 JavaScript/TypeScript 运行时调优、内存与对象池化、工程化与可观测性规范，并提供切实可行的分期演进重构方案。",
+  "updatedAt": "2026-09-05T03:00:53.677814Z",
+  "userFacing": true
+}
