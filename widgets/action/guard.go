@@ -19,7 +19,7 @@ func (p *Process) UseGuard(c *gin.Context, id string) error {
 		}
 
 		if guard != "" {
-			if middleware, has := api.HTTPGuards[guard]; has {
+			if middleware, has := api.GetGuard(guard); has {
 				middleware(c)
 				continue
 			}

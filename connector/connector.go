@@ -4,45 +4,37 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/gou/connector"
+	"github.com/yaoapp/yao/asset"
 	"github.com/yaoapp/yao/config"
-	"github.com/yaoapp/yao/share"
 )
 
-// Load load store
-func Load(cfg config.Config) error {
-	exts := []string{"*.yao", "*.json", "*.jsonc"}
-	messages := []string{}
-	err := application.App.Walk("connectors", func(root, file string, isdir bool) error {
-		if isdir {
-			return nil
-		}
-		id := share.ID(root, file)
-		_, err := connector.Load(file, id)
-		if err != nil {
-			// 如果是 "does not support" 错误，尝试作为配置文件加载
-			if strings.Contains(err.Error(), "does not support") {
-				_, configErr := LoadConfig(file, id)
-				if configErr != nil {
-					messages = append(messages, fmt.Sprintf("failed to load as config: %s", configErr.Error()))
+func init() {
+	asset.Register(asset.Definition{
+		Name:     "connectors",
+		Dir:      "connectors",
+		Exts:     []string{"*.yao", "*.json", "*.jsonc"},
+		Optional: true,
+		Loader: func(file string, id string) error {
+			_, err := connector.Load(file, id)
+			if err != nil {
+				if strings.Contains(err.Error(), "does not support") {
+					_, configErr := LoadConfig(file, id)
+					if configErr != nil {
+						return fmt.Errorf("failed to load as config: %w", configErr)
+					}
+					return nil
 				}
-			} else {
-				messages = append(messages, err.Error())
+				return err
 			}
-		}
-		return nil
-	}, exts...)
+			return nil
+		},
+	})
+}
 
-	if err != nil {
-		return err
-	}
-
-	if len(messages) > 0 {
-		return fmt.Errorf("%s", strings.Join(messages, ";\n"))
-	}
-
-	return nil
+// Load load connectors（委托至统一资产引擎）
+func Load(cfg config.Config) error {
+	return asset.LoadOnly(cfg, "connectors")
 }
 
 // Unload Connector

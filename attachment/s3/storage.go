@@ -11,8 +11,10 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -29,16 +31,19 @@ const MaxImageSize = 1920
 
 // Storage the S3 storage driver
 type Storage struct {
-	Endpoint    string        `json:"endpoint" yaml:"endpoint"`
-	Region      string        `json:"region" yaml:"region"`
-	Key         string        `json:"key" yaml:"key"`
-	Secret      string        `json:"secret" yaml:"secret"`
-	Bucket      string        `json:"bucket" yaml:"bucket"`
-	Expiration  time.Duration `json:"expiration" yaml:"expiration"`
-	CacheDir    string        `json:"cache_dir" yaml:"cache_dir"`
-	client      *s3.Client
-	prefix      string
-	compression bool
+	Endpoint         string        `json:"endpoint" yaml:"endpoint"`
+	ExternalEndpoint string        `json:"external_endpoint,omitempty" yaml:"external_endpoint,omitempty"` // Public external endpoint (e.g. reverse proxy / custom CDN)
+	Region           string        `json:"region" yaml:"region"`
+	Key              string        `json:"key" yaml:"key"`
+	Secret           string        `json:"secret" yaml:"secret"`
+	Bucket           string        `json:"bucket" yaml:"bucket"`
+	Expiration       time.Duration `json:"expiration" yaml:"expiration"`
+	CacheDir         string        `json:"cache_dir" yaml:"cache_dir"`
+	Provider         string        `json:"provider,omitempty" yaml:"provider,omitempty"`           // Storage provider: "obs", "s3", "minio", etc.
+	UsePathStyle     *bool         `json:"use_path_style,omitempty" yaml:"use_path_style,omitempty"` // Explicitly enable/disable path-style addressing
+	client           *s3.Client
+	prefix           string
+	compression      bool
 }
 
 // New create a new S3 storage
@@ -50,23 +55,29 @@ func New(options map[string]interface{}) (*Storage, error) {
 	}
 
 	if endpoint, ok := options["endpoint"].(string); ok {
-		storage.Endpoint = endpoint
+		storage.Endpoint = strings.TrimSpace(endpoint)
+	}
+
+	if extEndpoint, ok := options["external_endpoint"].(string); ok {
+		storage.ExternalEndpoint = strings.TrimSpace(extEndpoint)
+	} else if extAddr, ok := options["external_address"].(string); ok {
+		storage.ExternalEndpoint = strings.TrimSpace(extAddr)
 	}
 
 	if region, ok := options["region"].(string); ok {
-		storage.Region = region
+		storage.Region = strings.TrimSpace(region)
 	}
 
 	if key, ok := options["key"].(string); ok {
-		storage.Key = key
+		storage.Key = strings.TrimSpace(key)
 	}
 
 	if secret, ok := options["secret"].(string); ok {
-		storage.Secret = secret
+		storage.Secret = strings.TrimSpace(secret)
 	}
 
 	if bucket, ok := options["bucket"].(string); ok {
-		storage.Bucket = bucket
+		storage.Bucket = strings.TrimSpace(bucket)
 	}
 
 	if prefix, ok := options["prefix"].(string); ok {
@@ -88,6 +99,21 @@ func New(options map[string]interface{}) (*Storage, error) {
 		storage.compression = compression
 	}
 
+	if provider, ok := options["provider"].(string); ok {
+		storage.Provider = strings.ToLower(strings.TrimSpace(provider))
+	}
+
+	if ups, ok := options["use_path_style"].(bool); ok {
+		storage.UsePathStyle = &ups
+	} else if ps, ok := options["path_style"].(bool); ok {
+		storage.UsePathStyle = &ps
+	}
+
+	// Provider & PathStyle detection
+	lowerEndpoint := strings.ToLower(storage.Endpoint)
+	isOBS := storage.Provider == "obs" || strings.Contains(lowerEndpoint, ".myhuaweicloud.com")
+	isAWS := storage.Provider == "s3" || storage.Provider == "aws" || strings.Contains(lowerEndpoint, ".amazonaws.com")
+
 	// Validate required fields
 	if storage.Key == "" || storage.Secret == "" {
 		return nil, fmt.Errorf("key and secret are required")
@@ -97,20 +123,68 @@ func New(options map[string]interface{}) (*Storage, error) {
 		return nil, fmt.Errorf("bucket is required")
 	}
 
+	// Determine UsePathStyle:
+	// - If explicitly configured, respect user setting
+	// - For OBS and AWS, default to false (Virtual Hosted Style required by OBS)
+	// - For others (MinIO, rustfs, Ceph, local IP), default to true for backward compatibility
+	usePathStyle := true
+	if storage.UsePathStyle != nil {
+		usePathStyle = *storage.UsePathStyle
+	} else if isOBS || isAWS {
+		usePathStyle = false
+	}
+	storage.UsePathStyle = &usePathStyle
+
+	// Region inference for OBS: OBS requires a valid physical region for SigV4 scope (cannot be "auto")
+	if isOBS && (storage.Region == "" || storage.Region == "auto") {
+		re := regexp.MustCompile(`obs\.([a-z0-9-]+)\.myhuaweicloud\.com`)
+		if matches := re.FindStringSubmatch(storage.Endpoint); len(matches) > 1 {
+			storage.Region = matches[1]
+		} else {
+			storage.Region = "cn-north-4" // default Huawei Cloud region fallback
+		}
+	}
+
+	// Sanitize and normalize Endpoint
+	var baseEndpoint *string
+	if storage.Endpoint != "" {
+		cleanEndpoint := storage.Endpoint
+		if !strings.HasPrefix(cleanEndpoint, "http://") && !strings.HasPrefix(cleanEndpoint, "https://") {
+			cleanEndpoint = "https://" + cleanEndpoint
+		}
+
+		if u, err := url.Parse(cleanEndpoint); err == nil {
+			// Strip trailing slash
+			u.Path = strings.TrimSuffix(u.Path, "/")
+			// Strip bucket in path if present
+			if strings.HasSuffix(u.Path, "/"+storage.Bucket) {
+				u.Path = strings.TrimSuffix(u.Path, "/"+storage.Bucket)
+			}
+			// In Virtual-Hosted mode, if bucket is already in host prefix, strip it to prevent duplication
+			if !usePathStyle && strings.HasPrefix(u.Host, storage.Bucket+".") {
+				u.Host = strings.TrimPrefix(u.Host, storage.Bucket+".")
+			}
+			cleanEndpoint = u.Scheme + "://" + u.Host + u.Path
+		}
+		baseEndpoint = aws.String(cleanEndpoint)
+	}
+
+	// Sanitize and normalize ExternalEndpoint
+	if storage.ExternalEndpoint != "" {
+		cleanExternal := storage.ExternalEndpoint
+		if !strings.HasPrefix(cleanExternal, "http://") && !strings.HasPrefix(cleanExternal, "https://") {
+			cleanExternal = "https://" + cleanExternal
+		}
+		cleanExternal = strings.TrimSuffix(cleanExternal, "/")
+		storage.ExternalEndpoint = cleanExternal
+	}
+
 	// Create S3 client
 	opts := s3.Options{
 		Region:       storage.Region,
 		Credentials:  credentials.NewStaticCredentialsProvider(storage.Key, storage.Secret, ""),
-		UsePathStyle: true,
-	}
-
-	if storage.Endpoint != "" {
-		// Remove bucket name from endpoint if present
-		endpoint := storage.Endpoint
-		if strings.Contains(endpoint, "/"+storage.Bucket) {
-			endpoint = strings.TrimSuffix(endpoint, "/"+storage.Bucket)
-		}
-		opts.BaseEndpoint = aws.String(endpoint)
+		UsePathStyle: usePathStyle,
+		BaseEndpoint: baseEndpoint,
 	}
 
 	storage.client = s3.New(opts)
@@ -357,7 +431,7 @@ func (storage *Storage) URL(ctx context.Context, path string) string {
 		return ""
 	}
 
-	return request.URL
+	return storage.rewriteURL(request.URL)
 }
 
 // GetPresignedUrl gets a presigned URL for a file
@@ -385,7 +459,45 @@ func (storage *Storage) GetPresignedUrl(ctx context.Context, path string, conten
 		return ""
 	}
 
-	return request.URL
+	return storage.rewriteURL(request.URL)
+}
+
+// rewriteURL maps an internal presigned URL to the configured ExternalEndpoint if set
+func (storage *Storage) rewriteURL(rawURL string) string {
+	if storage.ExternalEndpoint == "" || rawURL == "" {
+		return rawURL
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	extU, err := url.Parse(storage.ExternalEndpoint)
+	if err != nil {
+		return rawURL
+	}
+
+	// Determine internal base path to strip if present
+	internalPath := ""
+	if storage.Endpoint != "" {
+		if inU, err := url.Parse(storage.Endpoint); err == nil {
+			internalPath = strings.TrimSuffix(inU.Path, "/")
+		}
+	}
+
+	relPath := u.Path
+	if internalPath != "" && strings.HasPrefix(relPath, internalPath) {
+		relPath = strings.TrimPrefix(relPath, internalPath)
+	}
+	relPath = "/" + strings.TrimPrefix(relPath, "/")
+
+	extBasePath := strings.TrimSuffix(extU.Path, "/")
+	u.Scheme = extU.Scheme
+	u.Host = extU.Host
+	u.Path = extBasePath + relPath
+
+	return u.String()
 }
 
 // Exists checks if a file exists in S3

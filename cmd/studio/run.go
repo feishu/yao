@@ -84,21 +84,11 @@ var RunCmd = &cobra.Command{
 			}
 		}
 
-		script, err := v8.SelectRoot(service)
-		if err != nil {
-			fmt.Println(color.RedString(L("Fatal: %s"), err.Error()))
-		}
-
 		sid := uuid.New().String()
-		global := map[string]interface{}{}
-		ctx, err := script.NewContext(sid, global)
-		if err != nil {
-			fmt.Println(color.RedString(L("Fatal: %s"), err.Error()))
-		}
-
-		defer ctx.Close()
-
-		res, err := ctx.Call(method, pargs...)
+		res, err := v8.Call(service, method, pargs, v8.CallOption{
+			Sid:  sid,
+			Root: true,
+		})
 		if err != nil {
 			fmt.Println(color.RedString("--------------------------------------"))
 			fmt.Println(color.RedString(L("%s Error"), args[0]))

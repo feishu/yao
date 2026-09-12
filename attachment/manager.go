@@ -32,8 +32,11 @@ import (
 var _ FileManager = (*Manager)(nil)
 
 // Managers the managers
-var Managers = map[string]*Manager{}
-var uploadChunks = sync.Map{}
+var (
+	Managers     = map[string]*Manager{}
+	managersLock sync.RWMutex
+	uploadChunks = sync.Map{}
+)
 
 // UploadChunk is the chunk data
 type UploadChunk struct {
@@ -234,7 +237,9 @@ func Register(name string, driver string, option ManagerOption) (*Manager, error
 	manager.Name = name
 
 	// Register the manager
+	managersLock.Lock()
 	Managers[name] = manager
+	managersLock.Unlock()
 	return manager, nil
 }
 
@@ -285,11 +290,54 @@ func RegisterDefault(name string) (*Manager, error) {
 
 // Select retrieves a manager by its ID
 func Select(id string) (*Manager, error) {
+	managersLock.RLock()
 	manager, exists := Managers[id]
+	managersLock.RUnlock()
 	if !exists {
 		return nil, fmt.Errorf("attachment %s not loaded", id)
 	}
 	return manager, nil
+}
+
+// Count returns the number of registered managers
+func Count() int {
+	managersLock.RLock()
+	defer managersLock.RUnlock()
+	return len(Managers)
+}
+
+// Range iterates over all registered managers
+func Range(f func(name string, manager *Manager) bool) {
+	managersLock.RLock()
+	defer managersLock.RUnlock()
+	for k, v := range Managers {
+		if !f(k, v) {
+			break
+		}
+	}
+}
+
+// parseEnvFallback parses environment variable expressions supporting fallback candidates separated by "||".
+// Example: "$ENV.OBS_API || $ENV.S3_API || https://obs.cn-north-4.myhuaweicloud.com"
+func parseEnvFallback(expr string) string {
+	parts := strings.Split(expr, "||")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "$ENV.") {
+			envKey := strings.TrimPrefix(part, "$ENV.")
+			if val := os.Getenv(envKey); strings.TrimSpace(val) != "" {
+				return strings.TrimSpace(val)
+			}
+		} else if strings.HasPrefix(part, "${") && strings.HasSuffix(part, "}") {
+			if val := os.ExpandEnv(part); strings.TrimSpace(val) != "" {
+				return strings.TrimSpace(val)
+			}
+		} else if part != "" && !strings.HasPrefix(part, "$") {
+			// Literal fallback value
+			return part
+		}
+	}
+	return ""
 }
 
 // ReplaceEnv replaces the environment variables in the options
@@ -298,8 +346,8 @@ func (option *ManagerOption) ReplaceEnv(root string) {
 		// Replace the environment variables in the options
 		for k, v := range option.Options {
 			if iv, ok := v.(string); ok {
-				if strings.HasPrefix(iv, "$ENV.") {
-					iv = os.ExpandEnv(fmt.Sprintf("${%s}", strings.TrimPrefix(iv, "$ENV.")))
+				if strings.Contains(iv, "$ENV.") {
+					iv = parseEnvFallback(iv)
 					option.Options[k] = iv
 				}
 
@@ -682,6 +730,38 @@ func (manager Manager) URL(ctx context.Context, fileID string) string {
 // GetPresignedUrl gets a presigned URL for a file
 func (manager Manager) GetPresignedUrl(ctx context.Context, fileID string, contentType string) string {
 	return manager.storage.GetPresignedUrl(ctx, fileID, contentType)
+}
+
+// PutObject uploads raw bytes/reader directly to storage without touching database
+func (manager Manager) PutObject(ctx context.Context, path string, reader io.Reader, contentType string) (string, error) {
+	if manager.storage == nil {
+		return "", fmt.Errorf("storage not initialized")
+	}
+	return manager.storage.Upload(ctx, path, reader, contentType)
+}
+
+// GetObject retrieves raw object content from storage without touching database
+func (manager Manager) GetObject(ctx context.Context, path string) ([]byte, error) {
+	if manager.storage == nil {
+		return nil, fmt.Errorf("storage not initialized")
+	}
+	return manager.storage.GetContent(ctx, path)
+}
+
+// DeleteObject deletes an object from storage without touching database
+func (manager Manager) DeleteObject(ctx context.Context, path string) error {
+	if manager.storage == nil {
+		return fmt.Errorf("storage not initialized")
+	}
+	return manager.storage.Delete(ctx, path)
+}
+
+// ExistsObject checks if an object exists in storage without touching database
+func (manager Manager) ExistsObject(ctx context.Context, path string) bool {
+	if manager.storage == nil {
+		return false
+	}
+	return manager.storage.Exists(ctx, path)
 }
 
 // Read reads a file and returns the content as bytes

@@ -1,0 +1,133 @@
+package asset
+
+import (
+	"fmt"
+
+	"github.com/yaoapp/yao/config"
+)
+
+// DefaultEngine 默认全局资产引擎实例
+var DefaultEngine = NewEngine()
+
+// Register 注册全局资产定义
+func Register(def Definition) {
+	DefaultEngine.Register(def)
+}
+
+// Load 按照依赖拓扑序加载所有注册的资产
+func Load(cfg config.Config) error {
+	return DefaultEngine.Load(cfg)
+}
+
+// LoadOnly 仅加载指定的一组资产（自动根据依赖拓扑排序）
+func LoadOnly(cfg config.Config, names ...string) error {
+	return DefaultEngine.LoadOnly(cfg, names...)
+}
+
+// Reset 重置全局资产引擎（用于测试）
+func Reset() {
+	DefaultEngine.Reset()
+	registerBuiltinAssets(DefaultEngine)
+}
+
+// Register 向引擎注册资产定义
+func (e *Engine) Register(def Definition) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.definitions[def.Name] = def
+}
+
+// Get 获取指定资产定义
+func (e *Engine) Get(name string) (Definition, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	def, has := e.definitions[name]
+	return def, has
+}
+
+// Reset 清理已注册的资产定义
+func (e *Engine) Reset() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.definitions = make(map[string]Definition)
+}
+
+// Load 按照拓扑排序全量加载资产
+func (e *Engine) Load(cfg config.Config) error {
+	e.mu.RLock()
+	defs := make([]Definition, 0, len(e.definitions))
+	for _, def := range e.definitions {
+		defs = append(defs, def)
+	}
+	e.mu.RUnlock()
+
+	sortedDefs, err := TopologicalSort(defs)
+	if err != nil {
+		return err
+	}
+
+	var allErrors ErrorList
+	for _, def := range sortedDefs {
+		if err := e.discoverAndLoad(def, cfg); err != nil {
+			if list, ok := err.(ErrorList); ok {
+				allErrors = append(allErrors, list...)
+			} else {
+				allErrors = append(allErrors, ErrorItem{
+					Type: def.Name,
+					File: def.Dir,
+					Err:  err,
+				})
+			}
+		}
+	}
+
+	if len(allErrors) > 0 {
+		return allErrors
+	}
+	return nil
+}
+
+// LoadOnly 仅加载选定的资产及其依赖
+func (e *Engine) LoadOnly(cfg config.Config, names ...string) error {
+	e.mu.RLock()
+	targetMap := make(map[string]bool, len(names))
+	for _, name := range names {
+		targetMap[name] = true
+	}
+
+	selected := make([]Definition, 0, len(names))
+	for name := range targetMap {
+		if def, ok := e.definitions[name]; ok {
+			selected = append(selected, def)
+		} else {
+			e.mu.RUnlock()
+			return fmt.Errorf("asset type %s not registered", name)
+		}
+	}
+	e.mu.RUnlock()
+
+	sortedDefs, err := TopologicalSort(selected)
+	if err != nil {
+		return err
+	}
+
+	var allErrors ErrorList
+	for _, def := range sortedDefs {
+		if err := e.discoverAndLoad(def, cfg); err != nil {
+			if list, ok := err.(ErrorList); ok {
+				allErrors = append(allErrors, list...)
+			} else {
+				allErrors = append(allErrors, ErrorItem{
+					Type: def.Name,
+					File: def.Dir,
+					Err:  err,
+				})
+			}
+		}
+	}
+
+	if len(allErrors) > 0 {
+		return allErrors
+	}
+	return nil
+}

@@ -202,3 +202,71 @@ func TestS3Storage(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+func TestS3OBSConfiguration(t *testing.T) {
+	t.Run("OBS Domain Auto-Detection", func(t *testing.T) {
+		options := map[string]interface{}{
+			"endpoint": "https://obs.cn-north-4.myhuaweicloud.com",
+			"key":      "test-ak",
+			"secret":   "test-sk",
+			"bucket":   "my-obs-bucket",
+		}
+		storage, err := New(options)
+		assert.NoError(t, err)
+		assert.NotNil(t, storage)
+		assert.NotNil(t, storage.UsePathStyle)
+		assert.False(t, *storage.UsePathStyle, "OBS should default to Virtual-Hosted style (UsePathStyle=false)")
+		assert.Equal(t, "cn-north-4", storage.Region, "Region should be inferred from OBS endpoint")
+	})
+
+	t.Run("Explicit Provider OBS", func(t *testing.T) {
+		options := map[string]interface{}{
+			"provider": "obs",
+			"endpoint": "custom-obs.example.com",
+			"region":   "cn-east-3",
+			"key":      "test-ak",
+			"secret":   "test-sk",
+			"bucket":   "my-obs-bucket",
+		}
+		storage, err := New(options)
+		assert.NoError(t, err)
+		assert.NotNil(t, storage)
+		assert.NotNil(t, storage.UsePathStyle)
+		assert.False(t, *storage.UsePathStyle, "Provider OBS should force UsePathStyle=false")
+		assert.Equal(t, "cn-east-3", storage.Region)
+	})
+
+	t.Run("Default MinIO Backward Compatibility", func(t *testing.T) {
+		options := map[string]interface{}{
+			"endpoint": "http://127.0.0.1:9000",
+			"key":      "minioadmin",
+			"secret":   "minioadmin",
+			"bucket":   "minio-bucket",
+		}
+		storage, err := New(options)
+		assert.NoError(t, err)
+		assert.NotNil(t, storage)
+		assert.NotNil(t, storage.UsePathStyle)
+		assert.True(t, *storage.UsePathStyle, "Default/MinIO should maintain UsePathStyle=true")
+		assert.Equal(t, "auto", storage.Region)
+	})
+
+	t.Run("Endpoint Sanitization", func(t *testing.T) {
+		options := map[string]interface{}{
+			"provider": "obs",
+			"endpoint": "https://my-obs-bucket.obs.cn-north-4.myhuaweicloud.com/",
+			"key":      "test-ak",
+			"secret":   "test-sk",
+			"bucket":   "my-obs-bucket",
+		}
+		storage, err := New(options)
+		assert.NoError(t, err)
+		assert.NotNil(t, storage)
+		assert.False(t, *storage.UsePathStyle)
+		assert.Equal(t, "cn-north-4", storage.Region)
+
+		url := storage.URL(context.Background(), "image.png")
+		assert.Contains(t, url, "my-obs-bucket.obs.cn-north-4.myhuaweicloud.com/image.png")
+	})
+}
+

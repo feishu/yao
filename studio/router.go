@@ -204,37 +204,18 @@ func setRouter(router *gin.Engine) {
 		}
 
 		sid, _ := c.Get("__sid")
-		script, err := v8.SelectRoot(service)
-		if err != nil {
-			throw(c, 500, err.Error())
-			return
-		}
-
-		ctx, err := script.NewContext(fmt.Sprintf("%v", sid), nil)
+		res, err := v8.Call(service, fun.Method, fun.Args, v8.CallOption{
+			Context: c.Request.Context(),
+			Sid:     fmt.Sprintf("%v", sid),
+			Root:    true,
+		})
 		if err != nil {
 			code := 500
 			message := err.Error()
 			match := regExcp.FindStringSubmatch(message)
 			if len(match) > 0 {
-				code, err = strconv.Atoi(match[1])
-				if err == nil {
-					message = strings.TrimSpace(match[2])
-				}
-			}
-			throw(c, code, message)
-			return
-		}
-
-		defer ctx.Close()
-
-		res, err := ctx.Call(fun.Method, fun.Args...)
-		if err != nil {
-			code := 500
-			message := err.Error()
-			match := regExcp.FindStringSubmatch(message)
-			if len(match) > 0 {
-				code, err = strconv.Atoi(match[1])
-				if err == nil {
+				if parsedCode, errConv := strconv.Atoi(match[1]); errConv == nil {
+					code = parsedCode
 					message = strings.TrimSpace(match[2])
 				}
 			}

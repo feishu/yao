@@ -290,25 +290,18 @@ func processService(process *process.Process) interface{} {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	script, err := v8.Select(service)
+	res, err := v8.Call(service, method, args, v8.CallOption{
+		Context: ctx,
+		Sid:     process.Sid,
+		Global:  process.Global,
+	})
 	if err != nil {
-		exception.New("services.%s not loaded", 404, process.ArgsString(0)).Throw()
-		return nil
-	}
-
-	v8ctx, err := script.NewContext(process.Sid, process.Global)
-	if err != nil {
-		message := fmt.Sprintf("services.%s failed to create context. %s", process.ArgsString(0), err.Error())
-		log.Error("[V8] process error. %s", message)
-		exception.New(message, 500).Throw()
-		return nil
-	}
-
-	defer v8ctx.Close()
-
-	res, err := v8ctx.CallWith(ctx, method, args...)
-	if err != nil {
+		if strings.Contains(err.Error(), "not exists") {
+			exception.New("services.%s not loaded", 404, process.ArgsString(0)).Throw()
+			return nil
+		}
 		exception.New(err.Error(), 500).Throw()
+		return nil
 	}
 
 	return res

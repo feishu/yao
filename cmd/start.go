@@ -336,24 +336,27 @@ func printConnectors(silent bool) {
 }
 
 func printStores(silent bool) {
-	if len(store.Pools) == 0 {
+	count := store.Count()
+	if count == 0 {
 		return
 	}
 
 	if silent {
-		for name := range store.Pools {
+		store.Range(func(name string, _ store.Store) bool {
 			log.Info("[Store] %s loaded", name)
-		}
+			return true
+		})
 		return
 	}
 
 	fmt.Println(color.WhiteString("\n---------------------------------"))
-	fmt.Println(color.WhiteString(L("Stores List (%d)"), len(connector.Connectors)))
+	fmt.Println(color.WhiteString(L("Stores List (%d)"), count))
 	fmt.Println(color.WhiteString("---------------------------------"))
-	for name := range store.Pools {
+	store.Range(func(name string, _ store.Store) bool {
 		fmt.Print(color.CyanString("[Store]"))
 		fmt.Print(color.WhiteString(" %s\t loaded\n", name))
-	}
+		return true
+	})
 }
 
 func printStudio(silent bool, host string) {

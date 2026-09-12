@@ -3,9 +3,11 @@ package attachment
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"io"
 	"mime/multipart"
 	"path/filepath"
+	"strings"
 
 	"github.com/yaoapp/gou/fs"
 	"github.com/yaoapp/gou/process"
@@ -29,6 +31,12 @@ func init() {
 		"list":            processList,
 		"base64":          processBase64,
 		"getPresignedUrl": processGetURL,
+		"url":             processURL,
+		"getUrl":          processURL,
+		"put":             processPut,
+		"get":             processGet,
+		"delete":          processDelete,
+		"exists":          processExists,
 	})
 }
 
@@ -248,4 +256,133 @@ func processGetURL(process *process.Process) interface{} {
 	}
 
 	return manager.GetPresignedUrl(getContext(process), fileID, contentType)
+}
+
+// processURL attachment.url uploader path
+func processURL(process *process.Process) interface{} {
+	process.ValidateArgNums(2)
+	uploader := process.ArgsString(0)
+	path := process.ArgsString(1)
+
+	manager, err := Select(uploader)
+	if err != nil {
+		exception.New(err.Error(), 404).Throw()
+	}
+
+	return manager.URL(getContext(process), path)
+}
+
+// processPut attachment.put uploader path content [contentType]
+// content can be:
+// - []byte
+// - string: base64 string (with or without data:xxx;base64, prefix), or file content
+// - io.Reader
+func processPut(process *process.Process) interface{} {
+	process.ValidateArgNums(3)
+	uploader := process.ArgsString(0)
+	path := process.ArgsString(1)
+	contentArg := process.Args[2]
+
+	contentType := ""
+	if process.NumOfArgs() > 3 {
+		contentType = process.ArgsString(3)
+	}
+
+	var reader io.Reader
+	switch v := contentArg.(type) {
+	case []byte:
+		reader = bytes.NewReader(v)
+	case string:
+		// Check for data URI or base64 marker
+		str := strings.TrimSpace(v)
+		if idx := strings.Index(str, "base64,"); idx != -1 {
+			if contentType == "" && strings.HasPrefix(str, "data:") {
+				header := str[:idx]
+				contentType = strings.TrimPrefix(header, "data:")
+				contentType = strings.TrimSuffix(contentType, ";")
+			}
+			b64Data := str[idx+7:]
+			data, err := base64.StdEncoding.DecodeString(b64Data)
+			if err != nil {
+				exception.New("failed to decode base64 content: %v", 400, err).Throw()
+			}
+			reader = bytes.NewReader(data)
+		} else {
+			// Try decoding as standard base64; if invalid, treat as raw text/binary string
+			data, err := base64.StdEncoding.DecodeString(str)
+			if err == nil && len(data) > 0 {
+				reader = bytes.NewReader(data)
+			} else {
+				reader = strings.NewReader(v)
+			}
+		}
+	case io.Reader:
+		reader = v
+	default:
+		exception.New("invalid content argument: expected []byte, string or io.Reader", 400).Throw()
+	}
+
+	manager, err := Select(uploader)
+	if err != nil {
+		exception.New(err.Error(), 404).Throw()
+	}
+
+	uploadedPath, err := manager.PutObject(getContext(process), path, reader, contentType)
+	if err != nil {
+		exception.New(err.Error(), 500).Throw()
+	}
+
+	return uploadedPath
+}
+
+// processGet attachment.get uploader path
+func processGet(process *process.Process) interface{} {
+	process.ValidateArgNums(2)
+	uploader := process.ArgsString(0)
+	path := process.ArgsString(1)
+
+	manager, err := Select(uploader)
+	if err != nil {
+		exception.New(err.Error(), 404).Throw()
+	}
+
+	data, err := manager.GetObject(getContext(process), path)
+	if err != nil {
+		exception.New(err.Error(), 500).Throw()
+	}
+
+	return data
+}
+
+// processDelete attachment.delete uploader path
+func processDelete(process *process.Process) interface{} {
+	process.ValidateArgNums(2)
+	uploader := process.ArgsString(0)
+	path := process.ArgsString(1)
+
+	manager, err := Select(uploader)
+	if err != nil {
+		exception.New(err.Error(), 404).Throw()
+	}
+
+	err = manager.DeleteObject(getContext(process), path)
+	if err != nil {
+		exception.New(err.Error(), 500).Throw()
+	}
+
+	return nil
+}
+
+// processExists attachment.exists uploader path
+func processExists(process *process.Process) interface{} {
+	process.ValidateArgNums(2)
+	uploader := process.ArgsString(0)
+	path := process.ArgsString(1)
+
+	manager, err := Select(uploader)
+	if err != nil {
+		exception.New(err.Error(), 404).Throw()
+	}
+
+	return manager.ExistsObject(getContext(process), path)
 }

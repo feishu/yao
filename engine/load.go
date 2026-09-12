@@ -12,18 +12,16 @@ import (
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 	"github.com/yaoapp/yao/aigc"
-	"github.com/yaoapp/yao/api"
+	"github.com/yaoapp/yao/asset"
 	"github.com/yaoapp/yao/cert"
 	"github.com/yaoapp/yao/config"
 	"github.com/yaoapp/yao/connector"
 	"github.com/yaoapp/yao/data"
-	"github.com/yaoapp/yao/flow"
 	"github.com/yaoapp/yao/fs"
 	"github.com/yaoapp/yao/i18n"
 	"github.com/yaoapp/yao/importer"
 
 	// "github.com/yaoapp/yao/moapi"
-	"github.com/yaoapp/yao/model"
 	"github.com/yaoapp/yao/neo"
 	"github.com/yaoapp/yao/pack"
 	"github.com/yaoapp/yao/payment"
@@ -31,14 +29,11 @@ import (
 	"github.com/yaoapp/yao/plugin"
 	"github.com/yaoapp/yao/query"
 	"github.com/yaoapp/yao/runtime"
-	"github.com/yaoapp/yao/schedule"
 	"github.com/yaoapp/yao/script"
 	"github.com/yaoapp/yao/share"
 	"github.com/yaoapp/yao/socket"
-	"github.com/yaoapp/yao/store"
 
 	// sui "github.com/yaoapp/yao/sui/api"
-	"github.com/yaoapp/yao/task"
 	"github.com/yaoapp/yao/volcengine"
 	"github.com/yaoapp/yao/websocket"
 	"github.com/yaoapp/yao/widget"
@@ -165,22 +160,12 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 		printErr(cfg.Mode, "Script", err)
 	}
 
-	// Load Models
-	err = model.Load(cfg)
+	// Load Core Assets via Unified Asset Engine (Topological DAG: models/stores -> flows/tasks/schedules -> apis)
+	err = loadStep("Assets", func() error {
+		return asset.LoadOnly(cfg, "models", "stores", "flows", "tasks", "schedules", "apis")
+	}, nil)
 	if err != nil {
-		printErr(cfg.Mode, "Model", err)
-	}
-
-	// Load Data flows
-	err = flow.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "Flow", err)
-	}
-
-	// Load Stores
-	err = store.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "Store", err)
+		printErr(cfg.Mode, "Assets", err)
 	}
 
 	// Load Uploaders
@@ -208,12 +193,6 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 		printErr(cfg.Mode, "Plugin", err)
 	}
 
-	// Load Apis
-	err = api.Load(cfg) // 加载业务接口 API
-	if err != nil {
-		printErr(cfg.Mode, "API", err)
-	}
-
 	// Load Sockets
 	err = socket.Load(cfg) // Load sockets
 	if err != nil {
@@ -224,18 +203,6 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 	err = websocket.Load(cfg)
 	if err != nil {
 		printErr(cfg.Mode, "WebSocket", err)
-	}
-
-	// Load tasks
-	err = task.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "Task", err)
-	}
-
-	// Load schedules
-	err = schedule.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "Schedule", err)
 	}
 
 	// // Load AIGC
@@ -406,22 +373,12 @@ func Reload(cfg config.Config, options LoadOption) (err error) {
 		printErr(cfg.Mode, "Script", err)
 	}
 
-	// Load Models
-	err = model.Load(cfg)
+	// Reload Core Assets via Unified Asset Engine (Topological DAG: models/stores -> flows/tasks/schedules -> apis)
+	err = loadStep("Assets", func() error {
+		return asset.LoadOnly(cfg, "models", "stores", "flows", "tasks", "schedules", "apis")
+	}, nil)
 	if err != nil {
-		printErr(cfg.Mode, "Model", err)
-	}
-
-	// Load Data flows
-	err = flow.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "Flow", err)
-	}
-
-	// Load Stores
-	err = store.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "Store", err)
+		printErr(cfg.Mode, "Assets", err)
 	}
 
 	// Load Plugins
@@ -438,12 +395,6 @@ func Reload(cfg config.Config, options LoadOption) (err error) {
 	// 	printErr(cfg.Mode, "Widgets", err)
 	// }
 
-	// Load Apis
-	err = api.Load(cfg) // 加载业务接口 API
-	if err != nil {
-		printErr(cfg.Mode, "API", err)
-	}
-
 	// Load Sockets
 	err = socket.Load(cfg) // Load sockets
 	if err != nil {
@@ -454,18 +405,6 @@ func Reload(cfg config.Config, options LoadOption) (err error) {
 	err = websocket.Load(cfg)
 	if err != nil {
 		printErr(cfg.Mode, "WebSocket", err)
-	}
-
-	// Load tasks
-	err = task.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "Task", err)
-	}
-
-	// Load schedules
-	err = schedule.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "Schedule", err)
 	}
 
 	// Load Custom Widget

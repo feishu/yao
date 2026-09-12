@@ -84,13 +84,13 @@ func CleanCache() {
 // GetHTML get the html
 func (c *Cache) GetHTML(hash string) (string, bool) {
 
-	store, has := store.Pools[c.CacheStore]
-	if !has {
+	stor, err := store.Get(c.CacheStore)
+	if err != nil {
 		log.Warn(`[SUI] The cache store "%s" is not found`, c.CacheStore)
 		return "", false
 	}
 
-	v, has := store.Get(hash)
+	v, has := stor.Get(hash)
 	if !has {
 		return "", false
 	}
@@ -100,19 +100,19 @@ func (c *Cache) GetHTML(hash string) (string, bool) {
 
 // GetData get the data
 func (c *Cache) GetData(hash string) (Data, bool) {
-	store, has := store.Pools[c.CacheStore]
-	if !has {
+	stor, err := store.Get(c.CacheStore)
+	if err != nil {
 		log.Warn(`[SUI] The cache store "%s" is not found`, c.CacheStore)
 		return Data{}, false
 	}
 
-	v, has := store.Get(hash)
+	v, has := stor.Get(hash)
 	if !has {
 		return Data{}, false
 	}
 
 	data := Data{}
-	err := jsoniter.Unmarshal(v.([]byte), &data)
+	err = jsoniter.Unmarshal(v.([]byte), &data)
 	if err != nil {
 		log.Error(`[SUI] The data is not a valid json: %s`, err.Error())
 		return Data{}, false
@@ -123,8 +123,8 @@ func (c *Cache) GetData(hash string) (Data, bool) {
 
 // SetData set the data
 func (c *Cache) SetData(hash string, data Data, ttl time.Duration) {
-	store, has := store.Pools[c.CacheStore]
-	if !has {
+	stor, err := store.Get(c.CacheStore)
+	if err != nil {
 		log.Warn(`[SUI] The cache store "%s" is not found`, c.CacheStore)
 		return
 	}
@@ -135,25 +135,25 @@ func (c *Cache) SetData(hash string, data Data, ttl time.Duration) {
 		return
 	}
 
-	store.Set(hash, raw, ttl)
+	stor.Set(hash, raw, ttl)
 }
 
 // SetHTML set the html
 func (c *Cache) SetHTML(hash, html string, ttl time.Duration) {
-	store, has := store.Pools[c.CacheStore]
-	if !has {
+	stor, err := store.Get(c.CacheStore)
+	if err != nil {
 		log.Warn(`[SUI] The cache store "%s" is not found`, c.CacheStore)
 		return
 	}
-	store.Set(hash, html, ttl)
+	stor.Set(hash, html, ttl)
 }
 
 // DelHTML del the html
 func (c *Cache) DelHTML(hash string) {
-	store, has := store.Pools[c.CacheStore]
-	if !has {
+	stor, err := store.Get(c.CacheStore)
+	if err != nil {
 		log.Warn(`[SUI] The cache store "%s" is not found`, c.CacheStore)
 		return
 	}
-	store.Del(hash)
+	stor.Del(hash)
 }

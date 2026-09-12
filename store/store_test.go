@@ -21,9 +21,10 @@ func TestLoad(t *testing.T) {
 
 func check(t *testing.T) {
 	ids := map[string]bool{}
-	for id := range store.Pools {
+	store.Range(func(id string, _ store.Store) bool {
 		ids[id] = true
-	}
+		return true
+	})
 	assert.True(t, ids["cache"])
 	assert.True(t, ids["data"])
 	assert.True(t, ids["share"])

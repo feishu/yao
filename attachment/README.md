@@ -4,7 +4,10 @@ A comprehensive file upload package for Go that supports chunked uploads, file f
 
 ## Features
 
-- **Multiple Storage Backends**: Local filesystem and S3-compatible storage
+- **Multiple Storage Backends**: Local filesystem, S3-compatible storage (AWS S3, MinIO, rustfs) and Huawei Cloud OBS
+- **Reverse Proxy URL Rewriting**: Transparent external gateway domain mapping with full AWS SigV4 authentication preservation
+- **Client Direct Upload**: Presigned PUT URL generation for zero-bandwidth serverless client uploads
+- **Raw Object Storage (免库通道)**: Fast, database-free direct object operations (`put`, `get`, `delete`, `exists`, `url`)
 - **Chunked Upload Support**: Handle large files with standard HTTP Content-Range headers
 - **File Deduplication**: Content-based fingerprinting to avoid duplicate uploads
 - **File Compression**:
@@ -112,7 +115,7 @@ manager, err := attachment.New(attachment.ManagerOption{
 })
 ```
 
-#### S3 Storage
+#### S3 Storage (AWS S3 / MinIO)
 
 ```go
 manager, err := attachment.New(attachment.ManagerOption{
@@ -127,6 +130,75 @@ manager, err := attachment.New(attachment.ManagerOption{
         "prefix":   "attachments/",
     },
 })
+```
+
+#### Huawei Cloud OBS (华为云 OBS)
+
+```go
+manager, err := attachment.New(attachment.ManagerOption{
+    Driver:  "s3",
+    MaxSize: "100M",
+    Options: map[string]interface{}{
+        "provider":       "obs", // Optional: automatically detected if endpoint contains .myhuaweicloud.com
+        "endpoint":       "https://obs.cn-north-4.myhuaweicloud.com",
+        "region":         "cn-north-4", // Optional: automatically inferred from endpoint
+        "key":            "your-huawei-ak",
+        "secret":         "your-huawei-sk",
+        "bucket":         "your-bucket-name",
+        "prefix":         "attachments/",
+        "use_path_style": false, // Optional: automatically set to false for OBS
+    },
+})
+```
+
+#### Private S3 / rustfs / MinIO with Reverse Proxy (内网存储 + 外网反向代理)
+
+When S3/rustfs runs on a private network (e.g. `http://192.168.21.152:9000`), client browsers cannot access the internal IP directly. Configure `external_endpoint` (or `external_address`) to automatically map presigned URLs to the public gateway:
+
+```json
+{
+  "label": "rustfs S3 Uploader",
+  "driver": "s3",
+  "options": {
+    "endpoint": "$ENV.S3_API",
+    "external_endpoint": "$ENV.S3_EXTERNAL_ADDRESS",
+    "key": "$ENV.S3_ACCESS_KEY",
+    "secret": "$ENV.S3_SECRET_KEY",
+    "bucket": "$ENV.S3_BUCKET",
+    "prefix": "ehosp",
+    "cache_dir": "$ENV.S3_CACHE_PATH"
+  }
+}
+```
+
+```go
+// Presigned URLs will automatically use the external public gateway
+url := manager.GetPresignedUrl(ctx, "attachments/foo.png", "image/png")
+// Output: https://hlwyy.hljs3y.org.cn/storeapi/ehosp/attachments/foo.png?X-Amz-...
+```
+
+### Raw Object Storage (免数据库纯对象存储)
+
+For applications managing their own business tables without needing metadata stored in `__yao.attachment`:
+
+```go
+// Direct stream upload (zero disk writing)
+err := manager.PutObject(ctx, "reports/sheet.pdf", reader, "application/pdf")
+
+// Direct read
+bytes, err := manager.GetObject(ctx, "reports/sheet.pdf")
+
+// Check existence & delete
+exists := manager.ExistsObject(ctx, "reports/sheet.pdf")
+err := manager.DeleteObject(ctx, "reports/sheet.pdf")
+```
+
+Or via Process in TypeScript:
+```typescript
+Process("attachment.put", "rustfs", "reports/sheet.pdf", pdfBuffer, "application/pdf");
+Process("attachment.url", "rustfs", "reports/sheet.pdf"); // Get download URL
+Process("attachment.get", "rustfs", "reports/sheet.pdf"); // Get bytes
+Process("attachment.delete", "rustfs", "reports/sheet.pdf");
 ```
 
 ### Chunked Upload
@@ -790,3 +862,229 @@ fmt.Printf("Retrieved text: %s\n", savedText)
 #### `RegisterDefault(name string) (*Manager, error)`
 
 Registers a default attachment manager with sensible defaults for common file types.
+
+---
+
+## Yao Application Integration Guide (Yao 应用层集成指南)
+
+在 Yao 业务项目中，文件存储能力以 **Uploader（上传器）** 的形式统一组织，既支持前端**零服务器带宽直传**，也支持服务端**纯对象免库存储**与**元数据驱动的附件管理**。
+
+### 1. Uploader 配置文件定义 (`uploaders/*.yao`)
+
+在 Yao 项目的 `uploaders/` 目录下创建 DSL 配置文件，文件名即为该 Uploader 的唯一注册标识（例如 `rustfs.s3.yao` 对应名称 `"rustfs"`，`obs.s3.yao` 对应 `"obs"`）。
+
+#### 示例 A: 私有云 / 内网 S3 (如 rustfs, MinIO) + 外网网关反代
+当对象存储部署在局域网内网 IP（如 `http://192.168.21.152:9000`），浏览器等客户端无法直接连通时，配置 `external_endpoint`。Yao 会在生成预签名 URL 时自动将 Host/Path 替换为公网端点，**并 100% 保持 SigV4 认证签名合法**：
+
+```json
+// uploaders/rustfs.s3.yao
+{
+  "label": "rustfs S3 Uploader",
+  "description": "私有化兼容 S3 存储，支持外网网关反向代理",
+  "tags": ["rustfs", "s3", "cloud", "storage"],
+  "driver": "s3",
+  "options": {
+    "endpoint": "$ENV.S3_API",
+    "external_endpoint": "$ENV.S3_EXTERNAL_ADDRESS",
+    "key": "$ENV.S3_ACCESS_KEY",
+    "secret": "$ENV.S3_SECRET_KEY",
+    "bucket": "$ENV.S3_BUCKET",
+    "prefix": "ehosp",
+    "expiration": "5m",
+    "cache_dir": "$ENV.S3_CACHE_PATH"
+  },
+  "chunk_size": "2M",
+  "max_size": "100M",
+  "allowed_types": ["image/*", "text/*", "application/pdf", ".docx", ".xlsx"]
+}
+```
+
+#### 示例 B: 公有云对象存储 (如 华为云 OBS)
+公网对象存储原生支持公网访问，无需配置 `external_endpoint`。在 `options` 中声明 `provider: "obs"` 即可自动适配华为云 Virtual-Hosted Style 域名和地域推断。
+
+支持 **`||` 环境变量智能回退语法**（优先读取 `OBS_*`，若未配置则自动回退使用 `S3_*` 通用环境变量，也可以在最后提供默认字面量）：
+
+```json
+// uploaders/obs.s3.yao
+{
+  "label": "Huawei Cloud OBS Uploader",
+  "description": "华为云对象存储服务 (OBS)",
+  "tags": ["obs", "huawei", "cloud", "storage", "s3"],
+  "driver": "s3",
+  "options": {
+    "provider": "obs",
+    "endpoint": "$ENV.OBS_API || $ENV.S3_API",
+    "region": "$ENV.OBS_REGION || $ENV.S3_REGION || auto",
+    "key": "$ENV.OBS_ACCESS_KEY || $ENV.S3_ACCESS_KEY",
+    "secret": "$ENV.OBS_SECRET_KEY || $ENV.S3_SECRET_KEY",
+    "bucket": "$ENV.OBS_BUCKET || $ENV.S3_BUCKET",
+    "prefix": "ehosp",
+    "expiration": "5m",
+    "cache_dir": "$ENV.OBS_CACHE_PATH || $ENV.S3_CACHE_PATH"
+  },
+  "chunk_size": "2M",
+  "max_size": "100M",
+  "allowed_types": ["image/*", "text/*", "application/pdf", ".docx", ".xlsx"]
+}
+```
+> **架构设计亮点**：环境变量回退能力由 Yao 配置解析层通用支持（`$ENV.PRIMARY || $ENV.FALLBACK || default`）。底层 S3 驱动完全保持解耦，不硬编码任何具体厂商的环境变量名，所有厂商参数回退规则均在 DSL 中显式声明，透明可控。
+
+---
+
+### 2. 多存储后端共存与调用区分 (Storage Routing & Selection)
+
+同一个项目内可以同时配置并注册多个 Uploader（如 `rustfs.s3.yao`、`obs.s3.yao`、`local.fs.yao`）。系统在执行时，通过传入的 **Uploader 标识名称**（第一个参数）决定操作哪一个存储器。
+
+在实际业务开发中，主要有以下 3 种典型区分与切换方式：
+
+#### 方式 1：通过 `.env` 环境变量全局切换（推荐，前端代码 100% 零改动）
+适用于**不同部署环境使用不同存储**（例如私有化/内网部署使用 `rustfs`，公有云生产部署使用华为云 `obs`）。
+
+1. 在 `.env` 中定义当前环境所用的存储驱动名称：
+   ```env
+   # 默认存储器驱动: rustfs 或 obs
+   STORAGE_UPLOADER="rustfs"
+   ```
+2. 在业务脚本 `scripts/service/attachment.ts` 中读取该变量：
+   ```typescript
+   export function getPresignedUrl(connName?: string, fileId?: string) {
+       // 优先使用传入名称，若未指定或传入 default 则读取环境变量
+       const defaultUploader = Process("utils.env.Get", "STORAGE_UPLOADER") || "rustfs";
+       const target = connName && connName !== "default" ? connName : defaultUploader;
+       
+       const url = Process("attachment.getPresignedUrl", target, fileId);
+       return { code: 0, data: url, message: "获取预签名成功" };
+   }
+   ```
+   > **优势**：更换部署环境时，只需在 `.env` 中切换 `STORAGE_UPLOADER=obs`，前端与业务脚本无须任何修改。
+
+#### 方式 2：HTTP API 动态区分（灵活按需存储）
+适用于**同一个环境内根据文件业务属性分流存储**（例如敏感处方传内网私有 `rustfs`，公开活动图片传华为云 `obs`）。
+
+在 `apis/v1/attachment.http.yao` 中接收 Query 参数或 Path 参数：
+```json
+{
+  "name": "附件直传接口",
+  "paths": [
+    {
+      "path": "presignedurl/:fileId",
+      "method": "get",
+      "process": "scripts.service.attachment.getPresignedUrl",
+      "in": [
+        "$query.uploader",
+        "$param.fileId"
+      ],
+      "out": { "status": 200, "type": "application/json" }
+    }
+  ]
+}
+```
+前端按需指定目标存储器：
+```typescript
+// 上传处方到 rustfs: GET /api/v1/attachment/presignedurl/rx_01.pdf?uploader=rustfs
+// 上传活动海报到 OBS: GET /api/v1/attachment/presignedurl/poster.png?uploader=obs
+```
+
+#### 方式 3：服务端业务脚本直接指定
+在后端任务或处理流程中直接指定 Uploader 名称：
+```typescript
+// 保存敏感处方单到 rustfs
+Process("attachment.put", "rustfs", "prescriptions/1001.pdf", pdfBuffer, "application/pdf");
+
+// 保存公开商品图片到 OBS
+Process("attachment.put", "obs", "goods/item_01.png", imageBuffer, "image/png");
+```
+
+---
+
+### 3. 客户端预签名直传最佳实践 (Zero Server Bandwidth Direct Upload)
+
+为避免大文件上传经过 Yao 应用服务占用服务器网络带宽与内存，建议前端使用预签名直传流程：
+
+```
+[前端客户端 (Web/H5/App)]
+       │
+       │ 1. GET /api/v1/attachment/presignedurl/:fileId
+       ▼
+[Yao 应用服务] ─── Process("attachment.getPresignedUrl", uploader, fileId) ───► 生成 SigV4 URL
+       │
+       │ 2. 返回外网可直连的预签名直传 URL
+       ▼
+[前端客户端 (Web/H5/App)]
+       │
+       │ 3. HTTP PUT 直传二进制文件流 (零消耗 Yao 服务端带宽)
+       ▼
+[对象存储后端 (S3 / OBS / rustfs)]
+```
+
+#### 前端实现示例 (TypeScript / JavaScript):
+```typescript
+import { AttachmentApi } from './apis/attachment.api';
+
+export async function uploadFileDirectly(file: File, uploader: string = 'rustfs') {
+    // 1. 生成唯一文件名
+    const ext = file.name.split('.').pop() || '';
+    const fileId = `file_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+    // 2. 向 Yao 获取预签名直传 URL
+    const presignedUrl = await AttachmentApi.getPresignedUrl(fileId, uploader);
+
+    // 3. 使用 PUT 方法直接将文件流上传到对象存储
+    const response = await fetch(presignedUrl, {
+        method: 'PUT',
+        body: file,
+        headers: {
+            'Content-Type': file.type || 'application/octet-stream'
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error(`Upload failed with status: ${response.status}`);
+    }
+
+    // 4. 上传成功，截取不带签名参数的 Clean URL 保存到业务数据库
+    const cleanUrl = presignedUrl.split('?')[0];
+    return { fileId, cleanUrl };
+}
+```
+
+---
+
+### 4. 免库纯对象存储通道 (Raw Object Storage Seam)
+
+对于业务自身已维护数据表、**不需要**写入 `__yao.attachment` 系统表的场景，可以使用免库纯对象存储通道：
+
+```typescript
+// 写入对象 (支持 Uint8Array / Buffer / Base64 DataURI / String)
+Process("attachment.put", "rustfs", "prescriptions/1001.png", imageBuffer, "image/png");
+
+// 获取只读预签名链接 (用于前端查看/下载)
+const downloadUrl = Process("attachment.url", "rustfs", "prescriptions/1001.png");
+
+// 读取对象二进制数据
+const bytes = Process("attachment.get", "rustfs", "prescriptions/1001.png");
+
+// 判断对象是否存在
+const exists = Process("attachment.exists", "rustfs", "prescriptions/1001.png"); // true / false
+
+// 删除对象
+Process("attachment.delete", "rustfs", "prescriptions/1001.png");
+```
+
+---
+
+### 5. Attachment Process 进程清单全览
+
+| Process 标识 | 参数说明 | 功能说明 |
+| :--- | :--- | :--- |
+| `attachment.getPresignedUrl` | `(uploader, fileId)` | 获取客户端 HTTP PUT 直传的预签名 URL（自动重写外网网关） |
+| `attachment.url` / `attachment.getUrl` | `(uploader, path)` | 获取对象只读查看/下载的预签名 URL |
+| `attachment.put` | `(uploader, path, data, [mimeType])` | 免库纯对象写入（支持 Bytes/Base64/String/Reader） |
+| `attachment.get` | `(uploader, path)` | 免库纯对象读取（返回二进制字节数组） |
+| `attachment.exists` | `(uploader, path)` | 检查对象是否存在于存储中（返回布尔值） |
+| `attachment.delete` | `(uploader, path)` | 删除指定路径的对象文件 |
+| `attachment.upload` | `(uploader, fileHeader, reader, [option])` | 传统附件上传，并在 `__yao.attachment` 记录完整元数据 |
+| `attachment.read` | `(uploader, fileId)` | 传统方式读取附件文件流（通过数据库 ID 索引） |
+| `attachment.info` | `(uploader, fileId)` | 查询附件元数据详情 |
+| `attachment.list` | `(uploader, query)` | 分页查询附件列表 |
+

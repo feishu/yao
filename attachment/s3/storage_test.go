@@ -367,3 +367,133 @@ func TestS3Storage(t *testing.T) {
 		storage.Delete(context.Background(), fileID)
 	})
 }
+
+func TestS3OBSConfiguration(t *testing.T) {
+	t.Run("OBS Domain Auto-Detection", func(t *testing.T) {
+		options := map[string]interface{}{
+			"endpoint": "https://obs.cn-north-4.myhuaweicloud.com",
+			"key":      "test-ak",
+			"secret":   "test-sk",
+			"bucket":   "my-obs-bucket",
+		}
+		storage, err := New(options)
+		assert.NoError(t, err)
+		assert.NotNil(t, storage)
+		assert.NotNil(t, storage.UsePathStyle)
+		assert.False(t, *storage.UsePathStyle, "OBS should default to Virtual-Hosted style (UsePathStyle=false)")
+		assert.Equal(t, "cn-north-4", storage.Region, "Region should be inferred from OBS endpoint")
+	})
+
+	t.Run("Explicit Provider OBS", func(t *testing.T) {
+		options := map[string]interface{}{
+			"provider": "obs",
+			"endpoint": "custom-obs.example.com",
+			"region":   "cn-east-3",
+			"key":      "test-ak",
+			"secret":   "test-sk",
+			"bucket":   "my-obs-bucket",
+		}
+		storage, err := New(options)
+		assert.NoError(t, err)
+		assert.NotNil(t, storage)
+		assert.NotNil(t, storage.UsePathStyle)
+		assert.False(t, *storage.UsePathStyle, "Provider OBS should force UsePathStyle=false")
+		assert.Equal(t, "cn-east-3", storage.Region)
+	})
+
+	t.Run("Explicit UsePathStyle Override", func(t *testing.T) {
+		options := map[string]interface{}{
+			"provider":       "obs",
+			"endpoint":       "https://obs.cn-south-1.myhuaweicloud.com",
+			"key":            "test-ak",
+			"secret":         "test-sk",
+			"bucket":         "my-obs-bucket",
+			"use_path_style": true, // explicit override
+		}
+		storage, err := New(options)
+		assert.NoError(t, err)
+		assert.NotNil(t, storage)
+		assert.NotNil(t, storage.UsePathStyle)
+		assert.True(t, *storage.UsePathStyle, "Explicit use_path_style should be respected")
+	})
+
+	t.Run("Default MinIO Backward Compatibility", func(t *testing.T) {
+		options := map[string]interface{}{
+			"endpoint": "http://127.0.0.1:9000",
+			"key":      "minioadmin",
+			"secret":   "minioadmin",
+			"bucket":   "minio-bucket",
+		}
+		storage, err := New(options)
+		assert.NoError(t, err)
+		assert.NotNil(t, storage)
+		assert.NotNil(t, storage.UsePathStyle)
+		assert.True(t, *storage.UsePathStyle, "Default/MinIO should maintain UsePathStyle=true")
+		assert.Equal(t, "auto", storage.Region)
+	})
+
+	t.Run("Endpoint Sanitization", func(t *testing.T) {
+		// Test stripping bucket from host when virtual hosted
+		options := map[string]interface{}{
+			"provider": "obs",
+			"endpoint": "https://my-obs-bucket.obs.cn-north-4.myhuaweicloud.com/",
+			"key":      "test-ak",
+			"secret":   "test-sk",
+			"bucket":   "my-obs-bucket",
+		}
+		storage, err := New(options)
+		assert.NoError(t, err)
+		assert.NotNil(t, storage)
+		assert.False(t, *storage.UsePathStyle)
+		assert.Equal(t, "cn-north-4", storage.Region)
+
+		// Test presigned URL format with Virtual-Hosted style
+		url := storage.URL(context.Background(), "test.jpg")
+		assert.Contains(t, url, "my-obs-bucket.obs.cn-north-4.myhuaweicloud.com/test.jpg")
+	})
+
+	t.Run("ExternalEndpoint URL Rewriting for Reverse Proxy", func(t *testing.T) {
+		options := map[string]interface{}{
+			"endpoint":          "http://192.168.21.152:9000",
+			"external_endpoint": "https://hlwyy.hljs3y.org.cn/storeapi",
+			"key":               "test-ak-key",
+			"secret":            "test-sk-secret-key-12345678",
+			"bucket":            "ehosp",
+			"prefix":            "ehosp",
+		}
+		storage, err := New(options)
+		assert.NoError(t, err)
+		assert.NotNil(t, storage)
+		assert.Equal(t, "https://hlwyy.hljs3y.org.cn/storeapi", storage.ExternalEndpoint)
+
+		// Test GetPresignedUrl (PUT for upload)
+		uploadURL := storage.GetPresignedUrl(context.Background(), "attachments/foo.png", "image/png")
+		assert.NotEmpty(t, uploadURL)
+		assert.True(t, strings.HasPrefix(uploadURL, "https://hlwyy.hljs3y.org.cn/storeapi/ehosp/ehosp/attachments/foo.png?"), "Upload URL should be mapped to external reverse proxy: %s", uploadURL)
+		assert.Contains(t, uploadURL, "X-Amz-Signature")
+		assert.Contains(t, uploadURL, "X-Amz-Credential")
+		assert.NotContains(t, uploadURL, "192.168.21.152:9000", "Upload URL must not contain internal IP")
+
+		// Test URL (GET for download)
+		downloadURL := storage.URL(context.Background(), "attachments/foo.png")
+		assert.NotEmpty(t, downloadURL)
+		assert.True(t, strings.HasPrefix(downloadURL, "https://hlwyy.hljs3y.org.cn/storeapi/ehosp/ehosp/attachments/foo.png?"), "Download URL should be mapped to external reverse proxy: %s", downloadURL)
+		assert.Contains(t, downloadURL, "X-Amz-Signature")
+		assert.NotContains(t, downloadURL, "192.168.21.152:9000", "Download URL must not contain internal IP")
+	})
+
+	t.Run("ExternalEndpoint Alias external_address", func(t *testing.T) {
+		options := map[string]interface{}{
+			"endpoint":         "http://192.168.21.152:9000",
+			"external_address": "hlwyy.hljs3y.org.cn/storeapi", // missing https:// prefix should be auto-fixed
+			"key":              "test-ak-key",
+			"secret":           "test-sk-secret-key-12345678",
+			"bucket":           "ehosp",
+		}
+		storage, err := New(options)
+		assert.NoError(t, err)
+		assert.NotNil(t, storage)
+		assert.Equal(t, "https://hlwyy.hljs3y.org.cn/storeapi", storage.ExternalEndpoint)
+	})
+}
+
