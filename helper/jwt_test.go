@@ -116,3 +116,35 @@ func assertJwtPanicMessage(t *testing.T, want string, fn func()) {
 
 	fn()
 }
+
+func TestJwtVerify(t *testing.T) {
+	secret := []byte("jwt-verify-test-secret")
+	data := map[string]interface{}{"user": "alice", "id": 100}
+	option := map[string]interface{}{"timeout": 3600, "sid": "session-100"}
+	token := JwtMake(100, data, option, secret)
+
+	// Valid token
+	claims, err := JwtVerify(token.Token, secret)
+	assert.NoError(t, err)
+	assert.NotNil(t, claims)
+	assert.Equal(t, float64(100), claims.Data["id"])
+	assert.Equal(t, "alice", claims.Data["user"])
+
+	// Expired token (negative timeout)
+	expiredToken := JwtMake(100, data, map[string]interface{}{"timeout": -3600, "sid": "session-100"}, secret)
+	claims, err = JwtVerify(expiredToken.Token, secret)
+	assert.Error(t, err)
+	assert.Nil(t, claims)
+
+	// Malformed token
+	claims, err = JwtVerify("invalid.token.structure", secret)
+	assert.Error(t, err)
+	assert.Nil(t, claims)
+
+	// Tampered signature
+	parts := strings.Split(token.Token, ".")
+	tampered := parts[0] + "." + parts[1] + ".tamperedSignature"
+	claims, err = JwtVerify(tampered, secret)
+	assert.Error(t, err)
+	assert.Nil(t, claims)
+}

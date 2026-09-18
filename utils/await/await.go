@@ -2,6 +2,7 @@ package await
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -32,6 +33,14 @@ var (
 func ProcessAwait(process *process.Process) interface{} {
 	// 验证参数
 	process.ValidateArgNums(1)
+
+	// 防御性前置检查：若上游 Context 已取消或超时，直接返回，避免在失效上下文中继续操作 V8 资源
+	if process.Context != nil {
+		if err := process.Context.Err(); err != nil {
+			return fmt.Errorf("ProcessAwait cancelled: %w", err)
+		}
+	}
+
 	args := process.Args
 	value := args[0]
 	var promise *v8go.Value
@@ -112,13 +121,22 @@ func ProcessAwait(process *process.Process) interface{} {
 		}
 	}
 
-	if !promise.IsPromise() {
+	if promise == nil || !promise.IsPromise() {
 		return value
 	}
 
 	// 性能优化：从缓存的配置中获取超时时间
 	timeout := getTimeout(process)
-	result, err := waitPromiseWithContext(context.Background(), ctx, promise, timeout)
+
+	// 提取上游调用方 Context，级联构建超时上下文
+	ctxCaller := process.Context
+	if ctxCaller == nil {
+		ctxCaller = context.Background()
+	}
+	waitCtx, cancel := context.WithTimeout(ctxCaller, timeout)
+	defer cancel()
+
+	result, err := waitPromiseWithContext(waitCtx, ctx, promise, timeout)
 	if err != nil {
 		log.Warn("ProcessAwait failed: %v", err)
 		return err
@@ -153,11 +171,19 @@ func SetTimeoutConfig(defaultTimeout, maxTimeout, minTimeout time.Duration) {
 	}
 }
 
-// waitPromiseWithContext 使用 context 管理超时和取消，优化了性能和并发安全性
+// waitPromiseWithContext 使用独立 Watchdog 协程管理超时与取消，结合底层 Isolate 中断机制彻底杜绝挂死
 func waitPromiseWithContext(ctx context.Context, v8ctx *v8go.Context, promise *v8go.Value, timeout time.Duration) (interface{}, error) {
 	// 安全检查
 	if v8ctx == nil || promise == nil {
 		return nil, fmt.Errorf("invalid context or promise")
+	}
+
+	// 检查 context 初始状态
+	if err := ctx.Err(); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, fmt.Errorf("Promise timeout after %v", timeout)
+		}
+		return nil, fmt.Errorf("Promise cancelled: %v", err)
 	}
 
 	// 使用 defer 确保 V8 对象资源正确释放
@@ -195,14 +221,29 @@ func waitPromiseWithContext(ctx context.Context, v8ctx *v8go.Context, promise *v
 		return nil, fmt.Errorf("not thenable: %v", err)
 	}
 
-	// 使用 context 进行优雅的超时和取消控制
 	done := make(chan interface{}, 1)
 	fail := make(chan error, 1)
 
 	iso := v8ctx.Isolate()
 
+	// 启动独立伴生看门狗协程 (Companion Watchdog)
+	// 一旦超时或上游 Context 取消，通过线程安全的 TerminateExecution 强行打断卡住的微任务执行
+	stopWatchdog := make(chan struct{})
+	defer close(stopWatchdog)
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			if iso != nil {
+				iso.TerminateExecution()
+			}
+		case <-stopWatchdog:
+			return
+		}
+	}()
+
 	// 创建回调函数模板，并确保资源管理
-	onFulfilledFn := v8go.NewFunctionTemplate(iso, func(info *v8go.FunctionCallbackInfo) *v8go.Value {
+	onFulfilled = v8go.NewFunctionTemplate(iso, func(info *v8go.FunctionCallbackInfo) *v8go.Value {
 		args := info.Args()
 		if len(args) > 0 {
 			done <- args[0]
@@ -210,7 +251,7 @@ func waitPromiseWithContext(ctx context.Context, v8ctx *v8go.Context, promise *v
 		return nil
 	}).GetFunction(v8ctx)
 
-	onRejectedFn := v8go.NewFunctionTemplate(iso, func(info *v8go.FunctionCallbackInfo) *v8go.Value {
+	onRejected = v8go.NewFunctionTemplate(iso, func(info *v8go.FunctionCallbackInfo) *v8go.Value {
 		args := info.Args()
 		if len(args) > 0 {
 			fail <- fmt.Errorf("promise rejected: %v", args[0])
@@ -218,56 +259,63 @@ func waitPromiseWithContext(ctx context.Context, v8ctx *v8go.Context, promise *v
 		return nil
 	}).GetFunction(v8ctx)
 
-	// 检查 context 状态
-	select {
-	case <-ctx.Done():
-		return nil, fmt.Errorf("operation cancelled: %v", ctx.Err())
-	default:
-	}
-
 	thenFn, err := then.AsFunction()
 	if err != nil {
 		return nil, fmt.Errorf("then is not a function: %v", err)
 	}
+	defer thenFn.Release()
 
 	// 调用 Promise.then()
-	_, err = thenFn.Call(promiseObj, onFulfilledFn, onRejectedFn)
+	_, err = thenFn.Call(promiseObj, onFulfilled, onRejected)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call promise.then: %v", err)
 	}
 
-	// 性能优化：使用自适应的时间间隔
-	// 根据剩余时间动态调整检查频率
 	deadline := time.Now().Add(timeout)
-	initialCheckInterval := time.Millisecond
+	initialCheckInterval := 500 * time.Microsecond
 	maxCheckInterval := 10 * time.Millisecond
 	checkInterval := initialCheckInterval
 
 	for {
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("operation cancelled: %v", ctx.Err())
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return nil, fmt.Errorf("Promise timeout after %v (execution terminated by watchdog)", timeout)
+			}
+			return nil, fmt.Errorf("Promise cancelled: %v", ctx.Err())
+
 		case val := <-done:
 			log.Debug("Promise resolved successfully")
 			return bridge.GoValue(val.(*v8go.Value), v8ctx)
+
 		case err := <-fail:
 			log.Warn("Promise rejected: %v", err)
 			return nil, err
+
 		case <-time.After(checkInterval):
+			if err := ctx.Err(); err != nil {
+				if errors.Is(err, context.DeadlineExceeded) {
+					return nil, fmt.Errorf("Promise timeout after %v (execution terminated by watchdog)", timeout)
+				}
+				return nil, fmt.Errorf("Promise cancelled: %v", err)
+			}
+
 			v8ctx.PerformMicrotaskCheckpoint()
 
-			// 性能优化：根据剩余时间动态调整检查间隔
 			remaining := time.Until(deadline)
 			if remaining < time.Second {
 				checkInterval = 500 * time.Microsecond
 			} else if remaining < 5*time.Second {
-				checkInterval = initialCheckInterval
+				checkInterval = 2 * time.Millisecond
 			} else {
 				checkInterval = maxCheckInterval
 			}
 
 			if time.Now().After(deadline) {
-				return nil, fmt.Errorf("promise timeout after %v (deadline exceeded)", timeout)
+				if iso != nil {
+					iso.TerminateExecution()
+				}
+				return nil, fmt.Errorf("Promise timeout after %v (deadline exceeded)", timeout)
 			}
 		}
 	}

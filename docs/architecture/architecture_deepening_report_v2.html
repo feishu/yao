@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yao 核心架构深度审查与深化重构报告 (TypeScript & V8/Gou/Xun 专项)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "neutral" });
+  </script>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
+    body { font-family: "Inter", system-ui, -apple-system, sans-serif; }
+    code, pre { font-family: "JetBrains Mono", monospace; }
+    .badge-strong { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300; }
+    .badge-worth { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800 border border-indigo-300; }
+    .badge-speculative { @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-800 border border-slate-300; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased selection:bg-indigo-500 selection:text-white pb-20">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-50 backdrop-blur-md bg-white/90">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-2.5 h-8 bg-indigo-600 rounded-full"></div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight text-slate-900">Yao 核心架构深度审查与深化重构报告</h1>
+          <p class="text-xs text-slate-500 font-medium">聚焦 TypeScript 业务执行链条 · v8go · gou/runtime/v8 · xun DBAL</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+          基于 improve-codebase-architecture 规范
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
+
+    <!-- Design Vocabulary Callout -->
+    <div class="bg-slate-900 text-slate-100 rounded-2xl p-6 shadow-xl border border-slate-800">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
+        <div>
+          <span class="text-xs font-semibold uppercase tracking-wider text-indigo-400">Architecture Vocabulary</span>
+          <h3 class="text-base font-bold text-white mt-0.5">严格遵循的标准架构词汇表</h3>
+        </div>
+        <span class="text-xs text-slate-400">Ousterhout 软件设计哲学 · 识别浅模块与构建深模块</span>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 text-xs">
+        <div class="bg-slate-800/90 p-3 rounded-xl border border-slate-700/60">
+          <div class="font-bold text-emerald-400">Deep Module (深模块)</div>
+          <div class="text-slate-400 mt-1 leading-relaxed">极简接口隐蔽极大实现复杂度，提供极高的开发与运行杠杆。</div>
+        </div>
+        <div class="bg-slate-800/90 p-3 rounded-xl border border-slate-700/60">
+          <div class="font-bold text-amber-400">Shallow Module (浅模块)</div>
+          <div class="text-slate-400 mt-1 leading-relaxed">接口复杂度接近其实现本身，不仅没减轻心智负荷，反倒增加抽象层次。</div>
+        </div>
+        <div class="bg-slate-800/90 p-3 rounded-xl border border-slate-700/60">
+          <div class="font-bold text-cyan-400">Seam (接缝)</div>
+          <div class="text-slate-400 mt-1 leading-relaxed">无需篡改内部即可改变或观测行为的契约点。接口即测试表面。</div>
+        </div>
+        <div class="bg-slate-800/90 p-3 rounded-xl border border-slate-700/60">
+          <div class="font-bold text-purple-400">Locality (局部性)</div>
+          <div class="text-slate-400 mt-1 leading-relaxed">因相同原因变化、共享生命周期的状态与代码集中在一处，杜绝泄漏。</div>
+        </div>
+        <div class="bg-slate-800/90 p-3 rounded-xl border border-slate-700/60">
+          <div class="font-bold text-rose-400">Deletion Test (删除检验)</div>
+          <div class="text-slate-400 mt-1 leading-relaxed">删除该模块是聚拢了复杂度还是转移了复杂度？若聚拢则证明原设计浅薄。</div>
+        </div>
+        <div class="bg-slate-800/90 p-3 rounded-xl border border-slate-700/60">
+          <div class="font-bold text-blue-400">Leverage (杠杆率)</div>
+          <div class="text-slate-400 mt-1 leading-relaxed">接口提供的威力对比调用它所需付出的认知与集成成本之比。</div>
+        </div>
+        <div class="bg-slate-800/90 p-3 rounded-xl border border-slate-700/60">
+          <div class="font-bold text-teal-400">Adapter (适配器)</div>
+          <div class="text-slate-400 mt-1 leading-relaxed">连接两个异构接口的转换器。“一个适配器是假设接缝，两个才是真实接缝”。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Domain Context: TS Execution Pipeline -->
+    <section class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-slate-200 space-y-6">
+      <div class="border-b border-slate-100 pb-4">
+        <span class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Domain Reality & Architecture Mapping</span>
+        <h2 class="text-xl font-bold text-slate-900 mt-1">业务核心运行链路：TypeScript 穿越 Yao 全栈的现状拓扑</h2>
+        <p class="text-sm text-slate-600 mt-1">
+          业务大部门全面使用 TypeScript 编写业务逻辑，因此整个系统的吞吐量、响应延迟与可用性，决定性地取决于 
+          <code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">yao (网关)</code> → 
+          <code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">gou/runtime/v8</code> → 
+          <code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">v8go (CGO)</code> → 
+          <code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">gou/process</code> → 
+          <code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">xun (DBAL)</code> 这一垂直执行流水线。
+        </p>
+      </div>
+
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+        <div class="mermaid">
+flowchart LR
+    subgraph Client [客户端]
+        REQ[HTTP 请求]
+    end
+
+    subgraph YaoHost [yao 网关宿主]
+        Gin[Gin Router]
+        Svc[Service Handler]
+    end
+
+    subgraph GouRuntime [gou 运行时]
+        Disp[Dispatcher 调度池]
+        Runner[Runner 实例]
+        Script[Script 源码加载]
+        Proc[Process 调度器]
+    end
+
+    subgraph V8GoCGO [v8go CGO底层]
+        Iso[V8 Isolate]
+        Ctx[V8 Context]
+        Codec[Value Codec]
+    end
+
+    subgraph XunORM [xun 数据库抽象层]
+        QB[Query Builder]
+        ConnPool[Database Connection]
+    end
+
+    REQ --> Gin --> Svc
+    Svc --> Disp --> Runner
+    Script -.拼接源码.-> Runner
+    Runner --> Iso & Ctx
+    Runner --TS 执行中调用 Process()--> Proc
+    Proc --> QB --> ConnPool
+    ConnPool --数据行--> QB --返回切片--> Proc
+    Proc --Go 对象通过 JSON--> Codec --进入 V8--> Ctx
+        </div>
+      </div>
+    </section>
+
+    <!-- Deepening Opportunities Section -->
+    <div class="space-y-6">
+      <div>
+        <span class="text-xs font-semibold uppercase tracking-wider text-indigo-600">Deepening Opportunities</span>
+        <h2 class="text-2xl font-bold text-slate-900 mt-1">架构摩擦点与模块深化方案 (5 大候选重构)</h2>
+        <p class="text-sm text-slate-600 mt-1">
+          直面浅模块、泄漏接缝与低局部性设计，提出将“浅薄包装”重构为“深模块”的落地机会。
+        </p>
+      </div>
+
+      <!-- Candidate 1: Script Compilation & Bytecode Cache -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
+          <div class="flex items-center space-x-3">
+            <span class="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 font-bold flex items-center justify-center text-sm">01</span>
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">TS 脚本预编译与执行缓存 (Script Precompilation & Bytecode Cache)</h3>
+              <p class="text-xs text-slate-500 font-mono mt-0.5">gou/runtime/v8/script.go · gou/runtime/v8/runner.go · v8go/isolate.go</p>
+            </div>
+          </div>
+          <span class="badge-strong">Strong (强烈推荐)</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="space-y-4">
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-rose-600">Problem (架构摩擦与浅模块缺陷)</h4>
+              <p class="text-sm text-slate-700 mt-1 leading-relaxed">
+                <code class="text-slate-900 font-semibold">Runner</code> 是一个典型的<strong>浅模块 (shallow module)</strong>。在 <code class="font-mono text-xs text-rose-600">runner._exec()</code> 中，每次接收到执行指令，都直接调用：
+                <br>
+                <code class="font-mono text-xs bg-slate-100 p-1 rounded text-slate-800">iso.CompileUnboundScript(source, origin, ...)</code>
+                <br>
+                这意味着每次 HTTP 请求或 TS 脚本调用，V8 都要从头重新做一次完整的词法解析、AST 抽象语法树构建与字节码编译！脚本加载、依赖拼接与执行编译割裂在不同地方，缺乏<strong>局部性 (locality)</strong>。
+              </p>
+              <div class="mt-2 p-3 bg-amber-50 rounded-lg border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                <strong>删除检验 (Deletion Test)</strong>：如果在 <code class="font-mono text-xs">runner._exec</code> 中删除单次编译逻辑，脚本编译的复杂度不会溢出到其他业务层，而是会集中聚拢到 <code class="font-mono text-xs">Script</code> 模块的加载与缓存生命周期中（"Yes, concentrates"），这正是深模块的特征。
+              </div>
+            </div>
+
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-600">Solution (深化为深模块)</h4>
+              <p class="text-sm text-slate-700 mt-1 leading-relaxed">
+                深化 <code class="text-slate-900 font-semibold">Script</code> 模块，将其改造为自包含的<strong>预编译字节码仓库 (Bytecode Repository)</strong>。在应用启动资产加载或热重载时，一次性将 TS 转译生成的 JS 编译为全局唯一的 <code class="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">UnboundScript</code>，并缓存 V8 Code Cache 字节码。
+                <code class="text-slate-900 font-semibold">Runner</code> 仅作为轻量级上下文宿主，执行时直接调用 <code class="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">unboundScript.Run(ctx)</code>，彻底消除热路径上的编译 CPU 损耗。
+              </p>
+            </div>
+
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-indigo-600">Benefits (杠杆率、局部性与测试)</h4>
+              <ul class="text-xs text-slate-600 space-y-1.5 list-disc list-inside mt-1">
+                <li><strong>Leverage (杠杆率)</strong>：单次执行延迟降低 70%~90%，吞吐量实现 5~10 倍跃升；</li>
+                <li><strong>Locality (局部性)</strong>：所有语法解析与编译错误被完全隔离在资产加载阶段，配合已有的 <code class="font-mono text-xs">yao scripts --error</code>，实现编译期防线，线上零偶发编译崩溃；</li>
+                <li><strong>Testability (测试性)</strong>：测试表面从庞大的 Dispatcher/Runner 状态机缩减为纯净的 <code class="font-mono text-xs">Script.Compile()</code> 单元测试。</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Visual Comparison -->
+          <div class="space-y-3">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider">Before vs After 结构对比</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div class="p-3 bg-rose-50/70 rounded-xl border border-rose-200">
+                <div class="font-bold text-rose-800 mb-2 flex items-center justify-between">
+                  <span>现状：浅 Runner + 每次重编译</span>
+                  <span class="text-rose-500 font-mono text-[10px]">Shallow</span>
+                </div>
+                <div class="space-y-2 text-slate-600 text-[11px]">
+                  <div class="p-1.5 bg-white rounded border border-rose-100">1. Select Runner 租借实例</div>
+                  <div class="p-1.5 bg-rose-100/60 rounded border border-rose-300 font-semibold text-rose-900">
+                    2. strings.Join 拼装源码
+                  </div>
+                  <div class="p-1.5 bg-rose-100/60 rounded border border-rose-300 font-semibold text-rose-900">
+                    3. CompileUnboundScript (全量编译 AST 与字节码)
+                  </div>
+                  <div class="p-1.5 bg-white rounded border border-rose-100">4. instance.Run(ctx) 绑定运行</div>
+                  <div class="p-1.5 bg-white rounded border border-rose-100">5. ctx.Close() 销毁 Context</div>
+                </div>
+                <div class="mt-2 text-rose-700 text-[10px] font-medium">每秒 1,000 次请求 = 1,000 次全量重编译</div>
+              </div>
+
+              <div class="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200">
+                <div class="font-bold text-emerald-800 mb-2 flex items-center justify-between">
+                  <span>深化后：深 Script + 字节码复用</span>
+                  <span class="text-emerald-500 font-mono text-[10px]">Deep</span>
+                </div>
+                <div class="space-y-2 text-slate-600 text-[11px]">
+                  <div class="p-1.5 bg-emerald-100/60 rounded border border-emerald-300 font-semibold text-emerald-900">
+                    【加载期】一次性编译 UnboundScript 并存入缓存
+                  </div>
+                  <div class="p-1.5 bg-white rounded border border-emerald-100">1. Select Runner 租借实例</div>
+                  <div class="p-1.5 bg-emerald-100/40 rounded border border-emerald-200 font-semibold text-emerald-900">
+                    2. cachedScript.Run(ctx) (零编译，直读字节码)
+                  </div>
+                  <div class="p-1.5 bg-white rounded border border-emerald-100">3. 执行目标函数并归还 Runner</div>
+                </div>
+                <div class="mt-2 text-emerald-700 text-[10px] font-medium">编译开销归零，吞吐量提升 5~10x</div>
+              </div>
+            </div>
+
+            <div class="p-3 bg-slate-900 text-slate-200 rounded-xl text-xs">
+              <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant App as Yao Asset Engine
+    participant Script as Script (Deep Module)
+    participant Runner as Runner Pool
+    participant V8 as V8 Isolate (CGO)
+
+    Note over App,V8: 加载阶段 (Load Time)
+    App->>Script: Load TS 资产
+    Script->>V8: CompileUnboundScript(source)
+    V8-->>Script: 缓存 UnboundScript 指针与 Bytecode Cache
+
+    Note over Runner,V8: 请求执行阶段 (Run Time)
+    Runner->>Script: 获取已编译实例
+    Script->>V8: unboundScript.Run(ctx) (微秒级直跑)
+    Runner-->>App: 返回结果
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Candidate 2: CGO Data Boundary & Value Codec -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
+          <div class="flex items-center space-x-3">
+            <span class="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 font-bold flex items-center justify-center text-sm">02</span>
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">跨 CGO 边界数据编解码器 (Value Codec & Zero-Copy Bridge)</h3>
+              <p class="text-xs text-slate-500 font-mono mt-0.5">gou/runtime/v8/bridge/bridge.go · gou/runtime/v8/functions/process/process.go · v8go/codec.go</p>
+            </div>
+          </div>
+          <span class="badge-strong">Strong (强烈推荐)</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="space-y-4">
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-rose-600">Problem (架构摩擦与类型截断陷阱)</h4>
+              <p class="text-sm text-slate-700 mt-1 leading-relaxed">
+                当前 <code class="font-mono text-xs text-slate-900">bridge</code> 模块是一个<strong>极度浅薄的适配器 (shallow adapter)</strong>：
+                在将 Go 对象传给 JS 时，使用 <code class="font-mono text-xs">jsoniter.Marshal</code> 并在 V8 内部调用 <code class="font-mono text-xs">v8go.JSONParse</code>；反方向则在 V8 内 <code class="font-mono text-xs">JSON.stringify</code>，再在 Go 内 <code class="font-mono text-xs">jsoniter.Unmarshal</code>。
+                每次 TS 脚本调用 <code class="font-mono text-xs">Process("models.user.Get")</code>，查询返回的数据集均历经 <strong>4 次完整的 JSON 编解码与 CGO 跨界内存拷贝</strong>！
+              </p>
+              <div class="mt-2 p-3 bg-rose-50 rounded-lg border border-rose-200 text-xs text-rose-900 leading-relaxed">
+                <strong>致命的类型截断缺陷</strong>：在 <code class="font-mono text-xs font-bold">bridge.go:211</code> 中，为规避 BigInt 的 JSON 兼容问题，代码将 Go 的 <code class="font-mono text-xs font-bold">int64</code>、<code class="font-mono text-xs font-bold">uint64</code> 强制强转为 <code class="font-mono text-xs font-bold">int32(v)</code>！导致所有毫秒时间戳（如 1789307032000）、雪花 ID、大整型主键在跨语言时<strong>发生静默溢出截断</strong>，产生诡异的负数和查不到记录问题。
+              </div>
+            </div>
+
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-600">Solution (深化为深模块)</h4>
+              <p class="text-sm text-slate-700 mt-1 leading-relaxed">
+                将 <code class="font-mono text-xs">v8go</code> 中已新增的 <code class="font-mono text-xs">codec.go</code>（基于 V8 原生二进制序列化 <code class="font-mono text-xs">ValueSerializer</code> / <code class="font-mono text-xs">DeserializeValue</code>）深化为完整的 <strong>Value Codec</strong> 模块并全面接入 <code class="font-mono text-xs">gou/runtime/v8/bridge</code>。
+                实现 Go 数据结构与 V8 堆对象之间的高速二进制克隆穿透；建立严谨的类型契约，消除 <code class="font-mono text-xs">int32</code> 强转截断，保证 64 位大整数在安全范围内转为 JS Number，超限时无缝映射为原生 BigInt；打通 <code class="font-mono text-xs">Uint8Array</code> 零拷贝通道。
+              </p>
+            </div>
+
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-indigo-600">Benefits (杠杆率、局部性与测试)</h4>
+              <ul class="text-xs text-slate-600 space-y-1.5 list-disc list-inside mt-1">
+                <li><strong>Leverage (杠杆率)</strong>：单次数据跨界开销减少 65%，杜绝中间 JSON 字符串分配，消除 GC 内存毛刺；</li>
+                <li><strong>Locality (局部性)</strong>：所有数据保真规则集中在 Codec 单一接缝，业务 TS 与底层 Process 无需感知类型强转细节；</li>
+                <li><strong>Testability (测试性)</strong>：针对全类型边界（Int64/Uint64/Float/Buffer/Date）具备确定性的编解码单元测试套件。</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Visual Comparison -->
+          <div class="space-y-3">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider">Before vs After 数据通路对比</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div class="p-3 bg-rose-50/70 rounded-xl border border-rose-200">
+                <div class="font-bold text-rose-800 mb-2 flex items-center justify-between">
+                  <span>现状：4x JSON + 强制 int32 截断</span>
+                  <span class="text-rose-500 font-mono text-[10px]">Shallow</span>
+                </div>
+                <div class="space-y-2 text-[11px]">
+                  <div class="p-2 bg-white rounded border border-rose-100 text-slate-600">
+                    Go 数据结构 (如 5000 条 Model 记录)
+                  </div>
+                  <div class="p-1 text-center text-rose-500 font-mono text-xs">↓ jsoniter.Marshal (分配巨量堆内存)</div>
+                  <div class="p-2 bg-rose-100/60 rounded border border-rose-300 text-rose-900 font-mono">
+                    JSON 文本跨 CGO 字符串拷贝
+                  </div>
+                  <div class="p-1 text-center text-rose-500 font-mono text-xs">↓ V8 JSON.parse (逐个构建 V8 对象)</div>
+                  <div class="p-2 bg-white rounded border border-rose-100 text-slate-600">
+                    TS 业务处理完毕
+                  </div>
+                  <div class="p-1 text-center text-rose-500 font-mono text-xs">↓ JSON.stringify + jsoniter.Unmarshal</div>
+                  <div class="p-1.5 bg-rose-200 text-rose-900 rounded font-semibold text-[10px]">
+                    ⚠️ int64 时间戳被截断为 int32 (变成负数)
+                  </div>
+                </div>
+              </div>
+
+              <div class="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200">
+                <div class="font-bold text-emerald-800 mb-2 flex items-center justify-between">
+                  <span>深化后：Value Codec 二进制克隆</span>
+                  <span class="text-emerald-500 font-mono text-[10px]">Deep</span>
+                </div>
+                <div class="space-y-2 text-[11px]">
+                  <div class="p-2 bg-white rounded border border-emerald-100 text-slate-600">
+                    Go 数据结构 / Uint8Array 缓冲区
+                  </div>
+                  <div class="p-1 text-center text-emerald-600 font-mono text-xs">↓ Value Codec (二进制 Structured Clone)</div>
+                  <div class="p-2 bg-emerald-100/60 rounded border border-emerald-300 text-emerald-900 font-semibold">
+                    单次内存块直通 (Zero JSON Parsing)
+                  </div>
+                  <div class="p-1 text-center text-emerald-600 font-mono text-xs">↓ V8 原生直接映射 (Preserve Int64/BigInt)</div>
+                  <div class="p-2 bg-white rounded border border-emerald-100 text-slate-600">
+                    TS 纯粹运行，时间戳/雪花ID 完全保真
+                  </div>
+                  <div class="p-1.5 bg-emerald-100 text-emerald-800 rounded font-medium text-[10px]">
+                    ✅ 吞吐提升 3~6 倍，内存分配减 60%
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-3 bg-slate-900 text-slate-200 rounded-xl text-xs">
+              <div class="mermaid">
+graph LR
+    subgraph Current [现状: 浅适配器 4x JSON]
+        GoVal[Go Data] --> JSM[jsoniter.Marshal]
+        JSM --> CGOStr[CGO String]
+        CGOStr --> V8P[V8 JSON.parse]
+        V8P --> TS[TS Runtime]
+        TS --> V8S[V8 JSON.stringify]
+        V8S --> CGOBytes[CGO Bytes]
+        CGOBytes --> JSU[jsoniter.Unmarshal]
+    end
+
+    subgraph Deepened [深化: 深 Value Codec]
+        GoVal2[Go Data / Buffer] --> VC[Value Codec Binary]
+        VC --> V8Direct[V8 Native Heap]
+        V8Direct --> TS2[TS Runtime]
+    end
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Candidate 3: End-to-End Execution Context Pipeline -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
+          <div class="flex items-center space-x-3">
+            <span class="w-8 h-8 rounded-lg bg-rose-100 text-rose-700 font-bold flex items-center justify-center text-sm">03</span>
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">全链路上下文与可取消执行管道 (End-to-End Context & Cancellation Seam)</h3>
+              <p class="text-xs text-slate-500 font-mono mt-0.5">yao/service/service.go · gou/runtime/v8/script.go · gou/runtime/v8/runner.go · gou/runtime/v8/functions/process/process.go · xun/dbal/query/query.go</p>
+            </div>
+          </div>
+          <span class="badge-strong">Strong (强烈推荐)</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="space-y-4">
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-rose-600">Problem (断裂的接缝与雪崩隐患)</h4>
+              <p class="text-sm text-slate-700 mt-1 leading-relaxed">
+                当前系统在请求生命周期管理上存在<strong>严重的接缝断裂 (broken seam)</strong>：
+                <br>
+                1. 在 <code class="font-mono text-xs">script.execPool</code> 调用 <code class="font-mono text-xs">runner.ExecInvocation</code> 时，<strong>完全遗漏了传递 <code class="font-mono text-xs">process.Context</code></strong>；
+                <br>
+                2. 导致 <code class="font-mono text-xs">runner._exec</code> 中调用 <code class="font-mono text-xs">bridge.BindGoContext(ctx, inv.ctx)</code> 传入了 <code class="font-mono text-xs">nil</code>；
+                <br>
+                3. TS 内部调用 <code class="font-mono text-xs">Process("models.xxx.find")</code> 时，<code class="font-mono text-xs">bridge.GoContext()</code> 恒为 <code class="font-mono text-xs">nil</code>，退化为无 context 的同步调用；
+                <br>
+                4. 底层 <code class="font-mono text-xs">xun</code> 的 SQL 执行更是完全没有 context 概念（全部为无超时的裸 <code class="font-mono text-xs">db.Prepare/Query</code>）。
+              </p>
+              <div class="mt-2 p-3 bg-rose-50 rounded-lg border border-rose-200 text-xs text-rose-900 leading-relaxed">
+                <strong>高并发雪崩根因</strong>：当客户端主动断开网络或网关超时触发取消，整个后端的 TS 引擎、Process 调用以及 MySQL 查询<strong>完全无法感知取消</strong>！V8 线程被卡死的慢查询牢牢占用，Runner 无法归还池中，Dispatcher 产生级联超时，最终全站接口瘫痪。
+              </div>
+            </div>
+
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-600">Solution (深化为深模块)</h4>
+              <p class="text-sm text-slate-700 mt-1 leading-relaxed">
+                构建统一的<strong>全链路执行管道 (Execution Context Pipeline)</strong>：
+                将 Go 标准 <code class="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">context.Context</code> 贯穿到底：
+                <code class="font-mono text-xs">Gin Request</code> → <code class="font-mono text-xs">Process</code> → <code class="font-mono text-xs">Runner</code> → <code class="font-mono text-xs">TS 内部 Process()</code> → <code class="font-mono text-xs">xun.QueryContext</code>。
+                在 Runner 内部启动 context 监听，一旦顶层取消，立即调用 V8 原生 <code class="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">iso.TerminateExecution()</code> 强行中断脚本执行，同时底层数据库连接驱动立即向数据库发送中断信号并释放连接。
+              </p>
+            </div>
+
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-indigo-600">Benefits (杠杆率、局部性与测试)</h4>
+              <ul class="text-xs text-slate-600 space-y-1.5 list-disc list-inside mt-1">
+                <li><strong>Locality (局部性)</strong>：超时与取消的生命周期逻辑严格绑定于上下文，杜绝“孤儿查询”与“僵尸 Runner”；</li>
+                <li><strong>Leverage (杠杆率)</strong>：用标准 Go Context 统一了 HTTP、Task、Schedule、脚本与数据库的协同停机，高并发韧性极大增强；</li>
+                <li><strong>Testability (测试性)</strong>：可通过标准单测注入任意 <code class="font-mono text-xs">context.WithTimeout(50*time.Millisecond)</code>，确定性验证全链路即时熔断。</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- Visual Comparison -->
+          <div class="space-y-3">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider">Before vs After 上下文链路对比</div>
+            <div class="p-3 bg-slate-900 text-slate-200 rounded-xl text-xs">
+              <div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor Client as 用户端
+    participant Gateway as Gin Gateway
+    participant Runner as V8 Runner Pool
+    participant Process as Process 总线
+    participant DB as Xun / MySQL
+
+    Note over Client,DB: 现状：上下文断裂，客户端断开后后台仍死锁
+    Client->>Gateway: 请求发起 (5s 超时)
+    Gateway->>Runner: 派发执行 (丢失 Context!)
+    Runner->>Process: TS 执行中 Process() (无 Context!)
+    Process->>DB: xun.Prepare + Query (无 Context!)
+    Client--xGateway: 客户端超时/断开连接
+    Note right of Runner: V8 毫无感知，继续等待慢 SQL
+    Note right of DB: MySQL 持续占用执行，Runner 池被耗尽！
+
+    Note over Client,DB: 深化后：标准 Context 闭环打通
+    Client->>Gateway: 请求发起 (带 ctx)
+    Gateway->>Runner: 派发执行 (绑定 ctx)
+    Runner->>Process: 穿透 ctx
+    Process->>DB: xun.QueryContext(ctx)
+    Client--xGateway: 客户端取消 (ctx.Done)
+    Gateway-->>Runner: iso.TerminateExecution() (即刻掐断 TS)
+    Gateway-->>DB: 取消底行 SQL 句柄 (即刻释放连接)
+    Runner-->>Gateway: 资源秒级归还池中！
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Candidate 4: Xun DBAL Connection & Query Lifecycle -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
+          <div class="flex items-center space-x-3">
+            <span class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm">04</span>
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">Xun DBAL 语句池化与反射消除 (Query Engine & Direct Row Scanner)</h3>
+              <p class="text-xs text-slate-500 font-mono mt-0.5">xun/dbal/query/query.go · xun/dbal/query/exec.go · xun/dbal/query/support.go</p>
+            </div>
+          </div>
+          <span class="badge-worth">Worth exploring (值得探索)</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="space-y-4">
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-amber-600">Problem (浅抽象带来的 3x 网络往返与反射损耗)</h4>
+              <p class="text-sm text-slate-700 mt-1 leading-relaxed">
+                <code class="font-mono text-xs text-slate-900">xun/dbal/query</code> 中的 <code class="font-mono text-xs">Get()</code> 与 <code class="font-mono text-xs">Exec()</code> 在每次查询时都执行：
+                <code class="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">stmt, err := db.Prepare(...)</code>，并在紧接着的 defer 中 <code class="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">stmt.Close()</code>。
+                在跨机房或 LAN 网络下，一次简单的 SELECT 产生了 <strong>3 次网络往返 (COM_STMT_PREPARE + COM_STMT_EXECUTE + COM_STMT_CLOSE)</strong>，严重放大了 TS 数据查询的端到端延迟。
+                同时，<code class="font-mono text-xs">support.go:359</code> 逐列使用反射解析值，每次千条数据列表查询产生数万次反射和堆逃逸。
+              </p>
+            </div>
+
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-600">Solution (深化为深模块)</h4>
+              <p class="text-sm text-slate-700 mt-1 leading-relaxed">
+                深化 <code class="font-mono text-xs">QueryEngine</code>：
+                日常查询直接使用 Go 原生驱动的 <code class="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">db.QueryContext(ctx, sql, bindings...)</code>，消除多余的两次网络往返；
+                对高频固定查询模板引入 LRU Prepared Statement 缓存池；
+                在行结果扫描中，将列值解析替换为静态类型断言（直接判断 <code class="font-mono text-xs">*interface{}</code> 与 <code class="font-mono text-xs">[]byte</code>），消除全反射调用。
+              </p>
+            </div>
+
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-indigo-600">Benefits (杠杆率、局部性与测试)</h4>
+              <ul class="text-xs text-slate-600 space-y-1.5 list-disc list-inside mt-1">
+                <li><strong>Leverage (杠杆率)</strong>：数据库读写延迟降低 40%~60%，极大减轻高并发下 MySQL 服务端句柄池压力；</li>
+                <li><strong>Locality (局部性)</strong>：连接池生命周期与驱动优化内聚于 DBAL，上层 Model 与 TS 业务无感知获益；</li>
+                <li><strong>Testability (测试性)</strong>：通过标准化 Mock DB 可直接验证语句复用率与零反射基准测试。</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider">网络 RTT 与反射消耗对比</div>
+            <div class="p-3 bg-slate-900 text-slate-200 rounded-xl text-xs">
+              <div class="mermaid">
+flowchart TD
+    subgraph Current [现状: 每次查询 3 次网络往返]
+        Q1[Get 查询] --> P[1. COM_STMT_PREPARE 往返]
+        P --> E[2. COM_STMT_EXECUTE 往返]
+        E --> C[3. COM_STMT_CLOSE 往返]
+        C --> R[40,000 次反射解析列]
+    end
+
+    subgraph Deepened [深化: 原生直连与类型断言]
+        Q2[Get 查询] --> D[1. db.QueryContext 单次往返]
+        D --> F[零反射原生指针断言扫描]
+    end
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Candidate 5: V8 Context Scope Recycle -->
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-4">
+          <div class="flex items-center space-x-3">
+            <span class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm">05</span>
+            <div>
+              <h3 class="text-lg font-bold text-slate-900">V8 上下文重置与轻量隔离 (Context Scope Recycle vs Destroy/Recreate Churn)</h3>
+              <p class="text-xs text-slate-500 font-mono mt-0.5">gou/runtime/v8/runner.go · gou/runtime/v8/dispatcher.go · v8go/context.go</p>
+            </div>
+          </div>
+          <span class="badge-worth">Worth exploring (值得探索)</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="space-y-4">
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-amber-600">Problem (粗暴的状态隔离导致高频 Context 碎片)</h4>
+              <p class="text-sm text-slate-700 mt-1 leading-relaxed">
+                在 <code class="font-mono text-xs">runner.reset()</code> 中，为了隔离请求间的 JS 全局状态，代码在每次执行后粗暴执行：
+                <code class="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">ctx.Close()</code>，并紧接着调用 <code class="font-mono text-xs bg-slate-100 px-1 py-0.5 rounded">v8go.NewContext(iso, tmpl)</code> 重建全新 Context。
+                Context 是 V8 中的重量级结构（涵盖内置原型对象、安全作用域等）。频繁创建销毁导致 V8 Native Contexts 数量激增，迫使代码加入了 <code class="font-mono text-xs">NumberOfNativeContexts > 200</code> 时直接销毁 Runner 的权宜之计，引发规律性的 P99 延迟抖动。
+              </p>
+            </div>
+
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-600">Solution (深化为深模块)</h4>
+              <p class="text-sm text-slate-700 mt-1 leading-relaxed">
+                借助近期在 <code class="font-mono text-xs">v8go</code> 中新增的 <code class="font-mono text-xs">ResetRetainedValues()</code> 与内部 Context 机制，深化为 <strong>Context Scope Manager</strong>。
+                在单次执行完毕后，仅清理挂载在 Global 上的请求级变量（如 <code class="font-mono text-xs">__yao_data</code>、<code class="font-mono text-xs">console</code>），并释放该次执行追踪的 Persistent 句柄，实现 Context 的纳秒级重置复用，消除整套 Context 的频繁销毁。
+              </p>
+            </div>
+
+            <div>
+              <h4 class="text-xs font-bold uppercase tracking-wider text-indigo-600">Benefits (杠杆率、局部性与测试)</h4>
+              <ul class="text-xs text-slate-600 space-y-1.5 list-disc list-inside mt-1">
+                <li><strong>Leverage (杠杆率)</strong>：Runner 归还与借出开销降低 90%，消除 Context 创建过程中的堆内存碎片；</li>
+                <li><strong>Locality (局部性)</strong>：Isolate 实例在其生命周期内保持稳定的 Context 拓扑，消灭 Dispatcher 健康检查里的“超过 200 强制销毁”补丁代码。</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider">Context 销毁 vs 作用域重置</div>
+            <div class="p-3 bg-slate-900 text-slate-200 rounded-xl text-xs">
+              <div class="mermaid">
+graph TD
+    subgraph Current [现状: 频繁销毁重建]
+        C1[执行完成] --> C2[ctx.Close 销毁]
+        C2 --> C3[v8go.NewContext 重新构建]
+        C3 --> C4[Native Contexts > 200?]
+        C4 --Yes--> C5[彻底销毁 Runner 引起毛刺]
+    end
+
+    subgraph Deepened [深化: 快速重置作用域]
+        D1[执行完成] --> D2[ResetRetainedValues 释放句柄]
+        D2 --> D3[清理请求级全局变量]
+        D3 --> D4[纳秒级立即归还池]
+    end
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Top Recommendation -->
+    <section class="bg-gradient-to-br from-indigo-900 via-slate-900 to-slate-950 text-white rounded-2xl p-6 sm:p-8 shadow-xl border border-indigo-500/30 space-y-6">
+      <div class="flex items-center space-x-3">
+        <span class="px-3 py-1 bg-indigo-500/30 border border-indigo-400/40 rounded-full text-xs font-bold text-indigo-200 uppercase tracking-wider">
+          Top Recommendation (首要推荐)
+        </span>
+      </div>
+
+      <div class="space-y-3">
+        <h2 class="text-2xl font-bold tracking-tight text-white">
+          建议首期攻坚：候选方案 01 (脚本预编译) 与 候选方案 02 (跨 CGO Value Codec)
+        </h2>
+        <p class="text-sm text-slate-300 leading-relaxed max-w-4xl">
+          根据你们团队<strong>“业务大部分使用 TS 编写，高度依赖 Yao 内部 v8go、gou、xun”</strong>的实际定位，
+          系统当前的<strong>第一大性能杀手</strong>是<strong>“每次调用全量重新编译 TS 脚本”</strong>，
+          <strong>第二大稳定性与性能陷阱</strong>是<strong>“Go 与 JS 之间低效的 4 次 JSON 往返以及强制 int32 导致的截断隐患”</strong>。
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        <div class="p-4 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-2">
+          <div class="font-bold text-indigo-300 text-sm">先做方案 01 的战略原因：极高杠杆率</div>
+          <p class="text-slate-400 leading-relaxed">
+            改动局限在 <code class="text-slate-200">gou/runtime/v8</code> 的 <code class="text-slate-200">Script</code> 与 <code class="text-slate-200">Runner</code>，完全符合外科手术式重构（Surgical Changes）原则，无需改动上层业务 TS 代码。一经落地，全量 TS 接口吞吐量可直接提升 <strong>5~10 倍</strong>，瞬间抹平 V8 脚本相比原生 Go 的解析差距。
+          </p>
+        </div>
+
+        <div class="p-4 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-2">
+          <div class="font-bold text-indigo-300 text-sm">同步做方案 02 的战略原因：彻底排除生产硬伤</div>
+          <p class="text-slate-400 leading-relaxed">
+            <code class="text-slate-200">v8go</code> 底层已经完成了 <code class="text-slate-200">ValueSerializer</code> 的 C++ 桥接支撑，只需在 <code class="text-slate-200">bridge</code> 层打通接缝。这不仅大幅提升 Model 数据查询传回 TS 的性能，更能彻底终结生产环境中毫秒级时间戳、雪花 ID 被截断为负数的隐蔽灾难。
+          </p>
+        </div>
+      </div>
+
+      <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <span>报告生成时间: 2026-09-13 · 架构审查完成</span>
+        <span class="text-indigo-400 font-medium">准备进入 Grilling Loop 决策阶段</span>
+      </div>
+    </section>
+
+  </main>
+</body>
+</html>

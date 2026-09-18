@@ -3,7 +3,10 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/fatih/color"
 	jsoniter "github.com/json-iterator/go"
@@ -26,6 +29,16 @@ var runCmd = &cobra.Command{
 	Short: L("Execute process"),
 	Long:  L("Execute process"),
 	Run: func(cmd *cobra.Command, args []string) {
+		// 监听终端中断信号，确保用户按 Ctrl+C 时能立即安全退出
+		interrupt := make(chan os.Signal, 1)
+		signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
+		go func() {
+			<-interrupt
+			share.SessionStop()
+			plugin.KillAll()
+			os.Exit(130)
+		}()
+
 		defer share.SessionStop()
 		defer plugin.KillAll()
 

@@ -23,10 +23,12 @@ var Middlewares = []gin.HandlerFunc{
 // withStaticFileServer static file server
 func withStaticFileServer(c *gin.Context) {
 
-	// Handle API & websocket
-	length := len(c.Request.URL.Path)
-	if (length >= 5 && c.Request.URL.Path[0:5] == "/api/") ||
-		(length >= 11 && c.Request.URL.Path[0:11] == "/websocket/") { // API & websocket
+	// Handle API, websocket & internal __yao routes (like dbadmin)
+	path := c.Request.URL.Path
+	if strings.HasPrefix(path, "/api/") ||
+		strings.HasPrefix(path, "/websocket/") ||
+		strings.HasPrefix(path, "/__yao/") ||
+		path == "/__yao/db" {
 		c.Next()
 		return
 	}

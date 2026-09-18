@@ -45,19 +45,18 @@ func guardCookieTrace(c *gin.Context) {
 // Cookie Cookie JWT
 func guardCookieJWT(c *gin.Context) {
 	tokenString, err := c.Cookie("__tk")
+	if err != nil || tokenString == "" {
+		c.JSON(403, gin.H{"code": 403, "message": "Not Authorized"})
+		c.Abort()
+		return
+	}
+
+	claims, err := helper.JwtVerify(tokenString)
 	if err != nil {
-		c.JSON(403, gin.H{"code": 403, "message": "Not Authorized"})
+		c.JSON(401, gin.H{"code": 401, "message": "Invalid token", "context": err.Error()})
 		c.Abort()
 		return
 	}
-
-	if tokenString == "" {
-		c.JSON(403, gin.H{"code": 403, "message": "Not Authorized"})
-		c.Abort()
-		return
-	}
-
-	claims := helper.JwtValidate(tokenString)
 	c.Set("__sid", claims.SID)
 	return
 }
@@ -72,11 +71,16 @@ func guardBearerJWT(c *gin.Context) {
 		return
 	}
 
-	claims := helper.JwtValidate(tokenString)
+	claims, err := helper.JwtVerify(tokenString)
+	if err != nil {
+		c.JSON(401, gin.H{"code": 401, "message": "Invalid token", "context": err.Error()})
+		c.Abort()
+		return
+	}
 	c.Set("__sid", claims.SID)
 }
 
-// JWT Bearer JWT
+// JWT Query JWT
 func guardQueryJWT(c *gin.Context) {
 	tokenString := c.Query("__tk")
 	if tokenString == "" {
@@ -85,7 +89,12 @@ func guardQueryJWT(c *gin.Context) {
 		return
 	}
 
-	claims := helper.JwtValidate(tokenString)
+	claims, err := helper.JwtVerify(tokenString)
+	if err != nil {
+		c.JSON(401, gin.H{"code": 401, "message": "Invalid token", "context": err.Error()})
+		c.Abort()
+		return
+	}
 	c.Set("__sid", claims.SID)
 }
 

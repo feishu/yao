@@ -21,17 +21,20 @@ import (
 	"github.com/yaoapp/gou/websocket"
 	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/yao/config"
+	"github.com/yaoapp/yao/dbadmin"
 	"github.com/yaoapp/yao/engine"
 	ischedule "github.com/yaoapp/yao/schedule"
 	"github.com/yaoapp/yao/service"
 	"github.com/yaoapp/yao/setup"
 	"github.com/yaoapp/yao/share"
 	itask "github.com/yaoapp/yao/task"
+	"github.com/yaoapp/yao/utils/asynq"
 )
 
 var startDebug = false
 var startDisableWatching = false
 var startInspect = ""
+var startDBAdmin = false
 
 var startCmd = &cobra.Command{
 	Use:   "start",
@@ -47,6 +50,11 @@ var startCmd = &cobra.Command{
 		signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 
 		Boot()
+
+		// Enable DB Admin
+		if startDBAdmin || os.Getenv("YAO_DB_ADMIN") == "true" || os.Getenv("YAO_DB_ADMIN") == "1" {
+			dbadmin.SetEnabled(true)
+		}
 
 		// Setup
 		isnew := false
@@ -119,6 +127,9 @@ var startCmd = &cobra.Command{
 		fmt.Println(color.WhiteString(L("Runtime")), color.GreenString(" %s", runtimeMode))
 		fmt.Println(color.WhiteString(L("Data")), color.GreenString(" %s", dataRoot))
 		fmt.Println(color.WhiteString(L("Listening")), color.GreenString(" %s:%d", config.Conf.Host, config.Conf.Port))
+		if config.Conf.Session.Store == "redis" || asynq.IsConfigured() {
+			fmt.Println(color.WhiteString(L("Redis")), color.GreenString(" %s", asynq.GetRedisOpt().Addr))
+		}
 
 		// print the messages under the development mode
 		if mode == "development" {
@@ -190,6 +201,9 @@ var startCmd = &cobra.Command{
 			fmt.Println(color.WhiteString(L("Website")), color.GreenString(" %s", endpoint.URL))
 			fmt.Println(color.WhiteString(L("Admin")), color.GreenString(" %s/%s/login/admin", endpoint.URL, strings.Trim(root, "/")))
 			fmt.Println(color.WhiteString(L("API")), color.GreenString(" %s/api", endpoint.URL))
+			if dbadmin.IsEnabled() {
+				fmt.Println(color.WhiteString(L("DB Admin")), color.GreenString(" %s/__yao/db", endpoint.URL))
+			}
 		}
 		fmt.Println("")
 
@@ -205,6 +219,10 @@ var startCmd = &cobra.Command{
 		// Start Schedules
 		ischedule.Start()
 		defer ischedule.Stop()
+
+		// Start Asynq Worker Server
+		asynq.StartServer()
+		defer asynq.Stop()
 
 		// Start HTTP Server
 		srv, err := service.Start(config.Conf)
@@ -502,4 +520,5 @@ func init() {
 	startCmd.PersistentFlags().BoolVarP(&startDebug, "debug", "", false, L("Development mode"))
 	startCmd.PersistentFlags().BoolVarP(&startDisableWatching, "disable-watching", "", false, L("Disable watching"))
 	startCmd.PersistentFlags().StringVar(&startInspect, "inspect", "", L("V8 inspector address"))
+	startCmd.PersistentFlags().BoolVarP(&startDBAdmin, "db", "", false, L("Enable Database Web Admin"))
 }

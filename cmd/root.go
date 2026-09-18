@@ -148,6 +148,7 @@ func init() {
 		scriptsCmd,
 		startCmd,
 		runCmd,
+		mcpCmd,
 		// getCmd,
 		// dumpCmd,
 		// restoreCmd,

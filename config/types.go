@@ -44,10 +44,14 @@ type Studio struct {
 
 // Database 数据库配置
 type Database struct {
-	Driver    string   `json:"driver,omitempty" env:"YAO_DB_DRIVER" envDefault:"sqlite3"`                        // 数据库驱动 sqlite3| mysql| postgres
-	Primary   []string `json:"primary,omitempty" env:"YAO_DB_PRIMARY" envSeparator:"|" envDefault:"./db/yao.db"` // 主库连接DSN
-	Secondary []string `json:"secondary,omitempty" env:"YAO_DB_SECONDARY" envSeparator:"|"`                      // 从库连接DSN
-	AESKey    string   `json:"aeskey,omitempty" env:"YAO_DB_AESKEY"`                                             // 加密存储KEY
+	Driver          string   `json:"driver,omitempty" env:"YAO_DB_DRIVER" envDefault:"sqlite3"`                        // 数据库驱动 sqlite3| mysql| postgres
+	Primary         []string `json:"primary,omitempty" env:"YAO_DB_PRIMARY" envSeparator:"|" envDefault:"./db/yao.db"` // 主库连接DSN
+	Secondary       []string `json:"secondary,omitempty" env:"YAO_DB_SECONDARY" envSeparator:"|"`                      // 从库连接DSN
+	AESKey          string   `json:"aeskey,omitempty" env:"YAO_DB_AESKEY"`                                             // 加密存储KEY
+	MaxIdleConns    int      `json:"max_idle_conns,omitempty" env:"YAO_DB_MAX_IDLE_CONNS" envDefault:"10"`             // 最大空闲连接数
+	MaxOpenConns    int      `json:"max_open_conns,omitempty" env:"YAO_DB_MAX_OPEN_CONNS" envDefault:"100"`            // 最大打开连接数
+	ConnMaxIdleTime int      `json:"conn_max_idle_time,omitempty" env:"YAO_DB_CONN_MAX_IDLE_TIME" envDefault:"180"`   // 连接最大空闲时间（秒），默认180秒（3分钟）
+	ConnMaxLifetime int      `json:"conn_max_lifetime,omitempty" env:"YAO_DB_CONN_MAX_LIFETIME" envDefault:"1800"`   // 连接最大生存时间（秒），默认1800秒（30分钟）
 }
 
 // Session 会话服务器

@@ -10,7 +10,6 @@ import (
 	"github.com/yaoapp/gou/session"
 	"github.com/yaoapp/kun/any"
 	"github.com/yaoapp/kun/exception"
-	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/yao/config"
 )
 
@@ -35,19 +34,17 @@ type JwtToken struct {
 	ExpiresAt int64  `json:"expires_at"`
 }
 
-// JwtValidate JWT 校验
-func JwtValidate(tokenString string, secret ...[]byte) *JwtClaims {
+// JwtVerify JWT 校验，返回 claims 和 error，不抛出异常
+func JwtVerify(tokenString string, secret ...[]byte) (*JwtClaims, error) {
 	// Check token length
 	if len(tokenString) > MaxTokenLength {
-		exception.New("Token too long", 401).Throw()
-		return nil
+		return nil, fmt.Errorf("Token too long")
 	}
 
 	// 校验 token 格式
 	parts := strings.Split(tokenString, ".")
 	if len(parts) != MaxTokenParts || parts[0] == "" || parts[1] == "" || parts[2] == "" {
-		exception.New("Invalid token format", 401).Throw()
-		return nil
+		return nil, fmt.Errorf("Invalid token format")
 	}
 
 	jwtSecret := []byte(config.Conf.JWTSecret)
@@ -65,17 +62,31 @@ func JwtValidate(tokenString string, secret ...[]byte) *JwtClaims {
 	)
 
 	if err != nil {
-		log.Error("JWT ParseWithClaims Error: %s", err)
-		exception.New("Invalid token", 401).Ctx(err.Error()).Throw()
-		return nil
+		return nil, err
 	}
 
 	if claims, ok := token.Claims.(*JwtClaims); ok && token.Valid {
-		return claims
+		return claims, nil
 	}
 
-	exception.New("Invalid token", 401).Ctx(token.Claims).Throw()
-	return nil
+	return nil, fmt.Errorf("Invalid token claims")
+}
+
+// JwtValidate JWT 校验（校验失败会抛出 401 异常）
+func JwtValidate(tokenString string, secret ...[]byte) *JwtClaims {
+	claims, err := JwtVerify(tokenString, secret...)
+	if err != nil {
+		errStr := err.Error()
+		if errStr == "Token too long" {
+			exception.New("Token too long", 401).Throw()
+		} else if errStr == "Invalid token format" {
+			exception.New("Invalid token format", 401).Throw()
+		} else {
+			exception.New("Invalid token", 401).Ctx(errStr).Throw()
+		}
+		return nil
+	}
+	return claims
 }
 
 // JwtMake  生成 JWT

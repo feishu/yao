@@ -74,8 +74,9 @@ func ProcessEnqueueIn(process *process.Process) interface{} {
 	args := process.ArgsArray(1)
 	delaySeconds := process.ArgsInt(2)
 
-	if client == nil {
-		exception.New("[Asynq] Client is not initialized", 500).Throw()
+	cli, err := GetClient()
+	if err != nil {
+		exception.New("[Asynq] %s", 500, err.Error()).Throw()
 	}
 
 	payloadBytes, err := json.Marshal(TaskPayload{
@@ -88,7 +89,7 @@ func ProcessEnqueueIn(process *process.Process) interface{} {
 
 	opts := append(parseOptions(process), asynq.ProcessIn(time.Duration(delaySeconds)*time.Second))
 	task := asynq.NewTask(TaskTypeYaoProcess, payloadBytes)
-	info, err := client.Enqueue(task, opts...)
+	info, err := cli.Enqueue(task, opts...)
 	if err != nil {
 		exception.New("[Asynq] EnqueueIn Error: %s", 500, err.Error()).Throw()
 	}
@@ -130,8 +131,9 @@ func ProcessEnqueueAt(process *process.Process) interface{} {
 		exception.New("[Asynq] Invalid executeAt parameter type", 400).Throw()
 	}
 
-	if client == nil {
-		exception.New("[Asynq] Client is not initialized", 500).Throw()
+	cli, err := GetClient()
+	if err != nil {
+		exception.New("[Asynq] %s", 500, err.Error()).Throw()
 	}
 
 	payloadBytes, err := json.Marshal(TaskPayload{
@@ -144,7 +146,7 @@ func ProcessEnqueueAt(process *process.Process) interface{} {
 
 	opts := append(parseOptions(process), asynq.ProcessAt(targetTime))
 	task := asynq.NewTask(TaskTypeYaoProcess, payloadBytes)
-	info, err := client.Enqueue(task, opts...)
+	info, err := cli.Enqueue(task, opts...)
 	if err != nil {
 		exception.New("[Asynq] EnqueueAt Error: %s", 500, err.Error()).Throw()
 	}
@@ -165,11 +167,12 @@ func ProcessCancel(process *process.Process) interface{} {
 		queue = process.ArgsString(1)
 	}
 
-	if inspector == nil {
-		exception.New("[Asynq] Inspector is not initialized", 500).Throw()
+	insp, err := GetInspector()
+	if err != nil {
+		exception.New("[Asynq] %s", 500, err.Error()).Throw()
 	}
 
-	err := inspector.DeleteTask(queue, taskID)
+	err = insp.DeleteTask(queue, taskID)
 	if err != nil {
 		exception.New("[Asynq] Cancel Task Error: %s", 500, err.Error()).Throw()
 	}

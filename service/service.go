@@ -6,7 +6,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/yaoapp/gou/api"
 	"github.com/yaoapp/gou/server/http"
+	yaoApi "github.com/yaoapp/yao/api"
 	"github.com/yaoapp/yao/config"
+	"github.com/yaoapp/yao/dbadmin"
 	"github.com/yaoapp/yao/neo"
 	"github.com/yaoapp/yao/share"
 	"github.com/yaoapp/yao/sse"
@@ -28,6 +30,8 @@ func Start(cfg config.Config) (*http.Server, error) {
 	router.Use(Middlewares...)
 	api.SetGuards(Guards)
 	api.SetRoutes(router, "/api", cfg.AllowFrom...)
+	yaoApi.MountMCPRoutes(router)
+	dbadmin.Mount(router, cfg)
 	srv := http.New(router, http.Option{
 		Host:    cfg.Host,
 		Port:    cfg.Port,
@@ -58,6 +62,8 @@ func Restart(srv *http.Server, cfg config.Config) error {
 	router.Use(Middlewares...)
 	api.SetGuards(Guards)
 	api.SetRoutes(router, "/api", cfg.AllowFrom...)
+	yaoApi.MountMCPRoutes(router)
+	dbadmin.Mount(router, cfg)
 	srv.Reset(router)
 	if err := startConfiguredPProf(cfg.PProf); err != nil {
 		return err
