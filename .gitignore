@@ -12,10 +12,7 @@
 *.out
 
 # Binaries
-/yao
-/yao/yao
-yao/yao
-*.old
+dist/release/yao*
 *.log
 
 WARP.md
