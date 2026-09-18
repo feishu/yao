@@ -16,20 +16,15 @@
 /yao/yao
 yao/yao
 *.old
-dist/
-dist/*
-
 *.log
 
 WARP.md
 _reference
-dist/release
 # Dependency directories (remove the comment below to include it)
 # vendor/
 .DS_Store
 .env*
 .tmp
-dist
 ui
 ^ui/index.html
 tests/data/*
