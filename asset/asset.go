@@ -25,6 +25,11 @@ func LoadOnly(cfg config.Config, names ...string) error {
 	return DefaultEngine.LoadOnly(cfg, names...)
 }
 
+// Unload 按照拓扑依赖反向顺序优雅卸载所有已注册资产
+func Unload() error {
+	return DefaultEngine.Unload()
+}
+
 // Reset 重置全局资产引擎（用于测试）
 func Reset() {
 	DefaultEngine.Reset()
@@ -85,6 +90,44 @@ func (e *Engine) LoadOnly(cfg config.Config, names ...string) error {
 	e.mu.RUnlock()
 
 	return e.loadDefinitions(selected, cfg)
+}
+
+// Unload 按照拓扑依赖逆序优雅卸载资产
+func (e *Engine) Unload() error {
+	e.mu.RLock()
+	defs := make([]Definition, 0, len(e.definitions))
+	for _, def := range e.definitions {
+		defs = append(defs, def)
+	}
+	e.mu.RUnlock()
+
+	stages, err := TopologicalSortStages(defs)
+	if err != nil {
+		for _, def := range defs {
+			if def.Unload != nil {
+				_ = def.Unload()
+			}
+		}
+		return err
+	}
+
+	var allErrors ErrorList
+	// 逆序执行 stages，确保叶子节点最先释放
+	for i := len(stages) - 1; i >= 0; i-- {
+		stage := stages[i]
+		for _, def := range stage {
+			if def.Unload != nil {
+				if err := def.Unload(); err != nil {
+					appendAssetError(&allErrors, def, err)
+				}
+			}
+		}
+	}
+
+	if len(allErrors) > 0 {
+		return allErrors
+	}
+	return nil
 }
 
 // loadDefinitions 按拓扑依赖波次（Stages）分阶段并发加载资产

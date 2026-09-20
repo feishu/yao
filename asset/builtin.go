@@ -86,6 +86,10 @@ func registerBuiltinAssets(e *Engine) {
 			_, err := task.Load(file, id)
 			return err
 		},
+		Unload: func() error {
+			task.StopAll()
+			return nil
+		},
 	})
 
 	// 6. Schedules 定时调度
@@ -98,6 +102,10 @@ func registerBuiltinAssets(e *Engine) {
 		Loader: func(file string, id string) error {
 			_, err := schedule.Load(file, id)
 			return err
+		},
+		Unload: func() error {
+			schedule.StopAll()
+			return nil
 		},
 	})
 

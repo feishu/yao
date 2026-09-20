@@ -16,6 +16,7 @@ type Definition struct {
 	Loader    func(file string, id string) error // 单个资产加载器
 	Preload   func(cfg config.Config) error      // 资产批次加载前钩子（可选）
 	Postload  func(cfg config.Config) error      // 资产批次加载后钩子（可选）
+	Unload    func() error                       // 资产批次卸载/清理钩子（可选）
 	DependsOn []string                           // 依赖的其他资产类型名称（DAG 排序用）
 	Optional  bool                               // 若目录不存在或为空是否忽略（默认 true）
 }

@@ -166,3 +166,47 @@ func TestConcurrentStageLoading(t *testing.T) {
 	assert.True(t, loaded["c2"])
 	assert.True(t, loaded["c3"])
 }
+
+func TestEngineUnloadReverseStages(t *testing.T) {
+	engine := NewEngine()
+	unloadedOrder := []string{}
+	var mu sync.Mutex
+
+	record := func(name string) {
+		mu.Lock()
+		defer mu.Unlock()
+		unloadedOrder = append(unloadedOrder, name)
+	}
+
+	engine.Register(Definition{
+		Name: "connectors",
+		Unload: func() error {
+			record("connectors")
+			return nil
+		},
+	})
+	engine.Register(Definition{
+		Name:      "models",
+		DependsOn: []string{"connectors"},
+		Unload: func() error {
+			record("models")
+			return nil
+		},
+	})
+	engine.Register(Definition{
+		Name:      "apis",
+		DependsOn: []string{"models"},
+		Unload: func() error {
+			record("apis")
+			return nil
+		},
+	})
+
+	err := engine.Unload()
+	assert.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []string{"apis", "models", "connectors"}, unloadedOrder, "Unload 应严格逆序释放叶子到根")
+}
+

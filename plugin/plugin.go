@@ -58,3 +58,10 @@ func Root(cfg config.Config) (string, error) {
 
 	return root, nil
 }
+
+// Unload 卸载并安全终止所有插件子进程
+func Unload() error {
+	plugin.KillAll()
+	return nil
+}
+

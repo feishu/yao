@@ -288,36 +288,23 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 func Unload() (err error) {
 	defer func() { err = exception.Catch(recover()) }()
 
-	// Stop Runtime
+	// 1. 安全终止业务插件子进程，防止孤儿进程
+	_ = plugin.Unload()
+
+	// 2. 拓扑逆序优雅卸载核心资产 (停止定时调度 schedules, 停止后台任务池 tasks, 释放关联资源)
+	_ = asset.Unload()
+
+	// 3. 停止 V8 脚本运行时
 	err = runtime.Stop()
 
-	// Close DB
+	// 4. 关闭外部连接器
+	_ = connector.Unload()
+
+	// 5. 关闭 Query 引擎
+	_ = query.Unload()
+
+	// 6. 关闭底层数据库连接池
 	err = share.DBClose()
-
-	// Close Query Engine
-	err = query.Unload()
-
-	// Close Connectors
-	err = connector.Unload()
-
-	// Recycle
-	// api
-	// models
-	// flows
-	// stores
-	// scripts
-	// connectors
-	// filesystem
-	// i18n
-	// certs
-	// plugins
-	// importers
-	// tasks
-	// schedules
-	// sockets
-	// websockets
-	// widgets
-	// custom widget
 
 	return err
 }
