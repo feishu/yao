@@ -85,3 +85,4 @@ yao/
 - **DO NOT** launch unmanaged background goroutines without passing and listening to `ctx.Done()`.
 - **DO NOT** edit pre-packaged frontend artifacts in `dist/` directly; make changes in source packages and run `make pack`.
 - **DO NOT** break backward compatibility of public Process signatures in `engine/process.go`.
+- **DO NOT** nest or re-acquire the same `sync.Mutex` / `sync.RWMutex` in internal loading, parser, or helper call paths; Go mutexes are strictly non-reentrant.

@@ -128,6 +128,10 @@ func DBClose() error {
 		dbKeepAliveStop = nil
 	}
 
+	if capsule.Global == nil || capsule.Global.Connections == nil {
+		return nil
+	}
+
 	messages := []string{}
 	capsule.Global.Connections.Range(func(key, value any) bool {
 		log.Trace("[DBClose] %s", key)

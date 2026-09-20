@@ -41,3 +41,15 @@ func TestDBConnectAndPoolSettings(t *testing.T) {
 	err = DBClose()
 	assert.NoError(t, err)
 }
+
+func TestDBCloseNilSafe(t *testing.T) {
+	orig := capsule.Global
+	defer func() {
+		capsule.Global = orig
+	}()
+
+	capsule.Global = nil
+	err := DBClose()
+	assert.NoError(t, err)
+}
+

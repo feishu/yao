@@ -12,7 +12,7 @@ import (
 // Load load all scripts and services
 func Load(cfg config.Config) error {
 	v8.CLearModules()
-	v8.Scripts = map[string]*v8.Script{}
+	v8.ResetScripts()
 	setLastLoadErrors(nil)
 	exts := []string{"*.js", "*.ts"}
 	loadErrs := &LoadErrors{}

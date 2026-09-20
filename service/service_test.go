@@ -1,6 +1,7 @@
 package service
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -73,3 +74,4 @@ func TestStartStop(t *testing.T) {
 	assert.Equal(t, 200, res.Status())
 	assert.Contains(t, res.Body(), "ROOT /admin/")
 }
+

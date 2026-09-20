@@ -20,8 +20,6 @@ import (
 	"github.com/yaoapp/kun/log"
 	"github.com/yaoapp/yao/config"
 	"github.com/yaoapp/yao/i18n"
-	"github.com/yaoapp/yao/neo"
-	"github.com/yaoapp/yao/neo/assistant"
 	"github.com/yaoapp/yao/share"
 	"github.com/yaoapp/yao/widgets/login"
 )
@@ -557,16 +555,7 @@ func processXgen(process *process.Process) interface{} {
 
 	// The default assistant
 	agent := map[string]interface{}{}
-	if neo.Neo != nil {
-		if ast, ok := neo.Neo.Assistant.(*assistant.Assistant); ok {
-			agent["default"] = map[string]interface{}{
-				"assistant_id":         ast.ID,
-				"assistant_name":       ast.Name,
-				"assistant_avatar":     ast.Avatar,
-				"assistant_deleteable": false,
-				"placeholder":          ast.Placeholder,
-			}
-		}
+	if len(connector.AIConnectors) > 0 {
 		agent["connectors"] = connector.AIConnectors
 	}
 

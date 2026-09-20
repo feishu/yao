@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/hashicorp/go-multierror"
@@ -24,28 +25,16 @@ type JitComponent struct {
 	buildOption *BuildOption
 }
 
-const (
-	saveComponent uint8 = iota
-	removeComponent
+var (
+	// Components loaded JIT components
+	Components     = map[string]*JitComponent{}
+	componentsLock sync.RWMutex
 )
 
-type componentData struct {
-	file string
-	comp *JitComponent
-	cmd  uint8
-}
-
-// Components loaded JIT components
-var Components = map[string]*JitComponent{}
-var chComp = make(chan *componentData, 1)
 var reScripts = regexp.MustCompile(`<script[^>]*name="scripts"[^>]*>(.*?)</script>`)
 var reStyles = regexp.MustCompile(`<script[^>]*name="styles"[^>]*>(.*?)</script>`)
 var reOption = regexp.MustCompile(`<script[^>]*name="option"[^>]*>(.*?)</script>`)
 var reImports = regexp.MustCompile(`<script[^>]*name="imports"[^>]*>(.*?)</script>`)
-
-func init() {
-	go componentWriter()
-}
 
 // parseComponent parse the component
 func (parser *TemplateParser) parseJitComponent(sel *goquery.Selection) {
@@ -219,7 +208,10 @@ func (parser *TemplateParser) getJitComponent(sel *goquery.Selection) (*JitCompo
 	}
 
 	// Load the component
-	if comp, has := Components[is]; has && parser.option.Debug == false && parser.option.DisableCache == false {
+	componentsLock.RLock()
+	comp, has := Components[is]
+	componentsLock.RUnlock()
+	if has && parser.option.Debug == false && parser.option.DisableCache == false {
 		return comp, nil
 	}
 
@@ -259,7 +251,7 @@ func (parser *TemplateParser) getJitComponent(sel *goquery.Selection) (*JitCompo
 		return nil, fmt.Errorf("Component %s failed to load, please recompile the component. %s", is, err.Error())
 	}
 
-	comp := &JitComponent{
+	comp = &JitComponent{
 		file:        file,
 		route:       is,
 		html:        string(source),
@@ -270,7 +262,9 @@ func (parser *TemplateParser) getJitComponent(sel *goquery.Selection) (*JitCompo
 	}
 
 	// Save the component to the cache
-	chComp <- &componentData{is, comp, saveComponent}
+	componentsLock.Lock()
+	Components[is] = comp
+	componentsLock.Unlock()
 	return comp, nil
 }
 
@@ -395,16 +389,16 @@ func (parser *TemplateParser) isJitComponent(sel *goquery.Selection) bool {
 	return exist && is != ""
 }
 
-func componentWriter() {
-	for {
-		select {
-		case data := <-chComp:
-			switch data.cmd {
-			case saveComponent:
-				Components[data.file] = data.comp
-			case removeCache:
-				delete(Components, data.file)
-			}
-		}
-	}
+// RemoveComponentCache removes a component from cache
+func RemoveComponentCache(route string) {
+	componentsLock.Lock()
+	defer componentsLock.Unlock()
+	delete(Components, route)
+}
+
+// ClearComponentCache clears all cached components
+func ClearComponentCache() {
+	componentsLock.Lock()
+	defer componentsLock.Unlock()
+	Components = map[string]*JitComponent{}
 }

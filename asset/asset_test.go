@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/yao/config"
 )
 
@@ -209,4 +210,102 @@ func TestEngineUnloadReverseStages(t *testing.T) {
 	defer mu.Unlock()
 	assert.Equal(t, []string{"apis", "models", "connectors"}, unloadedOrder, "Unload 应严格逆序释放叶子到根")
 }
+
+type mockAssetApp struct {
+	application.Application
+	files []string
+}
+
+func (m *mockAssetApp) Walk(path string, handler func(root, filename string, isdir bool) error, patterns ...string) error {
+	for _, f := range m.files {
+		if err := handler(path, f, false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func TestDiscoverAndLoadWorkerPool(t *testing.T) {
+	oldApp := application.App
+	defer func() { application.App = oldApp }()
+
+	mock := &mockAssetApp{
+		files: []string{
+			"a.mod.yao",
+			"b.mod.yao",
+			"c.mod.yao",
+			"d.mod.yao",
+			"e.mod.yao",
+		},
+	}
+	application.App = mock
+
+	engine := NewEngine()
+	var loadedFiles []string
+	var mu sync.Mutex
+
+	def := Definition{
+		Name: "models",
+		Dir:  "models",
+		Exts: []string{"*.mod.yao"},
+		Loader: func(file string, id string) error {
+			mu.Lock()
+			loadedFiles = append(loadedFiles, file)
+			mu.Unlock()
+			return nil
+		},
+	}
+
+	err := engine.discoverAndLoad(def, config.Config{})
+	assert.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 5, len(loadedFiles), "所有 5 个文件均应通过 Worker Pool 成功装载")
+}
+
+func TestDiscoverAndLoadErrorCollection(t *testing.T) {
+	oldApp := application.App
+	defer func() { application.App = oldApp }()
+
+	mock := &mockAssetApp{
+		files: []string{
+			"valid1.mod.yao",
+			"bad.mod.yao",
+			"valid2.mod.yao",
+		},
+	}
+	application.App = mock
+
+	engine := NewEngine()
+	var successFiles []string
+	var mu sync.Mutex
+
+	def := Definition{
+		Name: "models",
+		Dir:  "models",
+		Exts: []string{"*.mod.yao"},
+		Loader: func(file string, id string) error {
+			if file == "bad.mod.yao" {
+				return errors.New("parse json failed")
+			}
+			mu.Lock()
+			successFiles = append(successFiles, file)
+			mu.Unlock()
+			return nil
+		},
+	}
+
+	err := engine.discoverAndLoad(def, config.Config{})
+	assert.Error(t, err)
+	errList, ok := err.(ErrorList)
+	assert.True(t, ok)
+	assert.Equal(t, 1, len(errList))
+	assert.Contains(t, errList[0].Error(), "parse json failed")
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 2, len(successFiles), "其余正常文件不应因某一个文件的加载失败而中断")
+}
+
 

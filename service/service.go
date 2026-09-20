@@ -9,7 +9,6 @@ import (
 	yaoApi "github.com/yaoapp/yao/api"
 	"github.com/yaoapp/yao/config"
 	"github.com/yaoapp/yao/dbadmin"
-	"github.com/yaoapp/yao/neo"
 	"github.com/yaoapp/yao/share"
 	"github.com/yaoapp/yao/sse"
 )
@@ -19,6 +18,10 @@ func Start(cfg config.Config) (*http.Server, error) {
 
 	if cfg.AllowFrom == nil {
 		cfg.AllowFrom = []string{}
+	}
+
+	if cfg.Session.Store != "" {
+		config.Conf.Session = cfg.Session
 	}
 
 	err := prepare()
@@ -39,11 +42,6 @@ func Start(cfg config.Config) (*http.Server, error) {
 		Allows:  cfg.AllowFrom,
 		Timeout: 5 * time.Second,
 	})
-
-	// Neo API
-	if neo.Neo != nil {
-		neo.Neo.API(router, "/api/__yao/neo")
-	}
 
 	if err := startConfiguredPProf(cfg.PProf); err != nil {
 		return nil, err

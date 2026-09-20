@@ -23,6 +23,7 @@ import (
 )
 
 var runSilent = false
+var runSchedule = false
 
 var runCmd = &cobra.Command{
 	Use:   "run",
@@ -127,9 +128,11 @@ var runCmd = &cobra.Command{
 		itask.Start()
 		defer itask.Stop()
 
-		// Start Schedules
-		ischedule.Start()
-		defer ischedule.Stop()
+		// Start Schedules if explicitly requested
+		if runSchedule {
+			ischedule.Start()
+			defer ischedule.Stop()
+		}
 
 		process := process.NewWithContext(context.Background(), name, pargs...)
 		res, err := process.Exec()
@@ -175,4 +178,5 @@ var runCmd = &cobra.Command{
 
 func init() {
 	runCmd.PersistentFlags().BoolVarP(&runSilent, "silent", "s", false, L("Silent mode"))
+	runCmd.PersistentFlags().BoolVar(&runSchedule, "schedule", false, L("Start schedule jobs"))
 }

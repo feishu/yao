@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,41 +17,32 @@ import (
 
 // Scripts loaded scripts
 var Scripts = map[string]*Script{}
-
-const (
-	saveScript uint8 = iota
-	removeScript
-)
+var scriptsLock sync.RWMutex
 
 // Script the script
 type Script struct {
 	*v8.Script
 }
 
-type scriptData struct {
-	file   string
-	script *Script
-	cmd    uint8
+// SetScript set the script into cache (thread-safe)
+func SetScript(file string, script *Script) {
+	scriptsLock.Lock()
+	defer scriptsLock.Unlock()
+	Scripts[file] = script
 }
 
-var chScript = make(chan *scriptData, 1)
-
-func init() {
-	go scriptWriter()
+// GetScript get the script from cache (thread-safe)
+func GetScript(file string) *Script {
+	scriptsLock.RLock()
+	defer scriptsLock.RUnlock()
+	return Scripts[file]
 }
 
-func scriptWriter() {
-	for {
-		select {
-		case data := <-chScript:
-			switch data.cmd {
-			case saveScript:
-				Scripts[data.file] = data.script
-			case removeScript:
-				delete(Scripts, data.file)
-			}
-		}
-	}
+// RemoveScript remove the script from cache (thread-safe)
+func RemoveScript(file string) {
+	scriptsLock.Lock()
+	defer scriptsLock.Unlock()
+	delete(Scripts, file)
 }
 
 // LoadScript load the script
@@ -59,7 +51,10 @@ func LoadScript(file string, disableCache ...bool) (*Script, error) {
 	base := strings.TrimSuffix(strings.TrimSuffix(file, ".sui"), ".jit")
 	// LOAD FROM CACHE
 	if disableCache == nil || !disableCache[0] {
-		if script, has := Scripts[base]; has {
+		scriptsLock.RLock()
+		script, has := Scripts[base]
+		scriptsLock.RUnlock()
+		if has {
 			return script, nil
 		}
 	}
@@ -85,7 +80,7 @@ func LoadScript(file string, disableCache ...bool) (*Script, error) {
 
 	v8script.SourceRoots = getSourceRootReplaceFunc()
 	script := &Script{Script: v8script}
-	chScript <- &scriptData{base, script, saveScript}
+	SetScript(base, script)
 	return script, nil
 }
 

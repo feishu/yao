@@ -5,8 +5,12 @@ import (
 	"compress/gzip"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
+	"runtime/debug"
+	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
 	"github.com/yaoapp/kun/log"
@@ -16,8 +20,68 @@ import (
 
 // Middlewares the middlewares
 var Middlewares = []gin.HandlerFunc{
+	withInFlightTrack,
+	withRecovery,
 	gin.Logger(),
 	withStaticFileServer,
+}
+
+// maxConcurrency 全局网关最大在途并发限制，0 为不限制
+var maxConcurrency int64 = 0
+
+func init() {
+	if val := os.Getenv("YAO_MAX_CONCURRENCY"); val != "" {
+		if limit, err := strconv.ParseInt(val, 10, 64); err == nil && limit > 0 {
+			maxConcurrency = limit
+		}
+	}
+}
+
+// SetMaxConcurrency 动态配置网关最大在途并发限制（0 为不限制）
+func SetMaxConcurrency(limit int64) {
+	atomic.StoreInt64(&maxConcurrency, limit)
+}
+
+// GetMaxConcurrency 获取网关最大在途并发限制
+func GetMaxConcurrency() int64 {
+	return atomic.LoadInt64(&maxConcurrency)
+}
+
+// withInFlightTrack 全局在途请求追踪与过载保护，支持平滑热重载优雅排空与过载快速失败
+func withInFlightTrack(c *gin.Context) {
+	limit := atomic.LoadInt64(&maxConcurrency)
+	leave, ok := share.InFlightTryEnter(limit)
+	if !ok {
+		log.Warn("[Gateway] concurrency overload limit %d reached (in-flight %d), shedding load", limit, share.GlobalInFlight.Count())
+		c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+			"code":    http.StatusTooManyRequests,
+			"message": "Server overloaded, please retry later",
+		})
+		return
+	}
+	defer leave()
+	c.Next()
+}
+
+// withRecovery 全局网关未捕获 Panic 恢复与安全兜底中间件，防止进程异常退出并保障在途请求排空
+func withRecovery(c *gin.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			errStr := fmt.Sprintf("%v", r)
+			stack := string(debug.Stack())
+			log.Error("[Gateway Recovery] panic recovered: %s\nstack:\n%s", errStr, stack)
+
+			if c.Writer != nil && !c.Writer.Written() {
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"code":    http.StatusInternalServerError,
+					"message": "Internal Server Error",
+				})
+			} else {
+				c.Abort()
+			}
+		}
+	}()
+	c.Next()
 }
 
 // withStaticFileServer static file server

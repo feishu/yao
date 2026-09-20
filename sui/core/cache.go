@@ -1,6 +1,7 @@
 package core
 
 import (
+	"sync"
 	"time"
 
 	jsoniter "github.com/json-iterator/go"
@@ -24,60 +25,39 @@ type Cache struct {
 	Imports       map[string]string
 }
 
-const (
-	saveCache uint8 = iota
-	removeCache
-)
-
-type cacheData struct {
-	file  string
-	cache *Cache
-	cmd   uint8
-}
-
 // Caches the caches
 var Caches = map[string]*Cache{}
-var ch = make(chan *cacheData, 1)
+var cachesLock sync.RWMutex
 
-func init() {
-	go cacheWriter()
-}
-
-func cacheWriter() {
-	for {
-		select {
-		case data := <-ch:
-			switch data.cmd {
-			case saveCache:
-				Caches[data.file] = data.cache
-			case removeCache:
-				delete(Caches, data.file)
-			}
-		}
-	}
-}
-
-// SetCache set the cache
+// SetCache set the cache (thread-safe)
 func SetCache(file string, cache *Cache) {
-	ch <- &cacheData{file, cache, saveCache}
+	cachesLock.Lock()
+	defer cachesLock.Unlock()
+	Caches[file] = cache
 }
 
-// GetCache get the cache
+// GetCache get the cache (thread-safe)
 func GetCache(file string) *Cache {
+	cachesLock.RLock()
+	defer cachesLock.RUnlock()
 	if cache, has := Caches[file]; has {
 		return cache
 	}
 	return nil
 }
 
-// RemoveCache remove the cache
+// RemoveCache remove the cache (thread-safe)
 func RemoveCache(file string) {
-	ch <- &cacheData{file, nil, removeCache}
-	chScript <- &scriptData{file, nil, removeScript}
+	cachesLock.Lock()
+	delete(Caches, file)
+	cachesLock.Unlock()
+	RemoveScript(file)
 }
 
-// CleanCache clean the cache
+// CleanCache clean the cache (thread-safe)
 func CleanCache() {
+	cachesLock.Lock()
+	defer cachesLock.Unlock()
 	Caches = map[string]*Cache{}
 }
 

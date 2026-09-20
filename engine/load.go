@@ -11,7 +11,6 @@ import (
 	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
-	"github.com/yaoapp/yao/aigc"
 	"github.com/yaoapp/yao/asset"
 	"github.com/yaoapp/yao/cert"
 	"github.com/yaoapp/yao/config"
@@ -22,7 +21,6 @@ import (
 	"github.com/yaoapp/yao/importer"
 
 	// "github.com/yaoapp/yao/moapi"
-	"github.com/yaoapp/yao/neo"
 	"github.com/yaoapp/yao/pack"
 	"github.com/yaoapp/yao/payment"
 	"github.com/yaoapp/yao/pipe"
@@ -205,18 +203,6 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 		printErr(cfg.Mode, "WebSocket", err)
 	}
 
-	// // Load AIGC
-	// err = aigc.Load(cfg)
-	// if err != nil {
-	// 	printErr(cfg.Mode, "AIGC", err)
-	// }
-
-	// // Load Neo
-	// err = neo.Load(cfg)
-	// if err != nil {
-	// 	printErr(cfg.Mode, "Neo", err)
-	// }
-
 	// Load Volcengine
 	err = volcengine.Load(cfg)
 	if err != nil {
@@ -288,6 +274,9 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 func Unload() (err error) {
 	defer func() { err = exception.Catch(recover()) }()
 
+	// 0. 排空在途请求，避免未完成的请求在资源关闭时崩溃
+	_ = share.DrainInFlight(5 * time.Second)
+
 	// 1. 安全终止业务插件子进程，防止孤儿进程
 	_ = plugin.Unload()
 
@@ -314,6 +303,11 @@ func Reload(cfg config.Config, options LoadOption) (err error) {
 
 	defer func() { err = exception.Catch(recover()) }()
 	exception.Mode = cfg.Mode
+
+	// 0. 等待在途请求排空，实现平滑零停机热重载
+	if !share.DrainInFlight(5 * time.Second) {
+		printErr(cfg.Mode, "InFlight Drain", fmt.Errorf("in-flight requests drained with timeout"))
+	}
 
 	// SET XGEN_BASE
 	adminRoot := "yao"
@@ -398,18 +392,6 @@ func Reload(cfg config.Config, options LoadOption) (err error) {
 	err = widget.Load(cfg)
 	if err != nil {
 		printErr(cfg.Mode, "Widget", err)
-	}
-
-	// Load AIGC
-	err = aigc.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "AIGC", err)
-	}
-
-	// Load Neo
-	err = neo.Load(cfg)
-	if err != nil {
-		printErr(cfg.Mode, "Neo", err)
 	}
 
 	// Load Volcengine
