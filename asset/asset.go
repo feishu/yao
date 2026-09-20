@@ -2,6 +2,7 @@ package asset
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/yaoapp/yao/config"
 )
@@ -52,7 +53,7 @@ func (e *Engine) Reset() {
 	e.definitions = make(map[string]Definition)
 }
 
-// Load 按照拓扑排序全量加载资产
+// Load 按照拓扑分层波次并发加载资产
 func (e *Engine) Load(cfg config.Config) error {
 	e.mu.RLock()
 	defs := make([]Definition, 0, len(e.definitions))
@@ -61,33 +62,10 @@ func (e *Engine) Load(cfg config.Config) error {
 	}
 	e.mu.RUnlock()
 
-	sortedDefs, err := TopologicalSort(defs)
-	if err != nil {
-		return err
-	}
-
-	var allErrors ErrorList
-	for _, def := range sortedDefs {
-		if err := e.discoverAndLoad(def, cfg); err != nil {
-			if list, ok := err.(ErrorList); ok {
-				allErrors = append(allErrors, list...)
-			} else {
-				allErrors = append(allErrors, ErrorItem{
-					Type: def.Name,
-					File: def.Dir,
-					Err:  err,
-				})
-			}
-		}
-	}
-
-	if len(allErrors) > 0 {
-		return allErrors
-	}
-	return nil
+	return e.loadDefinitions(defs, cfg)
 }
 
-// LoadOnly 仅加载选定的资产及其依赖
+// LoadOnly 仅加载选定的资产及其依赖（按拓扑分层波次并发加载）
 func (e *Engine) LoadOnly(cfg config.Config, names ...string) error {
 	e.mu.RLock()
 	targetMap := make(map[string]bool, len(names))
@@ -106,28 +84,58 @@ func (e *Engine) LoadOnly(cfg config.Config, names ...string) error {
 	}
 	e.mu.RUnlock()
 
-	sortedDefs, err := TopologicalSort(selected)
+	return e.loadDefinitions(selected, cfg)
+}
+
+// loadDefinitions 按拓扑依赖波次（Stages）分阶段并发加载资产
+func (e *Engine) loadDefinitions(defs []Definition, cfg config.Config) error {
+	stages, err := TopologicalSortStages(defs)
 	if err != nil {
 		return err
 	}
 
 	var allErrors ErrorList
-	for _, def := range sortedDefs {
-		if err := e.discoverAndLoad(def, cfg); err != nil {
-			if list, ok := err.(ErrorList); ok {
-				allErrors = append(allErrors, list...)
-			} else {
-				allErrors = append(allErrors, ErrorItem{
-					Type: def.Name,
-					File: def.Dir,
-					Err:  err,
-				})
+	var mu sync.Mutex
+
+	for _, stage := range stages {
+		if len(stage) == 1 {
+			if err := e.discoverAndLoad(stage[0], cfg); err != nil {
+				mu.Lock()
+				appendAssetError(&allErrors, stage[0], err)
+				mu.Unlock()
 			}
+			continue
 		}
+
+		var wg sync.WaitGroup
+		for _, def := range stage {
+			wg.Add(1)
+			go func(d Definition) {
+				defer wg.Done()
+				if err := e.discoverAndLoad(d, cfg); err != nil {
+					mu.Lock()
+					appendAssetError(&allErrors, d, err)
+					mu.Unlock()
+				}
+			}(def)
+		}
+		wg.Wait()
 	}
 
 	if len(allErrors) > 0 {
 		return allErrors
 	}
 	return nil
+}
+
+func appendAssetError(allErrors *ErrorList, def Definition, err error) {
+	if list, ok := err.(ErrorList); ok {
+		*allErrors = append(*allErrors, list...)
+	} else {
+		*allErrors = append(*allErrors, ErrorItem{
+			Type: def.Name,
+			File: def.Dir,
+			Err:  err,
+		})
+	}
 }

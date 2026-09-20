@@ -1,58 +1,32 @@
-# 全电脑 AI Agent Skills 资产归一化治理与分发重建任务清单
+# AGENTS.md 架构深度增强任务清单（Agent Harness & Karpathy 准则）
 
-## 任务背景
-本机历史上经过多套工具与手动方式引入了 271 个 Agent Skills，目前散落在 6 个不同目录中，并存在 55 个空目录失效、47 个技能脱离中央库等严重问题。
-本任务旨在将 `~/.skillshub` 打造成唯一的单一真实数据源（SSOT），全量聚合散落的有效技能源码，清空目标端历史残余，并重建标准、统一、可维护的分发体系。
-
-## 执行清单
-
-### 1. 全量安全快照备份（零风险基石）
-- [x] 1.1 创建带时间戳的统一备份目录 `~/.skills_backup_20260918_213049`
-- [x] 1.2 全量归档备份 `~/.skillshub`、`~/.claude/skills`、`~/.cursor/skills`、`~/.codex/skills`、`~/.gemini/config/skills`、`~/.gemini/skills`、`~/.agents/skills`
-- [x] 1.3 备份 Skills Hub 核心数据库 `skills_hub.db`
-- [x] 1.4 验证备份产物完整性与文件数（共 7 个目录 + SQLite 数据库全量归档）
-
-### 2. 数据源逆向聚合与去重补全（构建健全 SSOT）
-- [x] 2.1 修复 55 个空目录：从 `~/.claude/skills` 将 55 个真实技能源码完整回填到 `~/.skillshub`
-- [x] 2.2 迁移 47 个 Go 专家技能：将 `~/.gemini/config/skills` 中的 `golang-*` 实体迁移合并入 `~/.skillshub`
-- [x] 2.3 验证并确保自研/特殊技能（`yao-service`、`handoff`、`cn-resume-optimizer-main`）在 `~/.skillshub` 中完整健全
-- [x] 2.4 全盘自动化校验 `~/.skillshub`，确认所有 271 个技能目录均含有有效 `SKILL.md`，无任何空壳文件夹（271/271 100% 健全）
-- [x] 2.5 在 `~/.skillshub` 初始化 Git 本地仓库，做首个基准版本 Commit（提交了 2368 个文件），锁定版本安全基线
-
-### 3. 目标端安全清空（消除旧软链、重复副本与断链）
-- [x] 3.1 安全清空目标工具目录中的历史旧内容：
-  - `~/.claude/skills` (清空 271 项)
-  - `~/.gemini/config/skills` 与 `~/.gemini/skills` (各清空 271 项)
-  - `~/.cursor/skills` (清空 271 项)
-  - `~/.codex/skills` (清空 276 项)
-  - `~/.agents/skills` (清空 274 项)
-- [x] 3.2 校验目标端目录已完全净空，无旧幽灵文件或死链残留（已全部验证 items_count=0）
-
-### 4. 统一分发与投影重建（以 `~/.skillshub` 为唯一源头）
-- [x] 4.1 重建各 AI 客户端的统一分发软链接（全量 271/271，0 错误）：
-  - Claude Code（`~/.claude/skills`）-> `~/.skillshub/<skill>`
-  - Gemini Antigravity（`~/.gemini/config/skills`）-> `~/.skillshub/<skill>`
-  - Gemini CLI（`~/.gemini/skills`）-> `~/.skillshub/<skill>`
-  - Codex（`~/.codex/skills`）-> `~/.skillshub/<skill>`
-  - Agents（`~/.agents/skills`）-> `~/.skillshub/<skill>`
-  - Cursor（`~/.cursor/skills`）-> `~/.skillshub/<skill>`
-- [x] 4.2 校准 Skills Hub 数据库 `skills_hub.db`，同步更新 skills (271条) 与 targets (8835条) 记录为 ok
-- [x] 4.3 自动化检测各目标端软链接有效性（全平台 271/271 SKILL.md 可读，0 断链）
-
-### 5. 验收与交付
-- [x] 5.1 验证 Gemini Antigravity / Claude Code / Cursor 等工具下的 Skills 可用性（全部 PASS）
-- [x] 5.2 编写执行总结与复盘，提供后续 Git 同步更新使用指南
+## 任务背景与目标
+基于 Andrej Karpathy 的 Agent 认知工程学理念（RAM 最小化、高频原子反馈、显式致命约束、导航矩阵与系统不变量），对 6 个工程的 `AGENTS.md` 进行第二轮高信噪比升级，全面赋能智能体自主导航、排障与开发。
 
 ---
 
-## 治理复盘与架构成果
+## 阶段一：业务应用服务工程增强
+- [x] 1.1 优化 `syd/service/AGENTS.md`（注入业务不变量、Entrypoints 导航矩阵、严厉的 DO NOT 负面清单、原子单测指令） <!-- id: 1.1 -->
 
-1. **确立中央权威数据源 (SSOT)**：
-   - 彻底摆脱 6 处重叠混乱的历史包袱，所有 271 个技能的代码物理实体唯一存放在 `~/.skillshub`。
-   - 在 `~/.skillshub` 初始化了 Git 版本库并完成了 2368 个文件的全量 Baseline Commit，版本安全彻底受控。
-2. **修复 55 个幽灵空目录**:
-   - 修复了 Skills Hub 此前遗留的空壳目录漏洞，将真实完整的 `SKILL.md` 回填，使 `benchmark`、`browse`、`ship`、`qa` 等核心短名技能全端复活。
-3. **收拢 47 个 Go 专业技能与自研技能**:
-   - 将散落在 Gemini 目录的 Go 专家技能及 `yao-service` 等项目核心技能纳管回中央库。
-4. **全自动零冗余分发**:
-   - 6 大主流目标工具通过软链接统一投影至 `~/.skillshub`，修改一处即全端生效，极大节省磁盘空间并保持实时绝对同步。
+## 阶段二：核心引擎库增强
+- [x] 2.1 优化 `yao/AGENTS.md`（注入 CLI/资产/服务入口路由表、架构不变量、防踩坑清单与跨库 replace 说明） <!-- id: 2.1 -->
+- [x] 2.2 优化 `gou/AGENTS.md`（注入 Process/Isolate 调度入口、Runner 单 Context 恒定性、CGO 桥接负面约束） <!-- id: 2.2 -->
+
+## 阶段三：基础与底层支撑库增强
+- [x] 3.1 优化 `kun/AGENTS.md`（注入公共 API 稳定性契约、Zero-Panic 约束、单包极速测试范式） <!-- id: 3.1 -->
+- [x] 3.2 优化 `xun/AGENTS.md`（注入方言隔离公理、Context 穿透写入、无 Prepare 直连规约与 SQLite 轻量单测） <!-- id: 3.2 -->
+- [x] 3.3 优化 `v8go/AGENTS.md`（注入 CGO 内存所有权公理、HandleScope 遗漏排查、单测试用例执行指令） <!-- id: 3.3 -->
+
+## 阶段四：质量与密度校验
+- [x] 4.1 统一校验 6 个文件的行数（确保处于 70~100 行黄金极简高密度区间） <!-- id: 4.1 -->
+- [x] 4.2 验证各文件渲染与超链接完整性，向用户汇报最终成果 <!-- id: 4.2 -->
+
+---
+
+## 结果审查与验收（Review & Verification）
+- **Yao 主引擎**: [`yao/AGENTS.md`](file:///Users/L/Desktop/Code/yao_dev/yao/AGENTS.md) (87 行) - 包含 CLI/资产引擎/网关入口路由表、DAG 拓扑顺序与通用 Context 穿透不变量。
+- **Gou 核心运行时**: [`gou/AGENTS.md`](file:///Users/L/Desktop/Code/yao_dev/gou/AGENTS.md) (80 行) - 包含 Process 调度入口、Runner 单 Context 恒定性、零拷贝二进制视图与禁止随手 Close Context。
+- **Kun 基础设施库**: [`kun/AGENTS.md`](file:///Users/L/Desktop/Code/yao_dev/kun/AGENTS.md) (74 行) - 包含公共 API 兼容性契约、Zero-Panic 准则、结构化 Panic 捕获与原子单测。
+- **Xun 数据库抽象层**: [`xun/AGENTS.md`](file:///Users/L/Desktop/Code/yao_dev/xun/AGENTS.md) (77 行) - 包含方言隔离公理、直连无 Prepare 写入、Context 取消与 SQLite 轻量测试模式。
+- **v8go JavaScript 引擎**: [`v8go/AGENTS.md`](file:///Users/L/Desktop/Code/yao_dev/v8go/AGENTS.md) (76 行) - 包含 Isolate 单线程限制、CGO 内存管理契约、HandleScope 泄漏规避与原生快序列化。
+- **syd/service 医疗业务**: [`syd/service/AGENTS.md`](file:///Users/L/Desktop/Code/yao_projects/syd/service/AGENTS.md) (92 行) - 包含单履约唯一权不变量、重复支付事实不可逆、禁止 Node 原生库与 `tsc` 秒级反馈。

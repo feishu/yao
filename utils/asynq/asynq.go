@@ -33,23 +33,23 @@ var (
 type asynqLogAdapter struct{}
 
 func (l *asynqLogAdapter) Debug(args ...interface{}) {
-	log.Debug("[Asynq] " + fmt.Sprint(args...))
+	log.Debug("[Asynq] %s", fmt.Sprint(args...))
 }
 
 func (l *asynqLogAdapter) Info(args ...interface{}) {
-	log.Info("[Asynq] " + fmt.Sprint(args...))
+	log.Info("[Asynq] %s", fmt.Sprint(args...))
 }
 
 func (l *asynqLogAdapter) Warn(args ...interface{}) {
-	log.Warn("[Asynq] " + fmt.Sprint(args...))
+	log.Warn("[Asynq] %s", fmt.Sprint(args...))
 }
 
 func (l *asynqLogAdapter) Error(args ...interface{}) {
-	log.Error("[Asynq] " + fmt.Sprint(args...))
+	log.Error("[Asynq] %s", fmt.Sprint(args...))
 }
 
 func (l *asynqLogAdapter) Fatal(args ...interface{}) {
-	log.Fatal("[Asynq] " + fmt.Sprint(args...))
+	log.Fatal("[Asynq] %s", fmt.Sprint(args...))
 }
 
 // TaskPayload 存入 asynq 队列的负载数据

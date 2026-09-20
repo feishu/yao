@@ -72,3 +72,79 @@ func TopologicalSort(defs []Definition) ([]Definition, error) {
 
 	return result, nil
 }
+
+// TopologicalSortStages 将资产定义按拓扑依赖划分为阶段波次（Waves）
+// 同一个阶段（Stage）内部的资产互不依赖，可以安全地并发加载
+func TopologicalSortStages(defs []Definition) ([][]Definition, error) {
+	if len(defs) == 0 {
+		return [][]Definition{}, nil
+	}
+	if len(defs) == 1 {
+		return [][]Definition{{defs[0]}}, nil
+	}
+
+	defMap := make(map[string]Definition, len(defs))
+	inDegree := make(map[string]int, len(defs))
+	dependents := make(map[string][]string, len(defs))
+
+	for _, def := range defs {
+		defMap[def.Name] = def
+		inDegree[def.Name] = 0
+	}
+
+	for _, def := range defs {
+		for _, dep := range def.DependsOn {
+			if _, exists := defMap[dep]; exists {
+				inDegree[def.Name]++
+				dependents[dep] = append(dependents[dep], def.Name)
+			}
+		}
+	}
+
+	// 收集第一批入度为 0 的节点
+	currentWave := make([]string, 0)
+	for name, deg := range inDegree {
+		if deg == 0 {
+			currentWave = append(currentWave, name)
+		}
+	}
+	sort.Strings(currentWave)
+
+	stages := make([][]Definition, 0)
+	totalProcessed := 0
+
+	for len(currentWave) > 0 {
+		stage := make([]Definition, 0, len(currentWave))
+		nextWave := make([]string, 0)
+
+		for _, name := range currentWave {
+			stage = append(stage, defMap[name])
+			totalProcessed++
+
+			nextNodes := dependents[name]
+			for _, next := range nextNodes {
+				inDegree[next]--
+				if inDegree[next] == 0 {
+					nextWave = append(nextWave, next)
+				}
+			}
+		}
+
+		sort.Strings(nextWave)
+		stages = append(stages, stage)
+		currentWave = nextWave
+	}
+
+	if totalProcessed != len(defs) {
+		unresolved := make([]string, 0)
+		for name, deg := range inDegree {
+			if deg > 0 {
+				unresolved = append(unresolved, fmt.Sprintf("%s(indegree=%d)", name, deg))
+			}
+		}
+		sort.Strings(unresolved)
+		return nil, fmt.Errorf("circular asset dependency detected among: %v", unresolved)
+	}
+
+	return stages, nil
+}

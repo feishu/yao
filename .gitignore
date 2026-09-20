@@ -13,6 +13,7 @@
 
 # Binaries
 dist/release/yao*
+dist/yao
 *.log
 
 WARP.md

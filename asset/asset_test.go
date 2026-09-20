@@ -2,6 +2,7 @@ package asset
 
 import (
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,4 +88,81 @@ func TestLoadOnlyUnregisteredAsset(t *testing.T) {
 	err := engine.LoadOnly(config.Config{}, "unknown")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "asset type unknown not registered")
+}
+
+func TestTopologicalSortStages(t *testing.T) {
+	defs := []Definition{
+		{Name: "apis", DependsOn: []string{"models", "flows"}},
+		{Name: "flows", DependsOn: []string{"models"}},
+		{Name: "tasks", DependsOn: []string{"models"}},
+		{Name: "stores", DependsOn: []string{"connectors"}},
+		{Name: "models", DependsOn: []string{"connectors"}},
+		{Name: "connectors"},
+		{Name: "standalone"},
+	}
+
+	stages, err := TopologicalSortStages(defs)
+	assert.NoError(t, err)
+	assert.Equal(t, 4, len(stages), "应该被合理划分为 4 个并发波次")
+
+	// 验证各 Stage 的成员
+	getNames := func(stage []Definition) []string {
+		res := make([]string, len(stage))
+		for i, d := range stage {
+			res[i] = d.Name
+		}
+		return res
+	}
+
+	assert.Equal(t, []string{"connectors", "standalone"}, getNames(stages[0]))
+	assert.Equal(t, []string{"models", "stores"}, getNames(stages[1]))
+	assert.Equal(t, []string{"flows", "tasks"}, getNames(stages[2]))
+	assert.Equal(t, []string{"apis"}, getNames(stages[3]))
+}
+
+func TestConcurrentStageLoading(t *testing.T) {
+	engine := NewEngine()
+	loaded := make(map[string]bool)
+	var mu sync.Mutex
+
+	record := func(name string) {
+		mu.Lock()
+		defer mu.Unlock()
+		loaded[name] = true
+	}
+
+	engine.Register(Definition{
+		Name:     "c1",
+		Optional: true,
+		Preload: func(cfg config.Config) error {
+			record("c1")
+			return nil
+		},
+	})
+	engine.Register(Definition{
+		Name:     "c2",
+		Optional: true,
+		Preload: func(cfg config.Config) error {
+			record("c2")
+			return nil
+		},
+	})
+	engine.Register(Definition{
+		Name:      "c3",
+		DependsOn: []string{"c1", "c2"},
+		Optional:  true,
+		Preload: func(cfg config.Config) error {
+			record("c3")
+			return nil
+		},
+	})
+
+	err := engine.Load(config.Config{})
+	assert.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.True(t, loaded["c1"])
+	assert.True(t, loaded["c2"])
+	assert.True(t, loaded["c3"])
 }
