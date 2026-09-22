@@ -40,7 +40,7 @@ func SessionRedis() error {
 		config.Conf.Session.DB = "1"
 	}
 
-	args = append(args, config.Conf.Session.Port, config.Conf.Session.DB, config.Conf.Session.Password)
+	args = append(args, config.Conf.Session.Port, config.Conf.Session.DB, config.Conf.Session.Password, config.Conf.Session.Username)
 	rdb, err := session.NewRedis(config.Conf.Session.Host, args...)
 	if err != nil {
 		return err
