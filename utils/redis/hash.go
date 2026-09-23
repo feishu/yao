@@ -1,7 +1,7 @@
 package redis
 
 import (
-	goredis "github.com/go-redis/redis/v8"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 )

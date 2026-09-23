@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	goredis "github.com/go-redis/redis/v8"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/yaoapp/gou/connector"
 	redisConnector "github.com/yaoapp/gou/connector/redis"
 	"github.com/yaoapp/gou/process"

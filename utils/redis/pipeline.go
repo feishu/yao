@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	goredis "github.com/go-redis/redis/v8"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 )
@@ -248,10 +248,10 @@ func executePipelineCommand(pipe goredis.Pipeliner, cmdName string, args []inter
 		if len(args) < 3 {
 			return nil
 		}
-		members := make([]*goredis.Z, 0)
+		members := make([]goredis.Z, 0)
 		for i := 1; i < len(args); i += 2 {
 			if i+1 < len(args) {
-				members = append(members, &goredis.Z{
+				members = append(members, goredis.Z{
 					Score:  toFloat64(args[i]),
 					Member: args[i+1],
 				})
@@ -336,7 +336,7 @@ func parseCommandResult(cmd goredis.Cmder) (interface{}, error) {
 	case *goredis.StringSliceCmd:
 		return c.Result()
 
-	case *goredis.StringStringMapCmd:
+	case *goredis.MapStringStringCmd:
 		return c.Result()
 
 	case *goredis.DurationCmd:

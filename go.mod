@@ -1,8 +1,6 @@
 module github.com/yaoapp/yao
 
-go 1.25.0
-
-toolchain go1.25.5
+go 1.26.0
 
 require (
 	github.com/PuerkitoBio/goquery v1.11.0
@@ -21,7 +19,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-pay/gopay v1.5.123
-	github.com/go-redis/redis/v8 v8.11.5
 	github.com/go-rod/rod v0.116.2
 	github.com/goccy/go-json v0.10.5
 	github.com/golang-jwt/jwt/v4 v4.5.2
@@ -34,6 +31,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/mozillazg/go-pinyin v0.20.0
 	github.com/pkoukk/tiktoken-go v0.1.7
+	github.com/redis/go-redis/v9 v9.17.2
 	github.com/rhysd/go-github-selfupdate v1.2.3
 	github.com/spf13/cast v1.10.0
 	github.com/spf13/cobra v1.9.1
@@ -120,7 +118,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/qdrant/go-client v1.14.0 // indirect
-	github.com/redis/go-redis/v9 v9.17.2 // indirect
 	github.com/richardlehane/mscfb v1.0.7 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect

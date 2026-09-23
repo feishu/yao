@@ -1,7 +1,7 @@
 package redis
 
 import (
-	goredis "github.com/go-redis/redis/v8"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
 )
@@ -22,7 +22,7 @@ func ProcessZAdd(process *process.Process) interface{} {
 		exception.New(err.Error(), 500).Throw()
 	}
 
-	members := make([]*goredis.Z, 0)
+	members := make([]goredis.Z, 0)
 	for member, scoreVal := range membersMap {
 		var score float64
 		switch v := scoreVal.(type) {
@@ -35,7 +35,7 @@ func ProcessZAdd(process *process.Process) interface{} {
 		default:
 			exception.New("invalid score type for member %s", 400, member).Throw()
 		}
-		members = append(members, &goredis.Z{
+		members = append(members, goredis.Z{
 			Score:  score,
 			Member: member,
 		})

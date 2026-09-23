@@ -5,7 +5,7 @@ import (
 	"time"
 	"unsafe"
 
-	goredis "github.com/go-redis/redis/v8"
+	goredis "github.com/redis/go-redis/v9"
 	json "github.com/goccy/go-json"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
@@ -362,7 +362,7 @@ func ProcessRankingAdd(process *process.Process) interface{} {
 		exception.New(err.Error(), 500).Throw()
 	}
 
-	err = rdb.ZAdd(ctx, key, &goredis.Z{
+	err = rdb.ZAdd(ctx, key, goredis.Z{
 		Score:  score,
 		Member: member,
 	}).Err()

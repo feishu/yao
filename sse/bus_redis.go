@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	redisv8 "github.com/go-redis/redis/v8"
+	redisv9 "github.com/redis/go-redis/v9"
 	"github.com/yaoapp/gou/connector"
 	redisConnector "github.com/yaoapp/gou/connector/redis"
 )
@@ -72,7 +72,7 @@ func (bus *RedisBus) Subscribe(ctx context.Context, handler func(Event)) error {
 	}
 }
 
-func (bus *RedisBus) client() (*redisv8.Client, error) {
+func (bus *RedisBus) client() (*redisv9.Client, error) {
 	connectorName := bus.connector()
 	selected, err := connector.Select(connectorName)
 	if err != nil {
