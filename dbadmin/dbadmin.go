@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -43,49 +44,71 @@ func Mount(router *gin.Engine, cfg config.Config) {
 		return
 	}
 
-	// 1. API 路由组
-	apiGroup := router.Group("/__yao/db/api")
-	apiGroup.Use(authGuard(cfg))
-	{
-		apiGroup.GET("/status", handleStatus)
-		apiGroup.GET("/tables", handleGetTables)
-		apiGroup.GET("/tables/:name/schema", handleGetTableSchema)
-		apiGroup.GET("/tables/:name/data", handleGetTableData)
-		apiGroup.POST("/tables/:name/data", handleInsertTableData)
-		apiGroup.PUT("/tables/:name/data", handleUpdateTableData)
-		apiGroup.DELETE("/tables/:name/data", handleDeleteTableData)
-		apiGroup.POST("/tables/:name/batch", handleBatchCommit)
-		apiGroup.GET("/tables/:name/ddl", handleGetTableDDL)
-		apiGroup.POST("/sql/execute", handleExecuteSQL)
-	}
-
-	// 2. 静态资源路由 (支持 /__yao/db, CSS, JS)
 	serveHTML := func(c *gin.Context) {
 		data, err := fs.ReadFile(distSub, "index.html")
 		if err != nil {
 			c.String(http.StatusInternalServerError, "Failed to load DB Admin index.html")
 			return
 		}
+		// 若环境变量配置了 YAO_DB_ADMIN_ROOT (例如 /syd)，注入到 HTML head 优先使用
+		if root := strings.TrimSpace(os.Getenv("YAO_DB_ADMIN_ROOT")); root != "" {
+			cleanRoot := "/" + strings.Trim(root, "/")
+			inject := "<script>window.__YAO_DB_ADMIN_ROOT__ = " + strconv.Quote(cleanRoot) + ";</script>\n  "
+			data = []byte(strings.Replace(string(data), "<head>", "<head>\n  "+inject, 1))
+		}
 		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
 	}
-	router.GET("/__yao/db", serveHTML)
-	router.GET("/__yao/db/", serveHTML)
-	router.GET("/__yao/db/tabulator.min.js", func(c *gin.Context) {
-		data, err := fs.ReadFile(distSub, "tabulator.min.js")
-		if err != nil {
-			c.Status(http.StatusNotFound)
-			return
+
+	mountRoutes := func(base string) {
+		base = "/" + strings.Trim(base, "/")
+
+		// 1. API 路由组
+		apiGroup := router.Group(base + "/api")
+		apiGroup.Use(authGuard(cfg))
+		{
+			apiGroup.GET("/status", handleStatus)
+			apiGroup.GET("/tables", handleGetTables)
+			apiGroup.GET("/tables/:name/schema", handleGetTableSchema)
+			apiGroup.GET("/tables/:name/data", handleGetTableData)
+			apiGroup.POST("/tables/:name/data", handleInsertTableData)
+			apiGroup.PUT("/tables/:name/data", handleUpdateTableData)
+			apiGroup.DELETE("/tables/:name/data", handleDeleteTableData)
+			apiGroup.POST("/tables/:name/batch", handleBatchCommit)
+			apiGroup.GET("/tables/:name/ddl", handleGetTableDDL)
+			apiGroup.POST("/sql/execute", handleExecuteSQL)
 		}
-		c.Data(http.StatusOK, "application/javascript; charset=utf-8", data)
-	})
-	router.GET("/__yao/db/tabulator_midnight.min.css", func(c *gin.Context) {
-		data, err := fs.ReadFile(distSub, "tabulator_midnight.min.css")
-		if err != nil {
-			c.Status(http.StatusNotFound)
-			return
+
+		// 2. 静态资源路由 (支持 base, CSS, JS)
+		router.GET(base, serveHTML)
+		router.GET(base+"/", serveHTML)
+		router.GET(base+"/tabulator.min.js", func(c *gin.Context) {
+			data, err := fs.ReadFile(distSub, "tabulator.min.js")
+			if err != nil {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			c.Data(http.StatusOK, "application/javascript; charset=utf-8", data)
+		})
+		router.GET(base+"/tabulator_midnight.min.css", func(c *gin.Context) {
+			data, err := fs.ReadFile(distSub, "tabulator_midnight.min.css")
+			if err != nil {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			c.Data(http.StatusOK, "text/css; charset=utf-8", data)
+		})
+	}
+
+	// 1. 默认挂载标准根路径 /__yao/db
+	mountRoutes("/__yao/db")
+
+	// 2. 若显式配置了 YAO_DB_ADMIN_ROOT 环境变量 (如 /syd)，则额外挂载对应前缀路由
+	if envRoot := strings.TrimSpace(os.Getenv("YAO_DB_ADMIN_ROOT")); envRoot != "" {
+		cleanRoot := "/" + strings.Trim(envRoot, "/")
+		if cleanRoot != "/" && cleanRoot != "/__yao" && cleanRoot != "/__yao/db" {
+			mountRoutes(cleanRoot + "/__yao/db")
 		}
-		c.Data(http.StatusOK, "text/css; charset=utf-8", data)
-	})
+	}
 }
 
 // authGuard 认证中间件

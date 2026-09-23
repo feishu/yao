@@ -87,12 +87,12 @@ func withRecovery(c *gin.Context) {
 // withStaticFileServer static file server
 func withStaticFileServer(c *gin.Context) {
 
-	// Handle API, websocket & internal __yao routes (like dbadmin)
+	// Handle API, websocket & internal __yao routes (like dbadmin, including subpaths)
 	path := c.Request.URL.Path
 	if strings.HasPrefix(path, "/api/") ||
 		strings.HasPrefix(path, "/websocket/") ||
-		strings.HasPrefix(path, "/__yao/") ||
-		path == "/__yao/db" {
+		strings.Contains(path, "/__yao/") ||
+		strings.HasSuffix(path, "/__yao/db") {
 		c.Next()
 		return
 	}

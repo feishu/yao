@@ -332,3 +332,33 @@ func TestDBAdmin_EmptyTableHasColumns(t *testing.T) {
 	assert.Contains(t, ddlRes["ddl"], "CREATE TABLE")
 	assert.Contains(t, ddlRes["ddl"], "test_empty_table")
 }
+
+func TestDBAdmin_SubpathMount(t *testing.T) {
+	os.Setenv("YAO_DB_ADMIN_ROOT", "/syd")
+	defer os.Unsetenv("YAO_DB_ADMIN_ROOT")
+
+	router := gin.New()
+	Mount(router, config.Config{Mode: "development"})
+
+	// 1. 测试二级目录静态页面路由
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/syd/__yao/db", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+	bodyStr := w.Body.String()
+	assert.Contains(t, bodyStr, "window.__YAO_DB_ADMIN_ROOT__ = \"/syd\"")
+	assert.Contains(t, bodyStr, "window.__YAO_DB_BASE__")
+
+	// 2. 测试二级目录下 API
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("GET", "/syd/__yao/db/api/status", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	// 3. 同时保持默认 /__yao/db 路由可用
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequest("GET", "/__yao/db", nil)
+	router.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+

@@ -4,9 +4,29 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Yao DB Admin - Navicat 风格数据库控制台 (Tabulator 驱动)</title>
-  <!-- 内嵌 Tabulator Midnight 暗黑主题与核心库 -->
-  <link rel="stylesheet" href="/__yao/db/tabulator_midnight.min.css" />
-  <script src="/__yao/db/tabulator.min.js"></script>
+  <!-- 动态计算二级目录 Base 路径并同步加载 Tabulator 资源 -->
+  <script>
+    (function() {
+      // 1. 优先使用服务端注入或全局配置的 ROOT (若有)
+      var root = window.__YAO_DB_ADMIN_ROOT__ || "";
+      var basePath = "";
+      if (root) {
+        basePath = ("/" + root.replace(/^\/+|\/+$/g, "") + "/__yao/db").replace(/\/+/g, "/");
+      } else {
+        // 2. 纯前端自动检测当前 pathname 中 /__yao/db 前面的前缀 (如 /syd/__yao/db -> /syd/__yao/db)
+        var pathname = window.location.pathname;
+        var mark = "/__yao/db";
+        var idx = pathname.indexOf(mark);
+        basePath = idx !== -1 ? pathname.substring(0, idx) + mark : mark;
+        basePath = basePath.replace(/\/+$/, "");
+      }
+      window.__YAO_DB_BASE__ = basePath;
+
+      // 3. 动态同步写入样式与脚本，确保在任意二级目录或根路径下均能精准加载
+      document.write('<link rel="stylesheet" href="' + basePath + '/tabulator_midnight.min.css" />');
+      document.write('<script src="' + basePath + '/tabulator.min.js"><\/script>');
+    })();
+  </script>
   <style>
     :root {
       --bg-darker: #191c20;
@@ -537,6 +557,7 @@
   <script>
     // 全局状态
     const G = {
+      basePath: window.__YAO_DB_BASE__ || "/__yao/db",
       tables: [],
       tabs: [],
       activeTabId: null,
@@ -545,12 +566,30 @@
       authToken: localStorage.getItem("YAO_ADMIN_TOKEN") || ""
     };
 
+    // 格式化 API 请求地址，自动适配二级目录前缀 (如 /syd/__yao/db/api/status)
+    function resolveApiUrl(url) {
+      if (url.startsWith("http://") || url.startsWith("https://")) {
+        return url;
+      }
+      if (url.startsWith("/__yao/db")) {
+        return G.basePath + url.substring("/__yao/db".length);
+      }
+      if (url.startsWith("/api")) {
+        return G.basePath + url;
+      }
+      if (!url.startsWith(G.basePath)) {
+        return G.basePath + (url.startsWith("/") ? url : "/" + url);
+      }
+      return url;
+    }
+
     // 通用 API 请求
     async function api(url, opts = {}) {
+      const targetUrl = resolveApiUrl(url);
       opts.headers = opts.headers || {};
       if (G.authKey) opts.headers["X-DB-Admin-Key"] = G.authKey;
       if (G.authToken) opts.headers["Authorization"] = "Bearer " + G.authToken;
-      const res = await fetch(url, opts);
+      const res = await fetch(targetUrl, opts);
       if (res.status === 401) {
         toast("未授权访问，请在请求头设置密钥或登录管理员", "error");
         throw new Error("Unauthorized");
