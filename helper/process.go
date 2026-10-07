@@ -88,6 +88,15 @@ func ProcessPrint(process *process.Process) interface{} {
 func ProcessSleep(process *process.Process) interface{} {
 	process.ValidateArgNums(1)
 	ms := process.ArgsInt(0)
-	time.Sleep(time.Duration((ms * int(time.Millisecond))))
+	duration := time.Duration(ms) * time.Millisecond
+	if process.Context != nil {
+		select {
+		case <-time.After(duration):
+		case <-process.Context.Done():
+			return nil
+		}
+	} else {
+		time.Sleep(duration)
+	}
 	return nil
 }

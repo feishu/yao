@@ -22,9 +22,23 @@
   - [x] 1.4.1 在 `gou` 中运行 `go test -v -run "TestRunner|TestProcess" ./runtime/v8/... ./process/...` 全量通过
   - [x] 1.4.2 在 `yao` 中运行 `make vet` 静态分析 100% 干净通过，并编译构建二进制 `dist/yao` 验证通过
 
+- [x] **Phase 2: 流式接口与 V8 运行时内存泄漏及死锁隐患系统性修复 (SPEC-0003)**
+  - [x] 2.1 修复 `gou/api/handler.go`：通道关闭检查 `, ok`，超时等待退出，清理 Runner 全局挂载函数
+  - [x] 2.2 修复 `gou/runtime/v8/runner.go`：`runner.reset()` 增加 `ssEvent` / `cancel` 全局变量防御性清除
+  - [x] 2.3 修复 `yao/moapi/process.go`：消除裸写入死锁与通道已关闭 Panic，增加 `WaitGroup` 与 Context 监听
+  - [x] 2.4 优化 `yao/helper/process.go`：`ProcessSleep` 增加 `process.Context` 取消感知
+  - [x] 2.5 编写与运行单元测试：验证流式接口正常关闭、异常断开、并发压测与零泄漏（`TestStreamHandlerChannelCloseAndClientCancel`、`TestRunnerResetCleansGlobalSSEventAndCancel`）全部 PASS
+  - [x] 2.6 生成现代化专业 HTML 架构与修复分析报告（`logs/stream_v8_memory_leak_fix_report.html`）
+
 ---
 
 ## 阶段验收评审 (Review)
-1. **多核多协程 V8 调度完全解绑全局锁**：`v8go` 在释放和重置上下文句柄时，由全局竞争降级为 Context 实例私有锁，高并发压测下再无互斥串行化停顿。
-2. **微架构零逃逸短路收益达成**：日志系统在级别关闭时实现 **0 B/op** 零堆分配与 **< 2.5ns/op** 极致短路，彻底根除了全生态各调用点无意义的 `fmt.Sprintf` 逃逸；异常提取实现零正则纯字节状态转移。
-3. **全生态 100% 编译与单元测试回归稳健**：涵盖 `v8go`、`kun`、`gou`、`yao` 全部模块，行为完全向后兼容，无破坏性风险。
+1. **多核多协程 V8 调度完全解绑全局锁 (Phase 1)**：`v8go` 在释放和重置上下文句柄时，由全局竞争降级为 Context 实例私有锁，高并发压测下再无互斥串行化停顿。
+2. **微架构零逃逸短路收益达成 (Phase 1)**：日志系统在级别关闭时实现 **0 B/op** 零堆分配与 **< 2.5ns/op** 极致短路，彻底根除了全生态各调用点无意义的 `fmt.Sprintf` 逃逸；异常提取实现零正则纯字节状态转移。
+3. **全链路流式连接泄漏与死锁彻底根除 (Phase 2)**：
+   - 修复了 `c.Stream` 对已关闭通道未检查 `ok` 导致的伪随机空帧广播死循环；
+   - 增加了 `streamHandler` 退出时的显式 `cancel()` 广播与 15s 超时安全等待，根除了后台阻塞导致的 Handler 永久挂起；
+   - 修复了 `moapi` 的裸发送可能引发的 `panic: send on closed channel` 以及协程孤立问题；
+   - 实现了 Runner 在复位时对 `ssEvent`、`cancel` 等动态注入全局函数的深度清除，阻断了闭包与通道在 `iso.cbs` 中的长期累积慢泄漏；
+   - `ProcessSleep` 增加了 `process.Context` 感知能力，支持毫秒级中断响应。
+4. **全生态 100% 编译与单元测试回归稳健**：涵盖 `v8go`、`kun`、`gou`、`yao` 全部模块，`make vet` 零警告，`go build -o dist/yao .` 编译无误。HTML 交互式报告已输出至 `logs/stream_v8_memory_leak_fix_report.html`。
