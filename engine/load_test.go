@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -95,4 +96,34 @@ func TestReloadWithInFlightDrain(t *testing.T) {
 	assert.Equal(t, int64(0), share.GlobalInFlight.Count())
 	assert.GreaterOrEqual(t, duration, 25*time.Millisecond)
 	<-done
+}
+
+func TestShutdown(t *testing.T) {
+	err := Load(config.Conf, LoadOption{})
+	assert.Nil(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = Shutdown(ctx)
+	assert.Nil(t, err)
+	assert.Equal(t, int64(0), share.GlobalInFlight.Count())
+}
+
+func TestShutdownWithStoppers(t *testing.T) {
+	err := Load(config.Conf, LoadOption{})
+	assert.Nil(t, err)
+
+	stopperCalled := false
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = Shutdown(ctx, func() error {
+		stopperCalled = true
+		return nil
+	})
+
+	assert.Nil(t, err)
+	assert.True(t, stopperCalled)
+	assert.Equal(t, int64(0), share.GlobalInFlight.Count())
 }

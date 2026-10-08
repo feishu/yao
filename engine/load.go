@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"regexp"
@@ -270,32 +271,65 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 	return nil
 }
 
-// Unload application engine
-func Unload() (err error) {
-	defer func() { err = exception.Catch(recover()) }()
+// Shutdown gracefully shuts down the engine, in-flight requests, and any external service stoppers
+func Shutdown(ctx context.Context, stoppers ...func() error) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = exception.Catch(r)
+		}
+	}()
 
-	// 0. 排空在途请求，避免未完成的请求在资源关闭时崩溃
-	_ = share.DrainInFlight(5 * time.Second)
+	// 1. 调用外部服务终止回调（例如停止 HTTP 监听、Asynq 队列等，阻断新请求进入）
+	for _, stop := range stoppers {
+		if stop != nil {
+			if stopErr := stop(); stopErr != nil && err == nil {
+				err = stopErr
+			}
+		}
+	}
 
-	// 1. 安全终止业务插件子进程，防止孤儿进程
+	// 2. 优雅排空在途请求
+	drainTimeout := 5 * time.Second
+	if ctx != nil {
+		if d, ok := ctx.Deadline(); ok {
+			if rem := time.Until(d); rem > 0 && rem < drainTimeout {
+				drainTimeout = rem
+			}
+		}
+	}
+	_ = share.DrainInFlight(drainTimeout)
+
+	// 3. 安全终止业务插件子进程，防止孤儿进程
 	_ = plugin.Unload()
 
-	// 2. 拓扑逆序优雅卸载核心资产 (停止定时调度 schedules, 停止后台任务池 tasks, 释放关联资源)
+	// 4. 拓扑逆序优雅卸载核心资产 (停止定时调度 schedules, 停止后台任务池 tasks, 释放关联资源)
 	_ = asset.Unload()
 
-	// 3. 停止 V8 脚本运行时
-	err = runtime.Stop()
+	// 5. 停止 V8 脚本运行时
+	if stopErr := runtime.Stop(); stopErr != nil && err == nil {
+		err = stopErr
+	}
 
-	// 4. 关闭外部连接器
+	// 6. 关闭外部连接器
 	_ = connector.Unload()
 
-	// 5. 关闭 Query 引擎
+	// 7. 关闭 Query 引擎
 	_ = query.Unload()
 
-	// 6. 关闭底层数据库连接池
-	err = share.DBClose()
+	// 8. 停止 Session 服务
+	share.SessionStop()
+
+	// 9. 关闭底层数据库连接池
+	if closeErr := share.DBClose(); closeErr != nil && err == nil {
+		err = closeErr
+	}
 
 	return err
+}
+
+// Unload application engine
+func Unload() error {
+	return Shutdown(context.Background())
 }
 
 // Reload the application engine

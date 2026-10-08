@@ -3,6 +3,7 @@ package share
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/yaoapp/kun/log"
@@ -10,7 +11,10 @@ import (
 	"github.com/yaoapp/yao/config"
 )
 
-var dbKeepAliveStop chan struct{}
+var (
+	dbKeepAliveStop chan struct{}
+	dbKeepAliveMu   sync.Mutex
+)
 
 // applyAllPoolSettings 配置连接池生命周期与连接数
 func applyAllPoolSettings(manager *capsule.Manager, dbconfig config.Database) {
@@ -46,11 +50,13 @@ func applyAllPoolSettings(manager *capsule.Manager, dbconfig config.Database) {
 
 // startDBKeepAlive 启动后台长连接定时探活保活协程
 func startDBKeepAlive(manager *capsule.Manager) {
+	dbKeepAliveMu.Lock()
 	if dbKeepAliveStop != nil {
 		close(dbKeepAliveStop)
 	}
 	dbKeepAliveStop = make(chan struct{})
 	stop := dbKeepAliveStop
+	dbKeepAliveMu.Unlock()
 
 	go func() {
 		ticker := time.NewTicker(60 * time.Second)
@@ -123,10 +129,12 @@ func DBConnect(dbconfig config.Database) (err error) {
 
 // DBClose close the database connections
 func DBClose() error {
+	dbKeepAliveMu.Lock()
 	if dbKeepAliveStop != nil {
 		close(dbKeepAliveStop)
 		dbKeepAliveStop = nil
 	}
+	dbKeepAliveMu.Unlock()
 
 	if capsule.Global == nil || capsule.Global.Connections == nil {
 		return nil

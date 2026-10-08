@@ -1,19 +1,20 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/yaoapp/gou/api"
 	"github.com/yaoapp/gou/connector"
 	"github.com/yaoapp/gou/fs"
-	"github.com/yaoapp/gou/plugin"
 	"github.com/yaoapp/gou/schedule"
 	"github.com/yaoapp/gou/server/http"
 	"github.com/yaoapp/gou/store"
@@ -42,8 +43,26 @@ var startCmd = &cobra.Command{
 	Long:  L("Start Engine"),
 	Run: func(cmd *cobra.Command, args []string) {
 
-		defer share.SessionStop()
-		defer plugin.KillAll()
+		var srv *http.Server
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = engine.Shutdown(ctx,
+				func() error {
+					if srv != nil {
+						return service.Stop(srv)
+					}
+					return nil
+				},
+				func() error {
+					asynq.Stop()
+					itask.Stop()
+					ischedule.Stop()
+					return nil
+				},
+			)
+			fmt.Println(color.GreenString(L("✨Exited successfully!")))
+		}()
 
 		// recive interrupt signal
 		interrupt := make(chan os.Signal, 1)
@@ -214,25 +233,18 @@ var startCmd = &cobra.Command{
 
 		// Start Tasks
 		itask.Start()
-		defer itask.Stop()
 
 		// Start Schedules
 		ischedule.Start()
-		defer ischedule.Stop()
 
 		// Start Asynq Worker Server
 		asynq.StartServer()
-		defer asynq.Stop()
 
 		// Start HTTP Server
-		srv, err := service.Start(config.Conf)
-		defer func() {
-			service.Stop(srv)
-			fmt.Println(color.GreenString(L("✨Exited successfully!")))
-		}()
-
-		if err != nil {
-			fmt.Println(color.RedString(L("Fatal: %s"), err.Error()))
+		var errSrv error
+		srv, errSrv = service.Start(config.Conf)
+		if errSrv != nil {
+			fmt.Println(color.RedString(L("Fatal: %s"), errSrv.Error()))
 			os.Exit(1)
 		}
 

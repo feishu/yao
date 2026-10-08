@@ -42,3 +42,54 @@
    - 实现了 Runner 在复位时对 `ssEvent`、`cancel` 等动态注入全局函数的深度清除，阻断了闭包与通道在 `iso.cbs` 中的长期累积慢泄漏；
    - `ProcessSleep` 增加了 `process.Context` 感知能力，支持毫秒级中断响应。
 4. **全生态 100% 编译与单元测试回归稳健**：涵盖 `v8go`、`kun`、`gou`、`yao` 全部模块，`make vet` 零警告，`go build -o dist/yao .` 编译无误。HTML 交互式报告已输出至 `logs/stream_v8_memory_leak_fix_report.html`。
+
+---
+
+## 阶段三：深模块生命周期收口、深层 Process 调度闭环与 DBAL 门禁 (SPEC-0004)
+
+- [x] **Phase 3.1: 引擎生命周期深度收口与优雅注销 (yao)**
+  - [x] 3.1.1 在 `yao/engine/load.go` 中封装统一深接口 `Shutdown(ctx context.Context, stoppers ...func() error) error`（整合排空、停听、取消异步任务、插件卸载、资产卸载、V8停机、DB连接池安全关闭）
+  - [x] 3.1.2 改造 `yao/cmd/start.go`，将分散的子系统 defer 统一收口为单一 `defer engine.Shutdown(...)`
+  - [x] 3.1.3 为 `yao/share/db.go` 的保活协程通道控制增加互斥锁保护，消除并发重载与停止的数据竞争
+  - [x] 3.1.4 编写针对性单元测试验证优雅注销与生命周期有序性（`TestShutdown`、`TestShutdownWithStoppers` 100% PASS）
+
+- [x] **Phase 3.2: HTTP 服务异常信号修复与 Process 闭环调度器 (gou)**
+  - [x] 3.2.1 修复 `gou/server/http/http.go:159` 中 `err != nil` 检查笔误，改为 `errSrv != nil` 并校验信号捕获
+  - [x] 3.2.2 在 `gou/process/process.go` 中实现统一闭环执行入口 `Dispatch(ctx context.Context, inv Invocation) (interface{}, error)`（自动管理出池、注入、协同取消与 defer 放回，修复 `process.Reset()` 全局 Map 清除问题）
+  - [x] 3.2.3 改造 `gou/api/handler.go` 中的 `executeProcess`，全量收口至 `process.Dispatch`
+  - [x] 3.2.4 编写并发测试验证在高并发调度下 Process 对象池复用且无状态污染（`TestDispatch`、`TestDispatchConcurrent` 100% PASS）
+
+- [x] **Phase 3.3: Xun DBAL 行扫描 Context 协同取消门禁 (xun)**
+  - [x] 3.3.1 在 `xun/dbal/query/support.go` 的 `mapScan`、`recordSetScan`、`structScan` 的 `for rows.Next()` 循环头部加入 `ctx.Err()` 强制取消门禁
+  - [x] 3.3.2 编写针对性单测验证在 context 提前取消或超时场景下，行扫描能够立即中断并返回 context 错误（`TestScanContextCancellationDuringIteration` 100% PASS）
+
+- [x] **Phase 3.4: V8 CGO 跨界数据传输净化与小对象加速 (gou/runtime/v8)**
+  - [x] 3.4.1 彻底清除 `gou/runtime/v8/bridge/bridge.go:425` 中的 `fmt.Printf` 调试残留
+  - [x] 3.4.2 在 `gou/runtime/v8/bridge/bridge.go:JsValue` 为小规模 Map（长度 <= 8 且标量值）引入基于 ObjectTemplate 的属性直接注入快速路径
+  - [x] 3.4.3 运行单元与回归测试验证跨界性能与行为完全兼容（`TestJsValueSmallMapFastPath` 100% PASS）
+
+- [x] **Phase 3.5: 全生态编译与回归验证**
+  - [x] 3.5.1 在 `xun`、`gou`、`yao` 分别运行针对性单元测试并保证 100% PASS
+  - [x] 3.5.2 在 `yao` 与 `gou`、`xun` 中运行 `make vet` 静态分析 100% 干净通过，并重新编译 `dist/yao` 二进制验证通过（版本正常输出 `0.10.7`）
+
+---
+
+## 阶段三验收评审 (Review)
+1. **引擎生命周期深度收口 (Phase 3.1)**：
+   - 彻底打破原来在 CLI 启动入口与主服务之间分散执行子系统停止的脆弱接缝，封装统一深接口 `engine.Shutdown(ctx, stoppers...)`；
+   - 实现了对“服务终止回调 -> 在途请求排空 (DrainInFlight) -> 插件终止 -> DAG 资产逆序卸载 -> V8 停机 -> 连接器/Query 注销 -> Session 停止 -> 数据库连接池安全关闭”的确定性链条式管理；
+   - 修复了 `yao/share/db.go` 中数据库保活协程 `dbKeepAliveStop` 的通道并发竞争漏洞。
+2. **调度闭环与异常信号广播 (Phase 3.2)**：
+   - 修正了 HTTP 服务启动时底层错误捕获的逻辑笔误，杜绝端口冲突静默失败；
+   - 封装了统一且不可绕过的 Process 闭环调度器 `process.Dispatch`，自动完成 `sync.Pool` 对象出池、上下文隔离注入、Context 协同取消检查与 `defer p.Release()` 安全回收；彻底修复了 `process.Reset()` 中误删外部全局字典键的隐蔽 Bug。
+3. **数据访问层扫描取消门禁 (Phase 3.3)**：
+   - 在 `xun` 的 `mapScan`、`recordSetScan` 与 `structScan` 中全面引入 `builder.Context()` 取消门禁；当客户端连接断开或 Context 超时时，立即中止后续行迭代并释放 `sql.Rows`，阻断大查询占用数据库资源。
+4. **CGO 桥接传输净化与小对象加速 (Phase 3.4)**：
+   - 清除了 `gou/runtime/v8/bridge/bridge.go` 中残留的 `fmt.Printf` 调试输出；
+   - 为 <= 8 项标量 Map 注入了基于 `v8go.ObjectTemplate` 的直接映射快速路径，跳过无谓的 JSON 序列化与反序列化。
+5. **全生态零警告与产物稳健交付 (Phase 3.5)**：
+   - `xun`、`gou`、`yao` 三大核心仓库单测 100% PASS；
+   - 全生态 `make vet` 静态分析 0 警告 0 错误；
+   - `dist/yao` 重新构建成功并验证正常运行。
+
+
