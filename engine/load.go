@@ -39,6 +39,7 @@ import (
 	"github.com/yaoapp/yao/widgets"
 
 	"github.com/yaoapp/yao/attachment"
+	"github.com/yaoapp/yao/triagekb"
 )
 
 // LoadHooks used to load custom widgets/processes
@@ -214,6 +215,12 @@ func Load(cfg config.Config, options LoadOption) (err error) {
 	err = payment.Load()
 	if err != nil {
 		printErr(cfg.Mode, "Payment", err)
+	}
+
+	// Load Triage Knowledge Graph Engine
+	err = triagekb.Load(cfg)
+	if err != nil {
+		printErr(cfg.Mode, "triagekb", err)
 	}
 
 	// Load Custom Widget
