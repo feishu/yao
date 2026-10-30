@@ -1,6 +1,7 @@
 package share
 
 import (
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -100,4 +101,41 @@ func TestInFlightTryEnter(t *testing.T) {
 	leave4()
 	assert.Equal(t, int64(0), tracker.Count())
 }
+
+func TestInFlightDrainTimeoutZeroLeak(t *testing.T) {
+	tracker := NewInFlightTracker()
+	leave := tracker.Enter()
+	defer leave()
+
+	// 强制 GC 稳定当前 goroutine 数量
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+	initialGoroutines := runtime.NumGoroutine()
+
+	// 连续触发 10 次超时排空
+	for i := 0; i < 10; i++ {
+		success := tracker.Drain(10 * time.Millisecond)
+		assert.False(t, success, "预期排空超时")
+	}
+
+	// 再次 GC 并检查协程数量，验证零协程泄漏
+	runtime.GC()
+	time.Sleep(10 * time.Millisecond)
+	finalGoroutines := runtime.NumGoroutine()
+
+	// 协程数不应增加
+	assert.LessOrEqual(t, finalGoroutines, initialGoroutines+1, "超时后后台等待协程必须确定性退出，杜绝协程累积泄漏")
+}
+
+func TestInFlightDrainingState(t *testing.T) {
+	tracker := NewInFlightTracker()
+	assert.False(t, tracker.IsDraining())
+
+	tracker.SetDraining(true)
+	assert.True(t, tracker.IsDraining())
+
+	tracker.SetDraining(false)
+	assert.False(t, tracker.IsDraining())
+}
+
 

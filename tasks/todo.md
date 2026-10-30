@@ -92,4 +92,104 @@
    - 全生态 `make vet` 静态分析 0 警告 0 错误；
    - `dist/yao` 重新构建成功并验证正常运行。
 
+---
+
+## 阶段四：热重载零停机原子路由替换与 V8 脚本双缓冲架构落地 (SPEC-0005)
+
+- [x] **Phase 4.1: gou/server/http HTTP Server 动态原子路由替换与生命周期加固**
+  - [x] 4.1.1 在 `gou/server/http/types.go` 与 `http.go` 中引入 `router atomic.Pointer[gin.Engine]`，并在 `Start()` 时将 `http.Server.Handler` 接入动态原子分发包装器
+  - [x] 4.1.2 实现 `SwapRouter(newRouter *gin.Engine)` 与 `Reset(router *gin.Engine)`：支持在微秒级内原子热替换路由引擎，底层 TCP 监听器保持连接、0 挂断、0 端口重绑
+  - [x] 4.1.3 加固 `gou/server/http/http.go`：在 `srv.Serve` 退出时引入 `errors.Is(errSrv, net.ErrClosed)` 过滤，并在 `case ERROR:` 中增加防御性判空，彻底杜绝 SIGSEGV
+  - [x] 4.1.4 编写针对性单元测试验证 `SwapRouter` 并发无锁替换、0 在途请求中断及 Listener 持续监听（`TestSwapRouter`、`TestSwapRouterConcurrent` 100% PASS）
+- [x] **Phase 4.2: yao/service & watch 零停机热重载链路闭环**
+  - [x] 4.2.1 改造 `yao/service/service.go` 的 `Restart`：优先使用 `srv.SwapRouter(router)` 进行原子路由替换，避免撕毁底层 TCP 监听器与中止在途 Context
+  - [x] 4.2.2 优化 `yao/service/watch.go`：对 `/apis` 变动仅重编路由树并调用原子更新，消灭 `500 context canceled`
+  - [x] 4.2.3 编写单元测试验证 API 路由变动时服务无缝切换且在途请求不受影响（`TestRestartHotSwap` 100% PASS）
+- [x] **Phase 4.3: gou/runtime/v8 & yao/script 脚本双缓冲（Double-Buffering）与原子置换**
+  - [x] 4.3.1 在 `gou/runtime/v8/script.go` 中实现 `LoadTo` 与 `ReplaceScripts(newScripts map[string]*Script)` 双缓冲原子替换接口，避免直接清空全局脚本
+  - [x] 4.3.2 改造 `yao/script/script.go` 的 `Load()`：改用临时字典 Draft 暂存加载，全量编译验证通过后一次性原子置换，消灭 404 真空窗口
+  - [x] 4.3.3 编写并发测试验证高频脚本调用时触发重载无任何 404 异常（`TestConcurrentReplaceScriptsZeroDowntime` 100% PASS）
+- [x] **Phase 4.4: 全生态编译与回归验证**
+  - [x] 4.4.1 运行 `gou` 与 `yao` 单元测试回归全量通过
+  - [x] 4.4.2 运行 `make vet` 静态分析保证 0 警告
+  - [x] 4.4.3 重新编译 `dist/yao` 并验证热重载平稳运行（输出版本 `0.10.7`）
+
+---
+
+## 阶段四验收评审 (Review)
+1. **HTTP Server 动态原子路由热替换 (Phase 4.1 & 4.2)**：
+   - 彻底打破原来“更新 API 路由必须重启 HTTP Server、销毁 TCP Listener”的脆弱浅模块设计；
+   - 在 `gou/server/http.Server` 内部引入 `atomic.Pointer[gin.Engine]`，对外提供微秒级原子置换接口 `SwapRouter`；
+   - 改造 `yao/service.Restart` 与 `yao/service/watch.go`：路由发生变动时，仅重新构建并原子交换 Gin 路由引擎，底层 TCP 监听器保持连接、0 挂断、0 端口重绑，彻底消灭 `500 context canceled`；
+   - 修复了 `gou/server/http/http.go` 中关闭监听器时误触发 `ERROR` 信号与 `case ERROR:` 中空指针解引用的致命缺陷，根除了 SIGSEGV。
+2. **V8 脚本双缓冲编译与原子置换 (Phase 4.3)**：
+   - 废除了 `v8.ResetScripts()` 先清空全量内存脚本字典再逐个编译的缺陷模式；
+   - 引入 `LoadTo` 与 `ReplaceScripts` 双缓冲机制：编译期间旧脚本字典持续零中断提供服务，全部脚本加载编译通过后通过锁保护执行指针置换；
+   - 彻底根除了热重载期间任何由于加载时间窗口造成的 `404 scripts.* not loaded: script not exists`。
+3. **全生态零警告与工程回归交付 (Phase 4.4)**：
+   - `gou/server/http`、`gou/runtime/v8`、`yao/service` 核心单测全部 100% PASS；
+   - `gou` 与 `yao` 双仓库全量 `make vet` 静态分析 0 警告 0 错误；
+   - 二进制产物 `dist/yao` 重新构建成功并正常输出 `0.10.7`。
+
+---
+
+## 阶段五：高并发稳健性加固、防抖热重载与生命周期闭环 (SPEC-0006)
+
+- [x] **Phase 5.1: gou/model/crypt.go 数据加密器并发数据竞争消除与 SQL 语法修复**
+  - [x] 5.1.1 消除 `IEncryptors` 全局单例可变指针共享反模式，改造 `SelectCrypt` 为线程安全实例工厂，防止并发查询时密钥相互覆盖篡改（遵从 `golang-concurrency` 与 `golang-safety` 规范）
+  - [x] 5.1.2 修复 `gou/model/crypt.go:77` 中 `Decode` SQL 字符串拼接缺失的右括号 `)` 致命语法错误，并增加安全转义防御
+  - [x] 5.1.3 编写 `gou/model/crypt_test.go`：包含表驱动测试与并发压测（`TestSelectCryptConcurrent`、`TestEncryptorAESDecodeSyntax`），验证无 Data Race 且 SQL 语法正确（遵从 `golang-testing` 规范）
+
+- [x] **Phase 5.2: yao/service/watch.go 文件系统防抖合并器 (Debounce Aggregator) 落地**
+  - [x] 5.2.1 遵循 `golang-concurrency` 规范，构建基于 Timer + Channel + Mutex 的防抖聚合器，设置 200ms 观察窗口，合并瞬时突发的多重文件系统事件（如 VS Code/Vim 保存产生的 `CREATE->WRITE->RENAME->CHMOD` 序列）
+  - [x] 5.2.2 收集窗口期内的所有事件文件路径，去重提取变更域（`scripts/`、`apis/`、`models/` 等），避免无节制的串行级联全量重载风暴
+  - [x] 5.2.3 编写 `yao/service/watch_test.go` 单元测试，模拟突发多事件触发，验证防抖聚合与去重效果
+
+- [x] **Phase 5.3: yao/engine/load.go 全局重载互斥锁与并发门禁 (Single-Flight Reload Mutex)**
+  - [x] 5.3.1 在 `yao/engine/load.go` 中引入 `reloadMu sync.Mutex` 与原子运行状态位，确保同一时间至多只有一个重载任务在执行，后续并发请求安全等待或跳过（遵从 `golang-concurrency`）
+  - [x] 5.3.2 编写针对性单元测试验证并发触发 `Reload` 时的互斥性与幂等性
+
+- [x] **Phase 5.4: yao/share/inflight.go 在途排空协程泄漏根除与准入门禁加固**
+  - [x] 5.4.1 修复 `t.Drain(timeout)` 中超时后后台协程永久阻塞挂起在 `t.cond.Wait()` 的 Goroutine 泄漏隐患，确保所有后台等待协程在退出时确定性释放（遵从 `golang-concurrency` 原则 1）
+  - [x] 5.4.2 优化排空期准入门禁逻辑，防止高频外部持续请求造成排空永远等待满 5 秒
+  - [x] 5.4.3 编写 `yao/share/inflight_test.go` 单元测试验证超时后零 Goroutine 泄漏与高并发进入退出一致性
+
+- [x] **Phase 5.5: gou/runtime/v8/script.go Studio 根脚本 (`RootScripts`) 双缓冲原子替换对齐**
+  - [x] 5.5.1 在 `gou/runtime/v8/script.go` 中实现 `LoadRootTo` 与 `ReplaceRootScripts`，消除 Studio 根脚本重载时的并发访问窗口，与业务脚本双缓冲保持架构对称
+  - [x] 5.5.2 编写针对性测试验证 `ReplaceRootScripts` 的并发安全性
+
+- [x] **Phase 5.6: 全生态编译与回归验证**
+  - [x] 5.6.1 在 `gou` 与 `yao` 分别运行针对性单元测试与并发测试，保证 100% PASS
+  - [x] 5.6.2 在 `yao` 与 `gou` 运行 `make vet` 静态分析 100% 干净通过，并重新编译 `dist/yao` 验证版本与运行状态
+
+---
+
+## 阶段五验收评审 (Review)
+1. **数据加密器并发安全与 SQL 语法加固 (Phase 5.1 - gou/model/crypt.go)**：
+   - 彻底消除了 `IEncryptors` 全局共享单例指针被无锁修改的反模式，将 `SelectCrypt` 改造为并发隔离的独立实例工厂，彻底杜绝高并发查询下密钥与配置相互覆盖篡改的数据竞争；
+   - 修复了 `EncryptorAES.Decode` 在普通单字段 SQL 拼装时缺失闭合右括号 `)` 的致命语法错误；对 SQL 拼接字段及 Key 执行了严格的单引号转义防御；
+   - 单元测试与 50 协程并发压测（`TestEncryptorAESDecodeSyntax`、`TestSelectCryptConcurrent`）在 `-race` 竞态检测下 100% PASS。
+2. **热重载文件事件防抖聚合器 (Phase 5.2 - yao/service/watch.go)**：
+   - 严格遵从 `golang-concurrency` 规范，构建了基于 Timer + Channel 的 `DebounceAggregator` 防抖合并器；
+   - 将 200ms 观察窗口期内的所有瞬时突发事件（如 VS Code/Vim/Git 触发的密集文件保存事件）合并为单一操作，自动去重，杜绝级联全量重载风暴；
+   - 单元测试（`TestDebounceAggregator_Coalescing`、`TestDebounceAggregator_SequentialBursts`、`TestDebounceAggregator_Close`）全部 PASS。
+3. **全局引擎重载互斥与单飞去重 (Phase 5.3 - yao/engine/load.go)**：
+   - 引入 `singleflight.Group` 与 `sync.Mutex`，将同一时间到达的多个并发 `engine.Reload` 请求智能归并为单次安全执行；
+   - 杜绝重载期间多个 Goroutine 同时编译 V8 脚本、同时写全局 Map、同时重建路由引发的状态撕裂与 Panic；
+   - 编写 `TestConcurrentReloadSingleflight` 并发单元测试验证 100% 稳健通过。
+4. **在途排空协程泄漏根除与准入门禁加固 (Phase 5.4 - yao/share/inflight.go)**：
+   - 修复了 `Drain(timeout)` 中当超时发生后后台协程永久挂起在 `t.cond.Wait()` 的孤立协程泄漏；
+   - 引入超时取消广播与确定性通道同步（`<-done`），保证后台等待协程在 `Drain` 返回前必定安全退出，绝对零协程泄漏；
+   - 增加排空状态探测与准入门禁辅助；编写针对性单元测试（`TestInFlightDrainTimeoutZeroLeak`）经由 `runtime.NumGoroutine()` 严格验证零泄漏。
+5. **Studio 根脚本 (`RootScripts`) 双缓冲原子置换对齐 (Phase 5.5 - gou/runtime/v8/script.go & yao/studio/studio.go)**：
+   - 为 Studio 根脚本增加了 `LoadRootTo` 与 `ReplaceRootScripts` 双缓冲原子替换接口，使 Studio 脚本体系与普通业务脚本体系达成完全对称；
+   - 彻底消除了重载 Studio 脚本时的并发访问窗口与 404 故障；编写 `TestConcurrentReplaceRootScriptsZeroDowntime` 在高并发读写及 `-race` 下 100% PASS。
+6. **全生态零警告与工程回归交付 (Phase 5.6)**：
+   - `gou` 与 `yao` 双仓库全量 `go vet` 与 `make vet` 静态分析 0 警告 0 错误；
+   - 二进制产物 `dist/yao` 成功构建并正常输出 `0.10.7`。
+
+
+
+
+
 

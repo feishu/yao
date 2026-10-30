@@ -6,12 +6,14 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/yaoapp/gou/application"
 	"github.com/yaoapp/gou/process"
 	"github.com/yaoapp/kun/exception"
+	"golang.org/x/sync/singleflight"
 	"github.com/yaoapp/yao/asset"
 	"github.com/yaoapp/yao/cert"
 	"github.com/yaoapp/yao/config"
@@ -339,8 +341,22 @@ func Unload() error {
 	return Shutdown(context.Background())
 }
 
-// Reload the application engine
-func Reload(cfg config.Config, options LoadOption) (err error) {
+var (
+	reloadGroup singleflight.Group
+	reloadMu    sync.Mutex
+)
+
+// Reload the application engine (并发安全：单飞合并 + 全局互斥)
+func Reload(cfg config.Config, options LoadOption) error {
+	_, err, _ := reloadGroup.Do("engine.reload", func() (interface{}, error) {
+		reloadMu.Lock()
+		defer reloadMu.Unlock()
+		return nil, doReload(cfg, options)
+	})
+	return err
+}
+
+func doReload(cfg config.Config, options LoadOption) (err error) {
 
 	defer func() { err = exception.Catch(recover()) }()
 	exception.Mode = cfg.Mode

@@ -108,11 +108,17 @@ func loadDSL(cfg config.Config) error {
 
 func loadScripts() error {
 	exts := []string{"*.js"}
-	return application.App.Walk("studio", func(root, file string, isdir bool) error {
+	draft := make(map[string]*v8.Script)
+	err := application.App.Walk("studio", func(root, file string, isdir bool) error {
 		if isdir {
 			return nil
 		}
-		_, err := v8.LoadRoot(file, share.ID(root, file))
+		_, err := v8.LoadRootTo(file, share.ID(root, file), draft)
 		return err
 	}, exts...)
+	if err != nil {
+		return err
+	}
+	v8.ReplaceRootScripts(draft)
+	return nil
 }

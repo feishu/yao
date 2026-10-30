@@ -8,9 +8,10 @@ import (
 
 // InFlightTracker 在途请求与任务追踪器，支持平滑热重载优雅排空（Drain）
 type InFlightTracker struct {
-	counter int64
-	cond    *sync.Cond
-	mu      sync.Mutex
+	counter  int64
+	draining atomic.Bool
+	cond     *sync.Cond
+	mu       sync.Mutex
 }
 
 // GlobalInFlight 全局在途请求追踪单例
@@ -63,26 +64,56 @@ func (t *InFlightTracker) Count() int64 {
 	return atomic.LoadInt64(&t.counter)
 }
 
-// Drain 等待所有在途请求安全排空或超时
+// SetDraining 设置排空阶段状态
+func (t *InFlightTracker) SetDraining(draining bool) {
+	t.draining.Store(draining)
+}
+
+// IsDraining 检查当前是否正处于在途排空阶段
+func (t *InFlightTracker) IsDraining() bool {
+	return t.draining.Load()
+}
+
+// Drain 等待所有在途请求安全排空或超时（确定性释放后台等待协程，绝对零协程泄漏）
 func (t *InFlightTracker) Drain(timeout time.Duration) bool {
 	if atomic.LoadInt64(&t.counter) <= 0 {
 		return true
 	}
 
+	t.SetDraining(true)
+	defer t.SetDraining(false)
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	cancel := make(chan struct{})
 	done := make(chan struct{})
+
 	go func() {
+		defer close(done)
 		t.mu.Lock()
 		defer t.mu.Unlock()
+
 		for atomic.LoadInt64(&t.counter) > 0 {
+			select {
+			case <-cancel:
+				return
+			default:
+			}
 			t.cond.Wait()
 		}
-		close(done)
 	}()
 
 	select {
 	case <-done:
-		return true
-	case <-time.After(timeout):
+		return atomic.LoadInt64(&t.counter) <= 0
+	case <-timer.C:
+		// 超时：关闭取消通道并广播唤醒可能阻塞在 cond.Wait 的协程，确保其必定退出
+		close(cancel)
+		t.mu.Lock()
+		t.cond.Broadcast()
+		t.mu.Unlock()
+		<-done // 确定性等待协程退出，彻底消灭孤立协程泄漏
 		return false
 	}
 }

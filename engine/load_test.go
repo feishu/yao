@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -126,4 +127,27 @@ func TestShutdownWithStoppers(t *testing.T) {
 	assert.Nil(t, err)
 	assert.True(t, stopperCalled)
 	assert.Equal(t, int64(0), share.GlobalInFlight.Count())
+}
+
+func TestConcurrentReloadSingleflight(t *testing.T) {
+	defer Unload()
+	err := Load(config.Conf, LoadOption{})
+	assert.Nil(t, err)
+
+	const concurrency = 8
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+
+	errs := make([]error, concurrency)
+	for i := 0; i < concurrency; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			errs[idx] = Reload(config.Conf, LoadOption{})
+		}(i)
+	}
+
+	wg.Wait()
+	for i := 0; i < concurrency; i++ {
+		assert.NoError(t, errs[i], "并发 Reload 调用必须全部安全返回")
+	}
 }

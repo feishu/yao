@@ -54,7 +54,7 @@ func Start(cfg config.Config) (*http.Server, error) {
 	return srv, nil
 }
 
-// Restart the yao service
+// Restart the yao service (hot swap router without dropping TCP connections)
 func Restart(srv *http.Server, cfg config.Config) error {
 	router := gin.New()
 	router.Use(Middlewares...)
@@ -62,11 +62,13 @@ func Restart(srv *http.Server, cfg config.Config) error {
 	api.SetRoutes(router, "/api", cfg.AllowFrom...)
 	yaoApi.MountMCPRoutes(router)
 	dbadmin.Mount(router, cfg)
-	srv.Reset(router)
+	if srv != nil {
+		srv.SwapRouter(router)
+	}
 	if err := startConfiguredPProf(cfg.PProf); err != nil {
 		return err
 	}
-	return srv.Restart()
+	return nil
 }
 
 // Stop the yao service
