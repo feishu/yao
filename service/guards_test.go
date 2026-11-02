@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
+	"github.com/yaoapp/gou/session"
 	"github.com/yaoapp/yao/config"
 	"github.com/yaoapp/yao/helper"
 )
@@ -41,6 +42,39 @@ func TestGuardBearerJWT_Valid(t *testing.T) {
 
 	assert.Equal(t, 200, w.Code)
 	assert.Contains(t, w.Body.String(), "sid-123456")
+}
+
+func TestGuardBearerJWT_HydrateGlobalSession(t *testing.T) {
+	sid := "sid-test-hydrate-777"
+	session.Global().ID(sid).Set("user_id", int64(9001))
+	session.Global().ID(sid).Set("org_id", int64(101))
+	session.Global().ID(sid).Set("tenant_id", int64(1000000000))
+
+	token := helper.JwtMake(1, map[string]interface{}{"name": "hydrate"}, map[string]interface{}{
+		"timeout": 3600,
+		"sid":     sid,
+	})
+
+	router := gin.New()
+	router.Use(guardBearerJWT)
+	router.GET("/test-hydrate", func(c *gin.Context) {
+		global, _ := c.Get("__global")
+		c.JSON(200, gin.H{"global": global})
+	})
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/test-hydrate", nil)
+	req.Header.Set("Authorization", "Bearer "+token.Token)
+	req.Header.Set("X-Active-Campus-Id", "42")
+
+	assert.NotPanics(t, func() {
+		router.ServeHTTP(w, req)
+	})
+
+	assert.Equal(t, 200, w.Code)
+	assert.Contains(t, w.Body.String(), "9001")
+	assert.Contains(t, w.Body.String(), "101")
+	assert.Contains(t, w.Body.String(), "42")
 }
 
 func TestGuardBearerJWT_Expired(t *testing.T) {
