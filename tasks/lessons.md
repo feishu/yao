@@ -20,3 +20,17 @@
   - **规则 2（内部无锁私有化模式）**：对于已处于持锁上下文的代码，操作共享资源的辅助函数必须声明为私有/无锁版本（如明确命名为 `loadModule` 并在注释声明 `// Caller must hold syncLock`）；如果该方法需要暴露给外部独立调用，则提供无锁的内部实现与加锁的外层包装；
   - **规则 3（真实业务拓扑门禁）**：任何涉及核心运行时、锁机制或加载生命周期的变更，必须在拥有真实多脚本相互引用依赖的业务项目（如 `his-adapter`）下执行真实的 `yao start` 启动与回归测试，绝不单纯依赖无 import 的简单单测。
 
+
+## 2026-11-09: 达梦数据库（DM8）增量迁移表结构比对失效与误报 DDL 报错 (Dameng Incremental Migrate Diff Failure)
+- **Error Pattern**: 在执行 `yao migrate -n <model>` 增量比对时，表明明已经在库中存在，却持续报错：
+  - `ChangeColumn id: Error -2654: 表[xxx]已含有IDENTITY列`
+  - `CreatePrimary: Error -2864: 表中已存在这样的唯一关键字或主键`
+  - `CreateIndex: Error -2140: 索引[xxx]已存在`
+- **Why it was wrong**:
+  1. **主键识别关联错误**：达梦数据库中主键约束名（`c.CONSTRAINT_NAME` 如 `CONS134221949`）与达梦为该主键自动创建的唯一索引名（`i.INDEX_NAME` 如 `INDEX33571878`）并不相等，但 `ALL_CONSTRAINTS` 中单独维护了 `INDEX_NAME` 字段。原 SQL 误用 `i.INDEX_NAME = c.CONSTRAINT_NAME` 进行 JOIN，导致 `IS_PRIMARY` 始终为 0，已有表的主键被当成了普通唯一索引，比对时系统误判“已有表没有主键”而生成 `CreatePrimary`；
+  2. **自增列（IDENTITY）识别机制不符**：达梦数据库 `ALL_TAB_COLUMNS.DATA_DEFAULT` 对自增列返回 `NULL`（达梦不将自增作为普通默认值存储）。原代码判断默认值包含 `IDENTITY` 必定失效，导致已有表的自增属性丢失，类型被反向解析为 `bigInteger` 而非 `ID`，比对时触发 `ChangeColumn id`；
+  3. **Interface 隐式指针类型断言盲区**：达梦方言驱动返回的默认值是 `*string` 指针，`blueprint.go` 的 `switch column.Default.(type)` 只判断了 `string` 与 `[]byte`，缺少 `*string` 的解引用，导致模型定义的 `default: 0` (int) 与已有表的指针对比始终不相等，误判列属性变化并试图重建已存在的普通索引。
+- **Defensive Rules**:
+  - **规则 1（方言元数据精确对齐）**：异构数据库的数据字典系统视图（如 Oracle / DM8 的 `ALL_CONSTRAINTS` / `SYSCOLUMNS`）与 MySQL `information_schema` 存在较大差异。主键关联必须通过 `(i.INDEX_NAME = c.INDEX_NAME OR i.INDEX_NAME = c.CONSTRAINT_NAME) AND c.CONSTRAINT_TYPE = 'P'`，自增列必须通过达梦底层 `SYSCOLUMNS` 的位标记 `(c.INFO2 & 1) = 1` 查询；
+  - **规则 2（统一默认值基础类型）**：在 DBAL 列反向解析阶段，所有默认值必须解引用为基础类型（`string`, `int`, `float`, `bool`），严禁保留指针类型暴露给上层 `types.Compare`，避免指针与基础类型比较永远不相等导致的比对漂移；
+  - **规则 3（方言 DDL 幂等防护）**：在达梦方言的 `CreateIndex`、`CreatePrimary`、`ChangeColumn` 以及 `DropTableIfExists` 中，必须针对已知表/索引已存在或不存在的错误码（如 `-2140`, `-2864`, `-2654`, `-2106`）提供幂等容错，保障异构数据库增量迁移的稳定性。

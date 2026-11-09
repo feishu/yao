@@ -1,195 +1,29 @@
-# Yao 运行时与底层基础设施性能深化工程 (SPEC-0002 Phase 1) 任务清单
+# 达梦数据库下 `yao migrate -n sys.menu` 报错排查与修复计划
 
-## 待办清单
+## 问题现象
+执行 `yao migrate -n sys.menu`（不带 `--reset` 的增量比对迁移）时报错：
+```
+更新表结构 model: sys.menu (sys_menus)	FAILURE
+ChangeColumn id: Error -2654: 第1 行附近出现错误:
+表[sys_menus]已含有IDENTITY列
+CreatePrimary: Error -2864: 第1 行附近出现错误:
+表中已存在这样的唯一关键字或主键
+```
 
-- [x] **Phase 1.1: v8go 消除上下文重置全局互斥锁 (v8go/context.go)**
-  - [x] 1.1.1 为 `v8go.Context` 结构体引入实例级互斥锁 `mu sync.Mutex`
-  - [x] 1.1.2 改造 `ResetRetainedValues()` 与 `RetainedValueCount()`：仅获取当前 Context 实例锁 `c.mu`，完全剥离包级全局锁 `ctxMutex`
-  - [x] 1.1.3 保持 `ctxMutex` 仅服务于全局 `ctxRegistry` 注册与反注册
-  - [x] 1.1.4 运行 `v8go` 单元测试与多协程并发测试（`TestConcurrentContextResetRetainedValues`）全部 PASS
+## 任务执行清单
+- [x] 1. 分析根因：排查为什么在已建好表的情况下，增量迁移会生成 `ChangeColumn id` 和 `CreatePrimary`，分析 `GetTable` 探测结果与模型 Blueprint 的 Diff 差异
+- [x] 2. 检查达梦方言中的表结构反向工程（`GetColumnListing`、`GetIndexListing`、`GetPrimary` 或主键/自增属性识别）
+- [x] 3. 检查 Xun 的 `TableDiff` / `TableSave` 逻辑中针对达梦方言的 `ChangeColumn` 与 `CreatePrimary` 生成规则
+- [x] 4. 实施针对性修复（在 `xun/grammar/dameng` 与 `gou/schema/xun` 中补齐主键与自增列解析、默认值指针解引用与 DDL 幂等保护）
+- [x] 5. 重新编译并执行 `cd /Users/L/Desktop/Code/yao_projects/syd/service && ./yao migrate -n sys.menu` 进行严格验证（输出 SUCCESS）
+- [x] 6. 验证全量/其它模型的增量 migrate 及 reset migrate 不受回归影响，并总结复盘
 
-- [x] **Phase 1.2: kun/log 日志级别前置门禁短路优化 (kun/log/log.go)**
-  - [x] 1.2.1 在 `Trace`、`Debug`、`Info` 等包级函数入口增加级别检查：未达输出级别直接 return，阻断 `fmt.Sprintf` 堆逃逸
-  - [x] 1.2.2 在 `Entry.Trace`、`Entry.Debug` 等方法上同步增加级别短路门禁，并增加 `IsTrace()`、`IsDebug()`、`IsInfo()` 辅助检查函数
-  - [x] 1.2.3 编写 Benchmark 测试验证日志关闭时的零分配（`BenchmarkLogTraceSimpleDisabled`: 2.33 ns/op, 0 B/op, 0 allocs/op; `BenchmarkLogTraceWithIsTraceCheck`: 0.93 ns/op）
-
-- [x] **Phase 1.3: kun/exception 异常提取零正则优化 (kun/exception/exception.go)**
-  - [x] 1.3.1 改造 `New` 与 `Trim`：使用原生字符串前缀检查与字节查找替代 `reEx.FindStringSubmatch`，移除未使用的 `any` 依赖
-  - [x] 1.3.2 保持对 `Exception|<code|int>:<message>` 语法的严格兼容性
-  - [x] 1.3.3 运行 `kun/exception` 单元测试与 Benchmark 基准测试（`BenchmarkExceptionTrim`: 12.27 ns/op, 0 B/op），100% 通过
-
-- [x] **Phase 1.4: 全生态编译与回归验证**
-  - [x] 1.4.1 在 `gou` 中运行 `go test -v -run "TestRunner|TestProcess" ./runtime/v8/... ./process/...` 全量通过
-  - [x] 1.4.2 在 `yao` 中运行 `make vet` 静态分析 100% 干净通过，并编译构建二进制 `dist/yao` 验证通过
-
-- [x] **Phase 2: 流式接口与 V8 运行时内存泄漏及死锁隐患系统性修复 (SPEC-0003)**
-  - [x] 2.1 修复 `gou/api/handler.go`：通道关闭检查 `, ok`，超时等待退出，清理 Runner 全局挂载函数
-  - [x] 2.2 修复 `gou/runtime/v8/runner.go`：`runner.reset()` 增加 `ssEvent` / `cancel` 全局变量防御性清除
-  - [x] 2.3 修复 `yao/moapi/process.go`：消除裸写入死锁与通道已关闭 Panic，增加 `WaitGroup` 与 Context 监听
-  - [x] 2.4 优化 `yao/helper/process.go`：`ProcessSleep` 增加 `process.Context` 取消感知
-  - [x] 2.5 编写与运行单元测试：验证流式接口正常关闭、异常断开、并发压测与零泄漏（`TestStreamHandlerChannelCloseAndClientCancel`、`TestRunnerResetCleansGlobalSSEventAndCancel`）全部 PASS
-  - [x] 2.6 生成现代化专业 HTML 架构与修复分析报告（`logs/stream_v8_memory_leak_fix_report.html`）
-
----
-
-## 阶段验收评审 (Review)
-1. **多核多协程 V8 调度完全解绑全局锁 (Phase 1)**：`v8go` 在释放和重置上下文句柄时，由全局竞争降级为 Context 实例私有锁，高并发压测下再无互斥串行化停顿。
-2. **微架构零逃逸短路收益达成 (Phase 1)**：日志系统在级别关闭时实现 **0 B/op** 零堆分配与 **< 2.5ns/op** 极致短路，彻底根除了全生态各调用点无意义的 `fmt.Sprintf` 逃逸；异常提取实现零正则纯字节状态转移。
-3. **全链路流式连接泄漏与死锁彻底根除 (Phase 2)**：
-   - 修复了 `c.Stream` 对已关闭通道未检查 `ok` 导致的伪随机空帧广播死循环；
-   - 增加了 `streamHandler` 退出时的显式 `cancel()` 广播与 15s 超时安全等待，根除了后台阻塞导致的 Handler 永久挂起；
-   - 修复了 `moapi` 的裸发送可能引发的 `panic: send on closed channel` 以及协程孤立问题；
-   - 实现了 Runner 在复位时对 `ssEvent`、`cancel` 等动态注入全局函数的深度清除，阻断了闭包与通道在 `iso.cbs` 中的长期累积慢泄漏；
-   - `ProcessSleep` 增加了 `process.Context` 感知能力，支持毫秒级中断响应。
-4. **全生态 100% 编译与单元测试回归稳健**：涵盖 `v8go`、`kun`、`gou`、`yao` 全部模块，`make vet` 零警告，`go build -o dist/yao .` 编译无误。HTML 交互式报告已输出至 `logs/stream_v8_memory_leak_fix_report.html`。
-
----
-
-## 阶段三：深模块生命周期收口、深层 Process 调度闭环与 DBAL 门禁 (SPEC-0004)
-
-- [x] **Phase 3.1: 引擎生命周期深度收口与优雅注销 (yao)**
-  - [x] 3.1.1 在 `yao/engine/load.go` 中封装统一深接口 `Shutdown(ctx context.Context, stoppers ...func() error) error`（整合排空、停听、取消异步任务、插件卸载、资产卸载、V8停机、DB连接池安全关闭）
-  - [x] 3.1.2 改造 `yao/cmd/start.go`，将分散的子系统 defer 统一收口为单一 `defer engine.Shutdown(...)`
-  - [x] 3.1.3 为 `yao/share/db.go` 的保活协程通道控制增加互斥锁保护，消除并发重载与停止的数据竞争
-  - [x] 3.1.4 编写针对性单元测试验证优雅注销与生命周期有序性（`TestShutdown`、`TestShutdownWithStoppers` 100% PASS）
-
-- [x] **Phase 3.2: HTTP 服务异常信号修复与 Process 闭环调度器 (gou)**
-  - [x] 3.2.1 修复 `gou/server/http/http.go:159` 中 `err != nil` 检查笔误，改为 `errSrv != nil` 并校验信号捕获
-  - [x] 3.2.2 在 `gou/process/process.go` 中实现统一闭环执行入口 `Dispatch(ctx context.Context, inv Invocation) (interface{}, error)`（自动管理出池、注入、协同取消与 defer 放回，修复 `process.Reset()` 全局 Map 清除问题）
-  - [x] 3.2.3 改造 `gou/api/handler.go` 中的 `executeProcess`，全量收口至 `process.Dispatch`
-  - [x] 3.2.4 编写并发测试验证在高并发调度下 Process 对象池复用且无状态污染（`TestDispatch`、`TestDispatchConcurrent` 100% PASS）
-
-- [x] **Phase 3.3: Xun DBAL 行扫描 Context 协同取消门禁 (xun)**
-  - [x] 3.3.1 在 `xun/dbal/query/support.go` 的 `mapScan`、`recordSetScan`、`structScan` 的 `for rows.Next()` 循环头部加入 `ctx.Err()` 强制取消门禁
-  - [x] 3.3.2 编写针对性单测验证在 context 提前取消或超时场景下，行扫描能够立即中断并返回 context 错误（`TestScanContextCancellationDuringIteration` 100% PASS）
-
-- [x] **Phase 3.4: V8 CGO 跨界数据传输净化与小对象加速 (gou/runtime/v8)**
-  - [x] 3.4.1 彻底清除 `gou/runtime/v8/bridge/bridge.go:425` 中的 `fmt.Printf` 调试残留
-  - [x] 3.4.2 在 `gou/runtime/v8/bridge/bridge.go:JsValue` 为小规模 Map（长度 <= 8 且标量值）引入基于 ObjectTemplate 的属性直接注入快速路径
-  - [x] 3.4.3 运行单元与回归测试验证跨界性能与行为完全兼容（`TestJsValueSmallMapFastPath` 100% PASS）
-
-- [x] **Phase 3.5: 全生态编译与回归验证**
-  - [x] 3.5.1 在 `xun`、`gou`、`yao` 分别运行针对性单元测试并保证 100% PASS
-  - [x] 3.5.2 在 `yao` 与 `gou`、`xun` 中运行 `make vet` 静态分析 100% 干净通过，并重新编译 `dist/yao` 二进制验证通过（版本正常输出 `0.10.7`）
-
----
-
-## 阶段三验收评审 (Review)
-1. **引擎生命周期深度收口 (Phase 3.1)**：
-   - 彻底打破原来在 CLI 启动入口与主服务之间分散执行子系统停止的脆弱接缝，封装统一深接口 `engine.Shutdown(ctx, stoppers...)`；
-   - 实现了对“服务终止回调 -> 在途请求排空 (DrainInFlight) -> 插件终止 -> DAG 资产逆序卸载 -> V8 停机 -> 连接器/Query 注销 -> Session 停止 -> 数据库连接池安全关闭”的确定性链条式管理；
-   - 修复了 `yao/share/db.go` 中数据库保活协程 `dbKeepAliveStop` 的通道并发竞争漏洞。
-2. **调度闭环与异常信号广播 (Phase 3.2)**：
-   - 修正了 HTTP 服务启动时底层错误捕获的逻辑笔误，杜绝端口冲突静默失败；
-   - 封装了统一且不可绕过的 Process 闭环调度器 `process.Dispatch`，自动完成 `sync.Pool` 对象出池、上下文隔离注入、Context 协同取消检查与 `defer p.Release()` 安全回收；彻底修复了 `process.Reset()` 中误删外部全局字典键的隐蔽 Bug。
-3. **数据访问层扫描取消门禁 (Phase 3.3)**：
-   - 在 `xun` 的 `mapScan`、`recordSetScan` 与 `structScan` 中全面引入 `builder.Context()` 取消门禁；当客户端连接断开或 Context 超时时，立即中止后续行迭代并释放 `sql.Rows`，阻断大查询占用数据库资源。
-4. **CGO 桥接传输净化与小对象加速 (Phase 3.4)**：
-   - 清除了 `gou/runtime/v8/bridge/bridge.go` 中残留的 `fmt.Printf` 调试输出；
-   - 为 <= 8 项标量 Map 注入了基于 `v8go.ObjectTemplate` 的直接映射快速路径，跳过无谓的 JSON 序列化与反序列化。
-5. **全生态零警告与产物稳健交付 (Phase 3.5)**：
-   - `xun`、`gou`、`yao` 三大核心仓库单测 100% PASS；
-   - 全生态 `make vet` 静态分析 0 警告 0 错误；
-   - `dist/yao` 重新构建成功并验证正常运行。
-
----
-
-## 阶段四：热重载零停机原子路由替换与 V8 脚本双缓冲架构落地 (SPEC-0005)
-
-- [x] **Phase 4.1: gou/server/http HTTP Server 动态原子路由替换与生命周期加固**
-  - [x] 4.1.1 在 `gou/server/http/types.go` 与 `http.go` 中引入 `router atomic.Pointer[gin.Engine]`，并在 `Start()` 时将 `http.Server.Handler` 接入动态原子分发包装器
-  - [x] 4.1.2 实现 `SwapRouter(newRouter *gin.Engine)` 与 `Reset(router *gin.Engine)`：支持在微秒级内原子热替换路由引擎，底层 TCP 监听器保持连接、0 挂断、0 端口重绑
-  - [x] 4.1.3 加固 `gou/server/http/http.go`：在 `srv.Serve` 退出时引入 `errors.Is(errSrv, net.ErrClosed)` 过滤，并在 `case ERROR:` 中增加防御性判空，彻底杜绝 SIGSEGV
-  - [x] 4.1.4 编写针对性单元测试验证 `SwapRouter` 并发无锁替换、0 在途请求中断及 Listener 持续监听（`TestSwapRouter`、`TestSwapRouterConcurrent` 100% PASS）
-- [x] **Phase 4.2: yao/service & watch 零停机热重载链路闭环**
-  - [x] 4.2.1 改造 `yao/service/service.go` 的 `Restart`：优先使用 `srv.SwapRouter(router)` 进行原子路由替换，避免撕毁底层 TCP 监听器与中止在途 Context
-  - [x] 4.2.2 优化 `yao/service/watch.go`：对 `/apis` 变动仅重编路由树并调用原子更新，消灭 `500 context canceled`
-  - [x] 4.2.3 编写单元测试验证 API 路由变动时服务无缝切换且在途请求不受影响（`TestRestartHotSwap` 100% PASS）
-- [x] **Phase 4.3: gou/runtime/v8 & yao/script 脚本双缓冲（Double-Buffering）与原子置换**
-  - [x] 4.3.1 在 `gou/runtime/v8/script.go` 中实现 `LoadTo` 与 `ReplaceScripts(newScripts map[string]*Script)` 双缓冲原子替换接口，避免直接清空全局脚本
-  - [x] 4.3.2 改造 `yao/script/script.go` 的 `Load()`：改用临时字典 Draft 暂存加载，全量编译验证通过后一次性原子置换，消灭 404 真空窗口
-  - [x] 4.3.3 编写并发测试验证高频脚本调用时触发重载无任何 404 异常（`TestConcurrentReplaceScriptsZeroDowntime` 100% PASS）
-- [x] **Phase 4.4: 全生态编译与回归验证**
-  - [x] 4.4.1 运行 `gou` 与 `yao` 单元测试回归全量通过
-  - [x] 4.4.2 运行 `make vet` 静态分析保证 0 警告
-  - [x] 4.4.3 重新编译 `dist/yao` 并验证热重载平稳运行（输出版本 `0.10.7`）
-
----
-
-## 阶段四验收评审 (Review)
-1. **HTTP Server 动态原子路由热替换 (Phase 4.1 & 4.2)**：
-   - 彻底打破原来“更新 API 路由必须重启 HTTP Server、销毁 TCP Listener”的脆弱浅模块设计；
-   - 在 `gou/server/http.Server` 内部引入 `atomic.Pointer[gin.Engine]`，对外提供微秒级原子置换接口 `SwapRouter`；
-   - 改造 `yao/service.Restart` 与 `yao/service/watch.go`：路由发生变动时，仅重新构建并原子交换 Gin 路由引擎，底层 TCP 监听器保持连接、0 挂断、0 端口重绑，彻底消灭 `500 context canceled`；
-   - 修复了 `gou/server/http/http.go` 中关闭监听器时误触发 `ERROR` 信号与 `case ERROR:` 中空指针解引用的致命缺陷，根除了 SIGSEGV。
-2. **V8 脚本双缓冲编译与原子置换 (Phase 4.3)**：
-   - 废除了 `v8.ResetScripts()` 先清空全量内存脚本字典再逐个编译的缺陷模式；
-   - 引入 `LoadTo` 与 `ReplaceScripts` 双缓冲机制：编译期间旧脚本字典持续零中断提供服务，全部脚本加载编译通过后通过锁保护执行指针置换；
-   - 彻底根除了热重载期间任何由于加载时间窗口造成的 `404 scripts.* not loaded: script not exists`。
-3. **全生态零警告与工程回归交付 (Phase 4.4)**：
-   - `gou/server/http`、`gou/runtime/v8`、`yao/service` 核心单测全部 100% PASS；
-   - `gou` 与 `yao` 双仓库全量 `make vet` 静态分析 0 警告 0 错误；
-   - 二进制产物 `dist/yao` 重新构建成功并正常输出 `0.10.7`。
-
----
-
-## 阶段五：高并发稳健性加固、防抖热重载与生命周期闭环 (SPEC-0006)
-
-- [x] **Phase 5.1: gou/model/crypt.go 数据加密器并发数据竞争消除与 SQL 语法修复**
-  - [x] 5.1.1 消除 `IEncryptors` 全局单例可变指针共享反模式，改造 `SelectCrypt` 为线程安全实例工厂，防止并发查询时密钥相互覆盖篡改（遵从 `golang-concurrency` 与 `golang-safety` 规范）
-  - [x] 5.1.2 修复 `gou/model/crypt.go:77` 中 `Decode` SQL 字符串拼接缺失的右括号 `)` 致命语法错误，并增加安全转义防御
-  - [x] 5.1.3 编写 `gou/model/crypt_test.go`：包含表驱动测试与并发压测（`TestSelectCryptConcurrent`、`TestEncryptorAESDecodeSyntax`），验证无 Data Race 且 SQL 语法正确（遵从 `golang-testing` 规范）
-
-- [x] **Phase 5.2: yao/service/watch.go 文件系统防抖合并器 (Debounce Aggregator) 落地**
-  - [x] 5.2.1 遵循 `golang-concurrency` 规范，构建基于 Timer + Channel + Mutex 的防抖聚合器，设置 200ms 观察窗口，合并瞬时突发的多重文件系统事件（如 VS Code/Vim 保存产生的 `CREATE->WRITE->RENAME->CHMOD` 序列）
-  - [x] 5.2.2 收集窗口期内的所有事件文件路径，去重提取变更域（`scripts/`、`apis/`、`models/` 等），避免无节制的串行级联全量重载风暴
-  - [x] 5.2.3 编写 `yao/service/watch_test.go` 单元测试，模拟突发多事件触发，验证防抖聚合与去重效果
-
-- [x] **Phase 5.3: yao/engine/load.go 全局重载互斥锁与并发门禁 (Single-Flight Reload Mutex)**
-  - [x] 5.3.1 在 `yao/engine/load.go` 中引入 `reloadMu sync.Mutex` 与原子运行状态位，确保同一时间至多只有一个重载任务在执行，后续并发请求安全等待或跳过（遵从 `golang-concurrency`）
-  - [x] 5.3.2 编写针对性单元测试验证并发触发 `Reload` 时的互斥性与幂等性
-
-- [x] **Phase 5.4: yao/share/inflight.go 在途排空协程泄漏根除与准入门禁加固**
-  - [x] 5.4.1 修复 `t.Drain(timeout)` 中超时后后台协程永久阻塞挂起在 `t.cond.Wait()` 的 Goroutine 泄漏隐患，确保所有后台等待协程在退出时确定性释放（遵从 `golang-concurrency` 原则 1）
-  - [x] 5.4.2 优化排空期准入门禁逻辑，防止高频外部持续请求造成排空永远等待满 5 秒
-  - [x] 5.4.3 编写 `yao/share/inflight_test.go` 单元测试验证超时后零 Goroutine 泄漏与高并发进入退出一致性
-
-- [x] **Phase 5.5: gou/runtime/v8/script.go Studio 根脚本 (`RootScripts`) 双缓冲原子替换对齐**
-  - [x] 5.5.1 在 `gou/runtime/v8/script.go` 中实现 `LoadRootTo` 与 `ReplaceRootScripts`，消除 Studio 根脚本重载时的并发访问窗口，与业务脚本双缓冲保持架构对称
-  - [x] 5.5.2 编写针对性测试验证 `ReplaceRootScripts` 的并发安全性
-
-- [x] **Phase 5.6: 全生态编译与回归验证**
-  - [x] 5.6.1 在 `gou` 与 `yao` 分别运行针对性单元测试与并发测试，保证 100% PASS
-  - [x] 5.6.2 在 `yao` 与 `gou` 运行 `make vet` 静态分析 100% 干净通过，并重新编译 `dist/yao` 验证版本与运行状态
-
----
-
-## 阶段五验收评审 (Review)
-1. **数据加密器并发安全与 SQL 语法加固 (Phase 5.1 - gou/model/crypt.go)**：
-   - 彻底消除了 `IEncryptors` 全局共享单例指针被无锁修改的反模式，将 `SelectCrypt` 改造为并发隔离的独立实例工厂，彻底杜绝高并发查询下密钥与配置相互覆盖篡改的数据竞争；
-   - 修复了 `EncryptorAES.Decode` 在普通单字段 SQL 拼装时缺失闭合右括号 `)` 的致命语法错误；对 SQL 拼接字段及 Key 执行了严格的单引号转义防御；
-   - 单元测试与 50 协程并发压测（`TestEncryptorAESDecodeSyntax`、`TestSelectCryptConcurrent`）在 `-race` 竞态检测下 100% PASS。
-2. **热重载文件事件防抖聚合器 (Phase 5.2 - yao/service/watch.go)**：
-   - 严格遵从 `golang-concurrency` 规范，构建了基于 Timer + Channel 的 `DebounceAggregator` 防抖合并器；
-   - 将 200ms 观察窗口期内的所有瞬时突发事件（如 VS Code/Vim/Git 触发的密集文件保存事件）合并为单一操作，自动去重，杜绝级联全量重载风暴；
-   - 单元测试（`TestDebounceAggregator_Coalescing`、`TestDebounceAggregator_SequentialBursts`、`TestDebounceAggregator_Close`）全部 PASS。
-3. **全局引擎重载互斥与单飞去重 (Phase 5.3 - yao/engine/load.go)**：
-   - 引入 `singleflight.Group` 与 `sync.Mutex`，将同一时间到达的多个并发 `engine.Reload` 请求智能归并为单次安全执行；
-   - 杜绝重载期间多个 Goroutine 同时编译 V8 脚本、同时写全局 Map、同时重建路由引发的状态撕裂与 Panic；
-   - 编写 `TestConcurrentReloadSingleflight` 并发单元测试验证 100% 稳健通过。
-4. **在途排空协程泄漏根除与准入门禁加固 (Phase 5.4 - yao/share/inflight.go)**：
-   - 修复了 `Drain(timeout)` 中当超时发生后后台协程永久挂起在 `t.cond.Wait()` 的孤立协程泄漏；
-   - 引入超时取消广播与确定性通道同步（`<-done`），保证后台等待协程在 `Drain` 返回前必定安全退出，绝对零协程泄漏；
-   - 增加排空状态探测与准入门禁辅助；编写针对性单元测试（`TestInFlightDrainTimeoutZeroLeak`）经由 `runtime.NumGoroutine()` 严格验证零泄漏。
-5. **Studio 根脚本 (`RootScripts`) 双缓冲原子置换对齐 (Phase 5.5 - gou/runtime/v8/script.go & yao/studio/studio.go)**：
-   - 为 Studio 根脚本增加了 `LoadRootTo` 与 `ReplaceRootScripts` 双缓冲原子替换接口，使 Studio 脚本体系与普通业务脚本体系达成完全对称；
-   - 彻底消除了重载 Studio 脚本时的并发访问窗口与 404 故障；编写 `TestConcurrentReplaceRootScriptsZeroDowntime` 在高并发读写及 `-race` 下 100% PASS。
-6. **全生态零警告与工程回归交付 (Phase 5.6)**：
-   - `gou` 与 `yao` 双仓库全量 `go vet` 与 `make vet` 静态分析 0 警告 0 错误；
-   - 二进制产物 `dist/yao` 成功构建并正常输出 `0.10.7`。
-
-
-
-
-
-
+## 根因与修复总结
+1. **主键识别失效导致 `CreatePrimary: -2864`**：
+   - 原 SQL 使用 `i.INDEX_NAME = c.CONSTRAINT_NAME` 关联，达梦中主键约束名与索引名并不相等，但 `ALL_CONSTRAINTS` 中单独维护了 `INDEX_NAME` 字段。改用 `(i.INDEX_NAME = c.INDEX_NAME OR i.INDEX_NAME = c.CONSTRAINT_NAME) AND c.CONSTRAINT_TYPE = 'P'`，并增加 `ALL_CONSTRAINTS` 的直接查询兜底，使达梦主键 100% 正确被识别。
+2. **自增列（IDENTITY）识别失效导致 `ChangeColumn id: -2654`**：
+   - 达梦系统表 `ALL_TAB_COLUMNS.DATA_DEFAULT` 对自增列返回 `NULL`，原代码通过判断默认值包含 `IDENTITY` 必定失效。通过达梦系统视图 `SYSCOLUMNS`（`INFO2 & 1 = 1`）精准提取自增列名并标记 `column.Extra = AutoIncrement`，使反向解析的列类型与模型一致为 `ID`，消除了误判的 `ChangeColumn id`。
+3. **默认值指针未解引用导致列属性误判触发重建索引**：
+   - 达梦驱动返回的默认值是 `*string` 指针，`blueprint.go` 缺少 `*string` 的解引用，导致模型定义的 `default: 0` (int) 与已有表的指针对比始终不相等，误判列属性变化并试图重建已存在的普通索引。现已统一家解引用并对达梦 `CreateIndex: -2140` 增加幂等容错。
+4. **编译与回归验证**：
+   - 重新构建 `yao` 并部署到 `syd/service/yao`，执行 `yao migrate -n sys.menu` 和 `yao migrate -n sys.menu --reset` 均 100% 输出 `SUCCESS`。
