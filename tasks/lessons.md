@@ -34,3 +34,15 @@
   - **规则 1（方言元数据精确对齐）**：异构数据库的数据字典系统视图（如 Oracle / DM8 的 `ALL_CONSTRAINTS` / `SYSCOLUMNS`）与 MySQL `information_schema` 存在较大差异。主键关联必须通过 `(i.INDEX_NAME = c.INDEX_NAME OR i.INDEX_NAME = c.CONSTRAINT_NAME) AND c.CONSTRAINT_TYPE = 'P'`，自增列必须通过达梦底层 `SYSCOLUMNS` 的位标记 `(c.INFO2 & 1) = 1` 查询；
   - **规则 2（统一默认值基础类型）**：在 DBAL 列反向解析阶段，所有默认值必须解引用为基础类型（`string`, `int`, `float`, `bool`），严禁保留指针类型暴露给上层 `types.Compare`，避免指针与基础类型比较永远不相等导致的比对漂移；
   - **规则 3（方言 DDL 幂等防护）**：在达梦方言的 `CreateIndex`、`CreatePrimary`、`ChangeColumn` 以及 `DropTableIfExists` 中，必须针对已知表/索引已存在或不存在的错误码（如 `-2140`, `-2864`, `-2654`, `-2106`）提供幂等容错，保障异构数据库增量迁移的稳定性。
+
+## 2026-11-11: 警惕跨网络批量匹配中的 N*M 数据库穿透放大导致接口假死 (Prevent Remote Database Query Amplification in Matching Pipelines)
+- **Error Pattern**: 在导诊收敛结算（`matchDepartment`）阶段，针对全平台候选机构循环执行 `findDepartmentByKeywords`、`getDepartmentInfo`、`getDepartmentScheduleInfo` 与 `getOrganizationUuid`，在单一 HTTP 请求中产生了 150~200 次串行跨网络 SQL 查询（北京公网 MySQL），单次请求耗时高达 25.7 秒，导致前端/网关在 15 秒连接超时门限处抛出 `Initial connection: 15.01s` 挂死且无任何返回。
+- **Why it was wrong**:
+  1. **查询放大盲区（N*M Queries Anti-Pattern）**：在内存中已持有机构列表和多组关键词时，没有批量聚合查询，而是使用多重嵌套循环针对每个机构的每个关键词逐条执行 `LIKE '%kw%'` 远程 SQL，网络往返时延（RTT）被放大了 150 倍以上；
+  2. **冗余数据反查与非幂等调用**：上一层查询已经获得了 `id, uuid, name, branch_id`，下游函数又重新向数据库查询同一条记录；且对无需变动的静态实体（如机构 UUID、院区名称）未做内存缓存，导致每个挂号链接生成都产生一次数据库往返；
+  3. **非必要的全表运力穿透**：平台级多机构分诊推荐只需轻量运力提示，却对每家医院穿透查询了多张单体人员与排班大表。
+- **Defensive Rules**:
+  - **规则 1（批量加载+内存过滤铁律）**：在服务层或脚本引擎中，严禁在 `for` 循环内部逐个拼接 SQL 或发起跨网络查询。凡有多实体或多关键词检索需求，必须使用 `IN` 一次性拉取数据集并在内存（JavaScript / Go）中高效完成检索和匹配（0 额外网络时延）；
+  - **规则 2（进程级/会话级内存缓存）**：对高频读取且生命周期稳定的元数据（如机构 UUID、院区映射），建立 Map 缓存（如 `orgUuidCache`、`campusCache`），阻断重复数据库往返；
+  - **规则 3（端到端超时与延迟门限）**：任何涉及面向患者终端的交互式 API，整个调用链路必须严格控制在 3 秒以内（首选 <1s），杜绝一切接近或超过网关反向代理超时（15s/30s）的设计。
+
